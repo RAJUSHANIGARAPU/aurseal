@@ -32,7 +32,7 @@ def run_tests(pytest_args: list[str]) -> tuple[int, str]:
             "-v",
         ]
     )
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Running: {' '.join(cmd)}")
     print("=" * 60)
 
@@ -72,17 +72,17 @@ def main():
     trace_analyzer = TraceAnalyzer()
 
     for iteration in range(1, args.max_iterations + 1):
-        print(f"\n{'#'*60}")
+        print(f"\n{'#' * 60}")
         print(f"# ITERATION {iteration}/{args.max_iterations}")
         print("#" * 60)
 
         exit_code, output = run_tests(pytest_args)
 
         if exit_code == 0:
-            print("\n✅ ALL TESTS PASSED")
+            print("\nALL TESTS PASSED")
             return 0
 
-        print(f"\n❌ Tests failed (exit code {exit_code}). Analyzing...")
+        print(f"\nTests failed (exit code {exit_code}). Analyzing...")
 
         # Analyze failures
         diagnosis = analyzer.analyze_failures()
