@@ -15,3 +15,9 @@ reports/
 
 # Mac
 .DS_Store
+
+# Claude local session data — never commit these
+# .claude/commands/ is intentionally tracked (AI slash command skills)
+.claude/*
+!.claude/commands/
+!.claude/commands/**
