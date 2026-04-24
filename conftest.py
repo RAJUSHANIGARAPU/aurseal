@@ -6,6 +6,7 @@ from datetime import datetime
 import pytest
 
 from core.config_reader import ConfigReader
+from core.failure_reporter import write_failure_bundle
 
 # =========================================================
 # CLI OPTIONS (ONLY ENV — let Playwright handle browser)
@@ -53,6 +54,33 @@ def config(request):
 
 
 # =========================================================
+# PER-TEST EVIDENCE COLLECTION (console errors + failed requests)
+# =========================================================
+
+_console_errors: list[str] = []
+_failed_requests: list[str] = []
+
+
+@pytest.fixture(autouse=True)
+def collect_browser_evidence(page, request):
+    """Accumulates console errors and failed network requests per test."""
+    _console_errors.clear()
+    _failed_requests.clear()
+
+    def on_console(msg):
+        if msg.type == "error":
+            _console_errors.append(msg.text)
+
+    def on_response(response):
+        if response.status >= 400:
+            _failed_requests.append(f"{response.request.method} {response.url} → {response.status}")
+
+    page.on("console", on_console)
+    page.on("response", on_response)
+    yield
+
+
+# =========================================================
 # ENABLE VIDEO + TRACING USING PLUGIN CONTEXT
 # =========================================================
 
@@ -61,10 +89,8 @@ def config(request):
 def enable_artifacts(context, request):
     os.makedirs("reports/videos", exist_ok=True)
     os.makedirs("reports/traces", exist_ok=True)
-    # Start tracing
     context.tracing.start(screenshots=True, snapshots=True, sources=True)
     yield
-    # Stop tracing after test
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     test_name = request.node.name
     browser = request.config.getoption("--browser")
@@ -72,7 +98,6 @@ def enable_artifacts(context, request):
     trace_path = f"reports/traces/{test_name}_{browser}_{timestamp}.zip"
     context.tracing.stop(path=trace_path)
 
-    # Save video references before closing context
     videos = []
     for page in context.pages:
         if page.video:
@@ -102,13 +127,27 @@ def browser_context_args(browser_context_args):
 
 
 @pytest.hookimpl(hookwrapper=True)
-def pytest_runtest_makereport(item):
+def pytest_runtest_makereport(item, call):
     outcome = yield
     rep = outcome.get_result()
 
     if rep.when == "call" and rep.failed:
         page = item.funcargs.get("page")
+        screenshot_bytes = None
+
         if page:
             os.makedirs("reports/screenshots", exist_ok=True)
             screenshot_path = f"reports/screenshots/{item.name}.png"
-            page.screenshot(path=screenshot_path)
+            try:
+                page.screenshot(path=screenshot_path, full_page=True)
+                screenshot_bytes = open(screenshot_path, "rb").read()
+            except Exception:
+                pass
+
+        write_failure_bundle(
+            test_name=item.name,
+            error=call.excinfo.value if call.excinfo else Exception("unknown"),
+            screenshot_bytes=screenshot_bytes,
+            console_errors=list(_console_errors),
+            failed_requests=list(_failed_requests),
+        )
