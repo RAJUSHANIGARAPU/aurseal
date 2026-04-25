@@ -12,7 +12,7 @@ import pytest
 
 from api.agents.analysis import AnalysisAgent, FailureAnalysis, FailureCategory
 from api.agents.execution import ExecutionResult
-from api.agents.generation import TestGenerationAgent
+from api.agents.generation import GenerationAgent
 from api.agents.healing import SelfHealingAgent
 from api.agents.ingestion import IngestionAgent, PostmanRequest
 from api.agents.orchestrator import OrchestrationResult, Orchestrator
@@ -33,7 +33,7 @@ def sample_requests() -> list[PostmanRequest]:
 @pytest.fixture(scope="module")
 def generated_files(sample_requests: list[PostmanRequest], tmp_path_factory) -> list[Path]:
     out = tmp_path_factory.mktemp("gen_tests")
-    agent = TestGenerationAgent(output_dir=out)
+    agent = GenerationAgent(output_dir=out)
     return agent.generate(sample_requests)
 
 

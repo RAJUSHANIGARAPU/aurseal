@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 
 from api.agents.analysis import AnalysisAgent
 from api.agents.execution import ExecutionAgent
-from api.agents.generation import TestGenerationAgent
+from api.agents.generation import GenerationAgent
 from api.agents.healing import SelfHealingAgent
 from api.agents.ingestion import IngestionAgent
 from api.engine.context_memory import ContextMemory
@@ -88,7 +88,7 @@ class Orchestrator:
         self._agent_logger.log("ingestion", "complete", {"request_count": len(requests_list)})
 
         # Step 2: Generate tests
-        gen_agent = TestGenerationAgent(
+        gen_agent = GenerationAgent(
             output_dir=self._output_dir,
             llm=self._llm,
             memory=self._memory,
