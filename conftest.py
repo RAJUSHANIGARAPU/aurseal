@@ -18,6 +18,27 @@ def pytest_addoption(parser):
 
 
 # =========================================================
+# FLAKINESS TRACKING
+# =========================================================
+
+
+def pytest_configure(config):
+    from autonomous_ui.flakiness.pytest_plugin import FlakinessPlugin
+
+    if not config.pluginmanager.hasplugin("flakiness-tracker"):
+        config.pluginmanager.register(FlakinessPlugin.from_config(config), "flakiness-tracker")
+
+    # Memory Intelligence Layer — opt-in via ENABLE_MEMORY=true
+    from memory.config import MemoryConfig
+
+    mem_config = MemoryConfig.from_env()
+    if mem_config.enabled and not config.pluginmanager.hasplugin("memory-tracker"):
+        from memory.pytest_plugin import MemoryPlugin
+
+        config.pluginmanager.register(MemoryPlugin.from_config(mem_config), "memory-tracker")
+
+
+# =========================================================
 # GLOBAL LOGGING SETUP
 # =========================================================
 
@@ -134,6 +155,7 @@ def pytest_runtest_makereport(item, call):
     if rep.when == "call" and rep.failed:
         page = item.funcargs.get("page")
         screenshot_bytes = None
+        dom_snapshot = ""
 
         if page:
             os.makedirs("reports/screenshots", exist_ok=True)
@@ -143,6 +165,10 @@ def pytest_runtest_makereport(item, call):
                 screenshot_bytes = open(screenshot_path, "rb").read()
             except Exception:
                 pass
+            try:
+                dom_snapshot = page.content()
+            except Exception:
+                pass
 
         write_failure_bundle(
             test_name=item.name,
@@ -150,4 +176,5 @@ def pytest_runtest_makereport(item, call):
             screenshot_bytes=screenshot_bytes,
             console_errors=list(_console_errors),
             failed_requests=list(_failed_requests),
+            dom_snapshot=dom_snapshot,
         )

@@ -15,13 +15,15 @@ Python + Pytest + Playwright for UI. Multi-agent pipeline for API. Self-healing.
 5. [Installation](#5-installation)
 6. [Running Tests](#6-running-tests)
 7. [Multi-Agent API Testing](#7-multi-agent-api-testing)
-8. [AI Skills (Slash Commands)](#8-ai-skills-slash-commands)
-9. [Failure Evidence Bundles](#9-failure-evidence-bundles)
-10. [Markers & Segmentation](#10-markers--segmentation)
-11. [Docker Execution](#11-docker-execution)
-12. [CI Integration](#12-ci-integration)
-13. [Code Quality](#13-code-quality)
-14. [Configuration & Environments](#14-configuration--environments)
+8. [Autonomous UI Intelligence Layer](#8-autonomous-ui-intelligence-layer)
+9. [Flakiness Intelligence System](#9-flakiness-intelligence-system)
+10. [AI Skills (Slash Commands)](#10-ai-skills-slash-commands)
+11. [Failure Evidence Bundles](#11-failure-evidence-bundles)
+12. [Markers & Segmentation](#12-markers--segmentation)
+13. [Docker Execution](#13-docker-execution)
+14. [CI Integration](#14-ci-integration)
+15. [Code Quality](#15-code-quality)
+16. [Configuration & Environments](#16-configuration--environments)
 
 ---
 
@@ -32,7 +34,9 @@ This framework covers the full automation lifecycle end-to-end:
 - **UI tests** via Playwright — page objects, locators, flows, traces, video
 - **API tests** via a six-agent autonomous pipeline — ingest, generate, execute, analyse, heal, repeat
 - **AI self-healing** — broken locators are detected, repaired by Claude, and persisted without human intervention
-- **Failure bundles** — every test failure writes a structured JSON evidence file with screenshot, stack trace, console errors, and failed HTTP requests
+- **Failure bundles** — every test failure writes a structured JSON evidence file with screenshot, stack trace, DOM snapshot, console errors, and failed HTTP requests
+- **Autonomous UI intelligence** — every failure is classified (LOCATOR / TIMEOUT / ASSERTION / NAVIGATION), healed automatically, and loop-guarded to prevent infinite patching
+- **Flakiness intelligence** — every test run is tracked in an append-only JSONL store; flaky tests are classified by pattern (TIMING / ORDER_DEPENDENT / RESOURCE_CONTENTION / DATA_POLLUTION / ENVIRONMENT) and receive actionable, LLM-enriched fix recommendations
 - **Autonomous fix loops** — run → analyse → patch → rerun until green
 
 ---
@@ -46,15 +50,37 @@ Tests → Flows → Pages → BasePage → Locators (JSON) → Playwright
                                  → AI Self-Healing (core/ai/)
 ```
 
+### Autonomous UI Intelligence Layer
+
+```
+conftest.py (pytest hooks)
+  ↓ failure bundle written on every test failure
+UIOrchestrator
+  ├── FailureAnalyzer    — rule-based classification → LLM fallback
+  ├── UIHealer           — locator patch | wait_retry | assertion_patch
+  └── Session log (JSONL) — structured healing events
+```
+
+### Flakiness Intelligence System
+
+```
+FlakinessPlugin (pytest_runtest_logreport)
+  ↓ append-only JSONL per run
+HistoryStore → FlakinessDetector → PatternAnalyzer → FlakinessRemediator
+                                                            ↓
+                                                      FlakinessReporter
+                                                  (Markdown + JSON report)
+```
+
 ### API Agent Pipeline
 
 ```
 Orchestrator
-  ├── IngestionAgent      — reads Postman collections / OpenAPI specs
-  ├── TestGenerationAgent — produces parameterised test cases
-  ├── ExecutionAgent      — runs requests, captures responses
-  ├── AnalysisAgent       — diagnoses failures, proposes fixes
-  └── SelfHealingAgent    — patches broken assertions, reruns
+  ├── IngestionAgent   — reads Postman collections / OpenAPI specs
+  ├── GenerationAgent  — produces parameterised test cases
+  ├── ExecutionAgent   — runs requests, captures responses
+  ├── AnalysisAgent    — diagnoses failures, proposes fixes
+  └── SelfHealingAgent — patches broken assertions, reruns
 ```
 
 Supporting engines: DynamicDataEngine, ValidationEngine, ContextMemory, AgentLogger, LLM abstraction (Claude).
@@ -81,6 +107,21 @@ Supporting engines: DynamicDataEngine, ValidationEngine, ContextMemory, AgentLog
 - Structured JSONL observability traces per session
 - Claude-backed LLM layer (swappable via `BaseLLMClient` ABC)
 
+**Autonomous UI Intelligence**
+- Failure classification: LOCATOR / TIMEOUT / ASSERTION / NAVIGATION (rule-based, LLM fallback)
+- Locator healing: reads DOM snapshot, asks Claude for an alternative selector, patches `wiki_locators.json`
+- Wait healing: records retry config to `reports/healing_overrides.json` for next run
+- Assertion healing: only when confidence is high — prevents masking real bugs
+- Loop guard: each locator key is patched at most once per session
+- CLI: `python -m autonomous_ui.orchestrator --path ui/tests/ --max-iterations 3`
+
+**Flakiness Intelligence**
+- Zero-latency JSONL tracking via `FlakinessPlugin` (fire-and-forget, parallel-safe)
+- Per-test profile: flakiness rate, confidence, max consecutive failures, most common error
+- Pattern classification: TIMING → ORDER_DEPENDENT → RESOURCE_CONTENTION → DATA_POLLUTION → ENVIRONMENT → LLM → UNKNOWN
+- Targeted remediation: timing gap stats, worker breakdown, env breakdown — each with LLM-enriched, file-specific guidance
+- Report output: `reports/flakiness/report-<run_id>.{md,json}` printed at session end
+
 **Infrastructure**
 - Environment-aware config (`--env qa/staging/prod`)
 - Docker images for both UI and API agent execution
@@ -100,6 +141,19 @@ wiki_project/
 │   ├── llm/             — BaseLLMClient ABC + ClaudeLLMClient
 │   ├── postman/         — sample Postman collection
 │   └── tests/           — API-layer tests
+├── autonomous_ui/
+│   ├── analyzer.py      — failure classification (rule-based + LLM fallback)
+│   ├── healer.py        — locator / wait / assertion healing strategies
+│   ├── models.py        — FailureBundle, FailureAnalysis, HealingResult dataclasses
+│   ├── orchestrator.py  — autonomous run → analyse → heal → rerun loop
+│   └── flakiness/
+│       ├── models.py        — FlakRecord, FlakinessProfile, RemediationResult, FlakPattern
+│       ├── history_store.py — append-only JSONL store (parallel-safe)
+│       ├── detector.py      — per-test profile computation + flaky/stable classification
+│       ├── pattern_analyzer.py — TIMING/ORDER_DEPENDENT/RESOURCE_CONTENTION/DATA_POLLUTION/ENVIRONMENT
+│       ├── remediator.py    — rule-based suggestions enriched by LLM
+│       ├── reporter.py      — Markdown + JSON report generation
+│       └── pytest_plugin.py — FlakinessPlugin (auto-registered via conftest.py)
 ├── core/
 │   ├── ai/              — self-healing engine (Claude API)
 │   ├── base_page.py
@@ -113,11 +167,18 @@ wiki_project/
 │   ├── testdata/
 │   └── tests/
 ├── tests/
-│   └── api_agent/       — unit tests for all agent and engine components
+│   ├── api_agent/       — unit tests for all agent and engine components
+│   ├── autonomous_ui/   — 49 tests for analyzer, healer, orchestrator
+│   └── flakiness/       — 50 tests for history store, detector, pattern analyzer, reporter
 ├── config/
 │   └── environments.json
 ├── generated_tests/     — output directory for agent-generated test files
-├── reports/             — screenshots, videos, traces, logs, failure bundles
+├── reports/
+│   ├── failures/        — JSON evidence bundles (screenshot, DOM, console, network)
+│   ├── flakiness/       — Markdown + JSON flakiness reports per run
+│   ├── screenshots/
+│   ├── traces/
+│   └── videos/
 ├── scripts/
 │   └── auto_runner.py   — autonomous run → fix → rerun loop
 ├── main.py              — CLI entry point for the API agent pipeline
@@ -214,7 +275,87 @@ Every agent session writes a JSONL trace to `reports/agent-sessions/`. Each line
 
 ---
 
-## 8. AI Skills (Slash Commands)
+## 8. Autonomous UI Intelligence Layer
+
+The `autonomous_ui/` layer wraps every pytest UI run with failure analysis and automatic healing. It integrates purely via `conftest.py` hooks — no page objects or test files are touched.
+
+### How it works
+
+1. On failure, `conftest.py` captures a DOM snapshot and writes a JSON failure bundle to `reports/failures/`.
+2. `FailureAnalyzer` classifies the failure: LOCATOR, TIMEOUT, ASSERTION, NAVIGATION, or UNKNOWN — using regex heuristics first, Claude as a fallback.
+3. `UIHealer` applies the appropriate strategy:
+   - **LOCATOR / TIMEOUT** — reads `ui/locators/wiki_locators.json`, asks Claude to suggest an alternative selector from the DOM snapshot, writes the patch back.
+   - **WAIT_RETRY** — records a retry config to `reports/healing_overrides.json` when the locator registry is missing.
+   - **ASSERTION** — delegates to `AutoFixer` only when confidence is `high`.
+4. Every decision is written as a JSONL line to `reports/ui_healing_sessions.jsonl`.
+5. A loop guard prevents the same locator key from being patched more than once per session.
+
+### Run the autonomous loop
+
+```bash
+# Run → analyse → heal → rerun (up to 3 iterations)
+python -m autonomous_ui.orchestrator --path ui/tests/ --max-iterations 3
+
+# Dry run — classify failures without applying patches
+python -m autonomous_ui.orchestrator --path ui/tests/ --analyze-only
+```
+
+### Healing overrides
+
+If `reports/healing_overrides.json` lists tests that need reruns, the orchestrator automatically appends `--reruns N` to the next pytest invocation.
+
+---
+
+## 9. Flakiness Intelligence System
+
+The flakiness system tracks every test execution and surfaces tests that intermittently fail — automatically, with targeted fix guidance.
+
+### Plugin registration
+
+`FlakinessPlugin` is auto-registered in `pytest_configure` (in `conftest.py`). It adds zero latency — the JSONL write is fire-and-forget.
+
+### What gets tracked
+
+Every test execution at the `call` phase writes a `FlakRecord` to `reports/flakiness/history.jsonl`:
+
+```json
+{"test_id": "ui/tests/test_search.py::test_search_train", "run_id": "20260425T143022Z",
+ "outcome": "failed", "duration_s": 4.2, "error": "TimeoutError: 30000ms",
+ "timestamp": "2026-04-25T14:30:22Z", "worker": "gw0", "environment": "qa"}
+```
+
+### Session report
+
+At the end of every session with enough history (≥ 5 runs per test), a report is written to `reports/flakiness/`:
+
+```
+[flakiness] 2 flaky test(s) detected. Report: reports/flakiness/report-20260425T143022Z.md
+```
+
+The Markdown report includes a severity table, per-test pattern classification, and LLM-enriched fix recommendations. A JSON equivalent is written alongside it.
+
+### Pattern classification (priority order)
+
+| Pattern | Signal |
+|---------|--------|
+| ENVIRONMENT | Failures correlated with external service errors |
+| TIMING | Timeout errors or wait-related keywords |
+| RESOURCE_CONTENTION | Failure rate ≥ 3× higher on parallel workers vs sequential |
+| DATA_POLLUTION | Shared data mutation keywords in errors |
+| ORDER_DEPENDENT | LLM classification (single-word prompt, max_tokens=20) |
+| UNKNOWN | No pattern identified |
+
+### Flakiness thresholds
+
+| Constant | Value | Meaning |
+|----------|-------|---------|
+| `MIN_RUNS` | 5 | Minimum runs before a judgement is made |
+| `FLAKY_MIN_RATE` | 2% | Below this: statistical noise |
+| `ALWAYS_FAIL_THRESHOLD` | 95% | Above this: broken test, not flaky |
+
+---
+
+## 10. AI Skills (Slash Commands)
 
 Use these from the repo root inside Claude Code:
 
@@ -229,7 +370,7 @@ Skills are in `.claude/commands/`.
 
 ---
 
-## 9. Failure Evidence Bundles
+## 11. Failure Evidence Bundles
 
 Every failing test writes a JSON bundle to `reports/failures/<test>-<timestamp>.json`:
 
@@ -240,6 +381,7 @@ Every failing test writes a JSON bundle to `reports/failures/<test>-<timestamp>.
   "error": "AssertionError: expected 'Dashboard' in page title",
   "stackTrace": "...",
   "screenshot": "<base64 PNG>",
+  "domSnapshot": "<full page HTML>",
   "consoleErrors": ["TypeError: Cannot read properties of null"],
   "failedRequests": ["POST /api/auth/login → 401"]
 }
@@ -249,7 +391,7 @@ The bundle is written by `core/failure_reporter.py` via the `pytest_runtest_make
 
 ---
 
-## 10. Markers & Segmentation
+## 12. Markers & Segmentation
 
 ```bash
 pytest -m smoke
@@ -262,7 +404,7 @@ pytest -m contract
 
 ---
 
-## 11. Docker Execution
+## 13. Docker Execution
 
 ### UI Tests
 
@@ -287,7 +429,7 @@ docker compose run api-agent run --collection api/postman/sample_collection.json
 
 ---
 
-## 12. CI Integration
+## 14. CI Integration
 
 ```
 .github/workflows/tests.yml
@@ -302,7 +444,7 @@ Pipeline steps:
 
 ---
 
-## 13. Code Quality
+## 15. Code Quality
 
 ```bash
 ruff check .
@@ -315,7 +457,7 @@ Pre-commit hooks run ruff on every commit. All checks must pass before commit is
 
 ---
 
-## 14. Configuration & Environments
+## 16. Configuration & Environments
 
 ```
 config/environments.json

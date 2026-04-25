@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 
 from api.agents.analysis import AnalysisAgent
 from api.agents.execution import ExecutionAgent
-from api.agents.generation import TestGenerationAgent
+from api.agents.generation import GenerationAgent
 from api.agents.healing import SelfHealingAgent
 from api.agents.ingestion import IngestionAgent
 from api.engine.context_memory import ContextMemory
@@ -18,6 +18,7 @@ from api.engine.observability import AgentLogger
 
 if TYPE_CHECKING:
     from api.llm.base import BaseLLMClient
+    from memory.config import MemoryConfig
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,7 @@ class Orchestrator:
         stop_on_success: bool = True,
         llm: BaseLLMClient | None = None,
         relax_status: bool = False,
+        memory_config: MemoryConfig | None = None,
     ) -> None:
         self._collection_path = Path(collection_path)
         self._output_dir = Path(output_dir)
@@ -67,6 +69,7 @@ class Orchestrator:
         self._session_id = uuid.uuid4().hex[:12]
         self._agent_logger = AgentLogger(self._session_id)
         self._memory = ContextMemory()
+        self._mem_layer = self._init_memory_layer(memory_config)
 
     def run(self) -> OrchestrationResult:
         """Execute the full orchestration loop.
@@ -87,8 +90,12 @@ class Orchestrator:
 
         self._agent_logger.log("ingestion", "complete", {"request_count": len(requests_list)})
 
+        # Memory: retrieve relevant past failures and inject into context (active mode only)
+        if self._mem_layer:
+            self._mem_layer.before_execution(requests_list, self._memory)
+
         # Step 2: Generate tests
-        gen_agent = TestGenerationAgent(
+        gen_agent = GenerationAgent(
             output_dir=self._output_dir,
             llm=self._llm,
             memory=self._memory,
@@ -156,6 +163,13 @@ class Orchestrator:
                 "analysis", "complete", {"categories": self._summarize(analyses)}
             )
 
+            # Memory: store failures and enrich with historical context
+            if self._mem_layer and analyses:
+                insights = self._mem_layer.after_execution(
+                    analyses, requests_list, self._session_id
+                )
+                self._agent_logger.log("memory", "enriched", {"insights_count": len(insights)})
+
             # Heal — one healing pass per generated file
             self._agent_logger.log("healing", "start", {"file_count": len(generated_files)})
             for gen_file in generated_files:
@@ -200,6 +214,23 @@ class Orchestrator:
             key = a.category.value
             summary[key] = summary.get(key, 0) + 1
         return summary
+
+    @staticmethod
+    def _init_memory_layer(config: MemoryConfig | None):  # noqa: ANN205
+        """Lazily initialise the memory layer — only imported when enabled."""
+        if config is None or not config.enabled:
+            return None
+        try:
+            from memory.middleware import MemoryMiddleware
+            from memory.retriever import MemoryRetriever
+            from memory.store import MemoryStore
+
+            store = MemoryStore(config)
+            retriever = MemoryRetriever(top_k=config.similarity_top_k)
+            return MemoryMiddleware(store, retriever, config)
+        except Exception:  # noqa: BLE001
+            logger.warning("Memory layer failed to initialise — running without memory")
+            return None
 
     def _failure_result(self, reason: str) -> OrchestrationResult:
         logger.error("Orchestration failed: %s", reason)
