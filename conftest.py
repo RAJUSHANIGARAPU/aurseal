@@ -37,6 +37,15 @@ def pytest_configure(config):
 
         config.pluginmanager.register(MemoryPlugin.from_config(mem_config), "memory-tracker")
 
+    # Contract Testing Layer — opt-in via ENABLE_CONTRACT_TESTING=true
+    from contract_testing.config import ContractConfig
+
+    ct_config = ContractConfig.from_env()
+    if ct_config.enabled and not config.pluginmanager.hasplugin("contract-testing"):
+        from contract_testing.pytest_plugin import ContractPlugin
+
+        config.pluginmanager.register(ContractPlugin.from_config(ct_config), "contract-testing")
+
 
 # =========================================================
 # GLOBAL LOGGING SETUP
