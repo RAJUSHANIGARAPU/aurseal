@@ -1,267 +1,332 @@
-# Test Automation Framework
+# wiki_project — Universal Test Automation Framework
 
-TestPilot is a production-grade, scalable UI automation framework built using Playwright and PyTest.
-It is designed with clean architecture, CI readiness, Docker reproducibility, and recruiter-level code quality in mind.
+A plug-and-play, AI-powered test automation framework for any web application. Clone it, point it at a URL, run. No org-specific assumptions, no proprietary dependencies.
 
-------------------------------------------------------------------------
+Python + Pytest + Playwright for UI. Multi-agent pipeline for API. Self-healing. Failure analysis. Autonomous fix loops — all built in.
+
+---
 
 ## Table of Contents
 
-1.  Overview
-2.  Architecture
-3.  Core Features
-4.  Project Structure
-5.  Installation & Local Setup
-6.  Running Tests
-7.  Markers & Test Segmentation
-8.  Docker Execution
-9.  Debugging & Artifacts
-10. Continuous Integration
-11. Code Quality & Linting
-12. Configuration & Environments
-13. Design Decisions
-14. Extensibility Strategy
-15. License
+1. [Overview](#1-overview)
+2. [Architecture](#2-architecture)
+3. [Core Capabilities](#3-core-capabilities)
+4. [Project Structure](#4-project-structure)
+5. [Installation](#5-installation)
+6. [Running Tests](#6-running-tests)
+7. [Multi-Agent API Testing](#7-multi-agent-api-testing)
+8. [AI Skills (Slash Commands)](#8-ai-skills-slash-commands)
+9. [Failure Evidence Bundles](#9-failure-evidence-bundles)
+10. [Markers & Segmentation](#10-markers--segmentation)
+11. [Docker Execution](#11-docker-execution)
+12. [CI Integration](#12-ci-integration)
+13. [Code Quality](#13-code-quality)
+14. [Configuration & Environments](#14-configuration--environments)
 
-------------------------------------------------------------------------
+---
 
 ## 1. Overview
 
-TestPilot is a modern UI automation framework that demonstrates:
+This framework covers the full automation lifecycle end-to-end:
 
--   Clean Page Object Model (POM)
--   JSON-based locator management
--   Plugin-based Playwright lifecycle
--   Contract-level network validation
--   Dockerized and CI-ready execution
--   Structured logging and artifact generation
+- **UI tests** via Playwright — page objects, locators, flows, traces, video
+- **API tests** via a six-agent autonomous pipeline — ingest, generate, execute, analyse, heal, repeat
+- **AI self-healing** — broken locators are detected, repaired by Claude, and persisted without human intervention
+- **Failure bundles** — every test failure writes a structured JSON evidence file with screenshot, stack trace, console errors, and failed HTTP requests
+- **Autonomous fix loops** — run → analyse → patch → rerun until green
 
-The framework is built to be maintainable, scalable, and
-production-ready.
-
-------------------------------------------------------------------------
+---
 
 ## 2. Architecture
 
-The framework follows a layered architecture:
+### UI Layer
 
--   Tests → Call Flows
--   Flows → Orchestrate Pages
--   Pages → Extend BasePage
--   BasePage → Handles locator resolution
--   Locators → JSON-based configuration
--   Config → Environment-based URL management
+```
+Tests → Flows → Pages → BasePage → Locators (JSON) → Playwright
+                                 → AI Self-Healing (core/ai/)
+```
 
-This separation ensures clean responsibilities and maintainability.
+### API Agent Pipeline
 
-------------------------------------------------------------------------
+```
+Orchestrator
+  ├── IngestionAgent      — reads Postman collections / OpenAPI specs
+  ├── TestGenerationAgent — produces parameterised test cases
+  ├── ExecutionAgent      — runs requests, captures responses
+  ├── AnalysisAgent       — diagnoses failures, proposes fixes
+  └── SelfHealingAgent    — patches broken assertions, reruns
+```
+
+Supporting engines: DynamicDataEngine, ValidationEngine, ContextMemory, AgentLogger, LLM abstraction (Claude).
+
+---
 
 ## 3. Core Capabilities
 
-1.  Plugin-Based Playwright Lifecycle
-2.  Multi-Browser Execution (Chromium, Firefox, WebKit)
-3.  Headed and Headless Execution
-4.  Parallel Execution
-5.  Retry Strategy via pytest-rerunfailures
-6.  Automatic Screenshot on Failure
-7.  Video Recording per Test
-8.  Playwright Tracing (DOM, network, timeline)
-9.  Dockerized Execution
-10. Mounted Artifact Persistence
-11. Environment-Based Configuration
-12. Structured Logging
-13. GitHub Actions CI Integration
-14. Artifact Upload in CI
-15. Ruff Linting Enforcement
-16. Pre-Commit Hook Support
-17. Clean Page Object Model
-18. JSON-Based Locator Strategy
-19. Contract-Level Network Validation
-20. Modular
+**UI**
+- Page Object Model with JSON-based locator registry
+- Multi-browser: Chromium, Firefox, WebKit
+- Headed and headless modes; parallel execution
+- Screenshot, video, and Playwright trace on every test
+- Structured failure evidence bundle (JSON) on failure
+- AI self-healing for broken locators
+- Auto-fix loop: run → diagnose → patch → rerun
 
-------------------------------------------------------------------------
+**API**
+- Postman collection ingestion (v2.1)
+- Dynamic data generation: Faker, env vars, `{{variable}}` templates
+- Context memory — extract response values and reuse across requests
+- Validation: status code, response time, JSON schema, headers
+- Six-agent autonomous loop with LLM-powered analysis and healing
+- Structured JSONL observability traces per session
+- Claude-backed LLM layer (swappable via `BaseLLMClient` ABC)
+
+**Infrastructure**
+- Environment-aware config (`--env qa/staging/prod`)
+- Docker images for both UI and API agent execution
+- GitHub Actions CI with artifact upload
+- Ruff linting + pre-commit hooks enforced
+
+---
 
 ## 4. Project Structure
 
-    project/
-    ├── api/
-    │   ├── clients/
-    │   └── tests/
-    ├── core/
-    │   ├── base_page.py
-    │   ├── config_reader.py
-    │   └── logger.py
-    ├── config/
-    │   └── environments.json
-    ├── ui/
-    │   ├── pages/
-    │   ├── flows/
-    │   ├── locators/
-    │   ├── testdata/
-    │   └── tests/
-    ├── reports/
-    ├── Dockerfile
-    ├── docker-compose.yml
-    ├── pytest.ini
-    ├── pyproject.toml
-    └── README.md
+```
+wiki_project/
+├── api/
+│   ├── agents/          — ingestion, generation, execution, analysis, healing, orchestrator
+│   ├── clients/         — low-level HTTP clients
+│   ├── engine/          — dynamic_data, context_memory, validation, observability
+│   ├── llm/             — BaseLLMClient ABC + ClaudeLLMClient
+│   ├── postman/         — sample Postman collection
+│   └── tests/           — API-layer tests
+├── core/
+│   ├── ai/              — self-healing engine (Claude API)
+│   ├── base_page.py
+│   ├── config_reader.py
+│   ├── failure_reporter.py
+│   └── logger.py
+├── ui/
+│   ├── pages/
+│   ├── flows/
+│   ├── locators/        — JSON locator registries per page
+│   ├── testdata/
+│   └── tests/
+├── tests/
+│   └── api_agent/       — unit tests for all agent and engine components
+├── config/
+│   └── environments.json
+├── generated_tests/     — output directory for agent-generated test files
+├── reports/             — screenshots, videos, traces, logs, failure bundles
+├── scripts/
+│   └── auto_runner.py   — autonomous run → fix → rerun loop
+├── main.py              — CLI entry point for the API agent pipeline
+├── Dockerfile
+├── Dockerfile.api-agent
+├── docker-compose.yml
+├── pytest.ini
+└── pyproject.toml
+```
 
-------------------------------------------------------------------------
+---
 
-## 5. Installation & Local Setup
+## 5. Installation
 
-### Clone Repository
+```bash
+git clone <repository-url>
+cd wiki_project
+pip install -r requirements.txt
+playwright install --with-deps
+```
 
-    git clone <repository-url>
-    cd project
+Set the Claude API key for AI features (degrades gracefully without it):
 
-### Install Dependencies
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+```
 
-    pip install -r requirements.txt
-    playwright install --with-deps
-
-------------------------------------------------------------------------
+---
 
 ## 6. Running Tests
 
-Run search tests:
+```bash
+# UI tests
+pytest ui/tests/ --browser chromium
 
-    pytest ui/tests/test_search.py --headed --browser chromium
+# Headed mode
+pytest ui/tests/ --headed --browser chromium
 
-Run specific browser:
+# Parallel
+pytest ui/tests/ -n 4 --browser chromium
 
-    pytest ui/tests/test_search.py --browser chromium
+# API layer tests
+pytest api/tests/
 
-Run headed mode:
+# Agent unit tests
+pytest tests/api_agent/
 
-    pytest ui/tests/test_search.py --headed --browser chromium
+# Specific environment
+pytest --env staging
+```
 
-Run in parallel:
+---
 
-    pytest ui/tests/test_search.py --headed --browser chromium -n 4
+## 7. Multi-Agent API Testing
 
-------------------------------------------------------------------------
+The agent pipeline reads a Postman collection, generates test cases, executes them, analyses failures, and heals broken assertions — with no manual intervention.
 
-## 7. Markers & Test Segmentation
+### Run via CLI
 
-Run contract tests:
+```bash
+# Full autonomous loop against a Postman collection
+python main.py run --collection api/postman/sample_collection.json --env qa
 
-    pytest -m contract --headed --browser chromium
+# Single-pass execution (no healing loop)
+python main.py run --collection api/postman/sample_collection.json --no-heal
 
-Run negative tests:
+# Dry run — generate test cases only, do not execute
+python main.py generate --collection api/postman/sample_collection.json
+```
 
-    pytest -m negative --headed --browser chromium
+### Run via Docker
 
-Run API tests:
+```bash
+docker build -f Dockerfile.api-agent -t wiki-api-agent .
+docker run -e ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY wiki-api-agent \
+    run --collection api/postman/sample_collection.json
+```
 
-    pytest -m api --headed --browser chromium
+### Dynamic Data
 
-------------------------------------------------------------------------
+Use `{{variable}}` in collection request bodies or URLs. Resolved in order:
 
-## 8. Docker Execution
+1. ContextMemory (values extracted from prior responses)
+2. Environment variables
+3. Faker — `{{faker.name}}`, `{{faker.email}}`, `{{faker.uuid4}}`, etc.
 
-### Build Image
+### Observability
 
-    docker compose build
+Every agent session writes a JSONL trace to `reports/agent-sessions/`. Each line is a structured event:
 
-### Run Tests
+```json
+{"ts": "2026-04-25T10:00:00Z", "agent": "execution", "event": "request_sent", "data": {...}}
+```
 
-    docker compose run tests
+---
 
-Run with browser override:
+## 8. AI Skills (Slash Commands)
 
-    docker compose run tests --browser firefox
+Use these from the repo root inside Claude Code:
 
-Run in parallel:
+| Command | What it does |
+|---------|-------------|
+| `/analyze-trace` | Extracts actions, errors, and DOM state from a Playwright trace ZIP |
+| `/analyze-test-failure` | Reads failure bundles and diagnoses root cause with fix proposals |
+| `/auto-run-fix` | Autonomous loop: run → analyse → fix → rerun until green |
+| `/generate-test-from-trace` | Generates Page Object + test from a recorded trace |
 
-    docker compose run tests -n 4
+Skills are in `.claude/commands/`.
 
-Artifacts are persisted in the local `reports/` directory.
+---
 
-------------------------------------------------------------------------
+## 9. Failure Evidence Bundles
 
-## 9. Debugging & Artifacts
+Every failing test writes a JSON bundle to `reports/failures/<test>-<timestamp>.json`:
 
-Open Playwright trace:
+```json
+{
+  "test": "test_login_flow",
+  "timestamp": "2026-04-25T09:31:00Z",
+  "error": "AssertionError: expected 'Dashboard' in page title",
+  "stackTrace": "...",
+  "screenshot": "<base64 PNG>",
+  "consoleErrors": ["TypeError: Cannot read properties of null"],
+  "failedRequests": ["POST /api/auth/login → 401"]
+}
+```
 
-    playwright show-trace reports/traces/<trace.zip>
+The bundle is written by `core/failure_reporter.py` via the `pytest_runtest_makereport` hook in `conftest.py`. No test code changes required.
 
-View recorded video:
+---
 
-    open reports/videos/<file>.webm
+## 10. Markers & Segmentation
 
-Logs are stored in:
+```bash
+pytest -m smoke
+pytest -m regression
+pytest -m e2e
+pytest -m negative
+pytest -m api
+pytest -m contract
+```
 
-    reports/logs/test.log
+---
 
-------------------------------------------------------------------------
+## 11. Docker Execution
 
-## 10. Continuous Integration
+### UI Tests
 
-Workflow location:
+```bash
+docker compose build
+docker compose run tests
 
-    .github/workflows/tests.yml
+# Override browser
+docker compose run tests --browser firefox
 
-Pipeline includes:
+# Parallel
+docker compose run tests -n 4
+```
 
--   Dependency installation
--   Playwright browser setup
--   Ruff lint check
--   Parallel test execution
--   Artifact upload
+Artifacts are written to the local `reports/` directory via volume mount.
 
-------------------------------------------------------------------------
+### API Agent
 
-## 11. Code Quality & Linting
+```bash
+docker compose run api-agent run --collection api/postman/sample_collection.json
+```
 
-Run Ruff:
+---
 
-    ruff check .
-    ruff format .
+## 12. CI Integration
 
-This ensures:
+```
+.github/workflows/tests.yml
+```
 
--   No unused imports
--   No bare exceptions
--   Clean formatting
--   Enforced best practices
+Pipeline steps:
+- Ruff lint check
+- Playwright browser install
+- UI test execution with artifact upload
+- Agent unit test execution
+- Failure bundle and trace archival
 
-------------------------------------------------------------------------
+---
 
-## 12. Configuration & Environments
+## 13. Code Quality
 
-Environment configuration is managed via:
+```bash
+ruff check .
+ruff format .
+```
 
-    config/environments.json
+Enforced rules: E, F, I (isort), UP (pyupgrade), B (bugbear). Line length: 100. Target: Python 3.10+.
 
-Switch environment using:
+Pre-commit hooks run ruff on every commit. All checks must pass before commit is accepted.
 
-    pytest --env qa
+---
 
-The ConfigReader class dynamically resolves base URLs.
+## 14. Configuration & Environments
 
-------------------------------------------------------------------------
+```
+config/environments.json
+```
 
-## 13. Design Decisions
+Switch environment:
 
--   No raw selectors in tests
--   Centralized locator strategy
--   Flow-based test orchestration
--   Browser lifecycle managed by plugin
--   Docker-first reproducibility
--   CI integration from day one
+```bash
+pytest --env qa        # default
+pytest --env staging
+pytest --env prod
+```
 
-------------------------------------------------------------------------
-
-## 14. Extensibility Strategy
-
-The framework supports:
-
--   Additional flows
--   API layer expansion
--   Cross-layer contract tests
--   Performance assertions
--   Allure report publishing
--   Multi-browser CI matrix
-
-------------------------------------------------------------------------
+The `ConfigReader` class resolves base URLs per environment. Add new environments by extending `environments.json` — no code changes needed.
