@@ -18,6 +18,18 @@ def pytest_addoption(parser):
 
 
 # =========================================================
+# FLAKINESS TRACKING
+# =========================================================
+
+
+def pytest_configure(config):
+    from autonomous_ui.flakiness.pytest_plugin import FlakinessPlugin
+
+    if not config.pluginmanager.hasplugin("flakiness-tracker"):
+        config.pluginmanager.register(FlakinessPlugin.from_config(config), "flakiness-tracker")
+
+
+# =========================================================
 # GLOBAL LOGGING SETUP
 # =========================================================
 
