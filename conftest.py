@@ -46,6 +46,15 @@ def pytest_configure(config):
 
         config.pluginmanager.register(ContractPlugin.from_config(ct_config), "contract-testing")
 
+    # Web Discovery Layer — opt-in via ENABLE_WEB_DISCOVERY=true
+    import os as _os
+
+    if _os.getenv("ENABLE_WEB_DISCOVERY", "false").lower() in ("1", "true", "yes"):
+        if not config.pluginmanager.hasplugin("web_discovery_plugin"):
+            from web_discovery.pytest_plugin import WebDiscoveryPlugin
+
+            config.pluginmanager.register(WebDiscoveryPlugin(), "web_discovery_plugin")
+
 
 # =========================================================
 # GLOBAL LOGGING SETUP
