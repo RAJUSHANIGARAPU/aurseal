@@ -15,3 +15,15 @@ reports/
 
 # Mac
 .DS_Store
+
+# Generated test output from API agent runs
+generated_tests/*.py
+
+# Accidental files
+eval\ *
+
+# Claude local session data — never commit these
+# .claude/commands/ is intentionally tracked (AI slash command skills)
+.claude/*
+!.claude/commands/
+!.claude/commands/**
