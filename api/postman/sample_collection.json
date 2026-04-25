@@ -1,0 +1,175 @@
+{
+  "info": {
+    "name": "httpbin Sample Collection",
+    "description": "Sample Postman collection for API agent testing against httpbin.org",
+    "_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Basic Requests",
+      "item": [
+        {
+          "name": "GET httpbin get",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "https://httpbin.org/get?source=api-agent&version=1",
+              "protocol": "https",
+              "host": ["httpbin", "org"],
+              "path": ["get"],
+              "query": [
+                {
+                  "key": "source",
+                  "value": "api-agent"
+                },
+                {
+                  "key": "version",
+                  "value": "1"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET status 200",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "https://httpbin.org/status/200",
+              "protocol": "https",
+              "host": ["httpbin", "org"],
+              "path": ["status", "200"]
+            },
+            "header": []
+          }
+        },
+        {
+          "name": "GET JSON response",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "https://httpbin.org/json",
+              "protocol": "https",
+              "host": ["httpbin", "org"],
+              "path": ["json"]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Response is JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "POST Requests",
+      "item": [
+        {
+          "name": "POST with JSON body",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "https://httpbin.org/post",
+              "protocol": "https",
+              "host": ["httpbin", "org"],
+              "path": ["post"]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\": \"{{name}}\", \"email\": \"{{email}}\", \"company\": \"{{company}}\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST with bearer token",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "https://httpbin.org/post",
+              "protocol": "https",
+              "host": ["httpbin", "org"],
+              "path": ["post"]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"action\": \"create\", \"payload\": {\"id\": \"{{uuid}}\", \"name\": \"{{name}}\"}}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Timing Tests",
+      "item": [
+        {
+          "name": "GET with delay",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "https://httpbin.org/delay/1",
+              "protocol": "https",
+              "host": ["httpbin", "org"],
+              "path": ["delay", "1"]
+            },
+            "header": []
+          }
+        }
+      ]
+    }
+  ]
+}

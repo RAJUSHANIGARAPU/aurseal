@@ -1,0 +1,33 @@
+FROM python:3.13-slim
+
+LABEL description="Autonomous multi-agent API testing system for wiki_project"
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy dependency files first for layer caching
+COPY requirements.txt requirements-lock.txt ./
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir \
+        faker \
+        jsonschema \
+        pytest-json-report \
+        -r requirements.txt
+
+# Copy source code
+COPY api/ ./api/
+COPY core/ ./core/
+COPY tests/ ./tests/
+COPY main.py ./
+COPY pyproject.toml ./
+COPY pytest.ini ./
+
+# Create output directories
+RUN mkdir -p generated_tests reports/agent_traces reports/logs
+
+# Default command: run the API agent tests
+CMD ["python", "-m", "pytest", "tests/api_agent/", "-v", "--tb=short"]
