@@ -28,6 +28,15 @@ def pytest_configure(config):
     if not config.pluginmanager.hasplugin("flakiness-tracker"):
         config.pluginmanager.register(FlakinessPlugin.from_config(config), "flakiness-tracker")
 
+    # Memory Intelligence Layer — opt-in via ENABLE_MEMORY=true
+    from memory.config import MemoryConfig
+
+    mem_config = MemoryConfig.from_env()
+    if mem_config.enabled and not config.pluginmanager.hasplugin("memory-tracker"):
+        from memory.pytest_plugin import MemoryPlugin
+
+        config.pluginmanager.register(MemoryPlugin.from_config(mem_config), "memory-tracker")
+
 
 # =========================================================
 # GLOBAL LOGGING SETUP
