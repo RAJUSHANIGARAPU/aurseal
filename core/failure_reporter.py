@@ -29,6 +29,7 @@ def write_failure_bundle(
     console_errors: list[str],
     failed_requests: list[str],
     output_dir: str = "reports/failures",
+    dom_snapshot: str = "",
 ) -> Path | None:
     safe_name = "".join(c if c.isalnum() or c in "_-" else "_" for c in test_name)
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -46,6 +47,7 @@ def write_failure_bundle(
             "screenshot": base64.b64encode(screenshot_bytes).decode() if screenshot_bytes else "",
             "consoleErrors": console_errors,
             "failedRequests": failed_requests,
+            "domSnapshot": dom_snapshot,
         }
 
         out_file.write_text(json.dumps(bundle, indent=2), encoding="utf-8")

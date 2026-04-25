@@ -134,6 +134,7 @@ def pytest_runtest_makereport(item, call):
     if rep.when == "call" and rep.failed:
         page = item.funcargs.get("page")
         screenshot_bytes = None
+        dom_snapshot = ""
 
         if page:
             os.makedirs("reports/screenshots", exist_ok=True)
@@ -143,6 +144,10 @@ def pytest_runtest_makereport(item, call):
                 screenshot_bytes = open(screenshot_path, "rb").read()
             except Exception:
                 pass
+            try:
+                dom_snapshot = page.content()
+            except Exception:
+                pass
 
         write_failure_bundle(
             test_name=item.name,
@@ -150,4 +155,5 @@ def pytest_runtest_makereport(item, call):
             screenshot_bytes=screenshot_bytes,
             console_errors=list(_console_errors),
             failed_requests=list(_failed_requests),
+            dom_snapshot=dom_snapshot,
         )
