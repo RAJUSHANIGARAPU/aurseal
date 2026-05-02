@@ -2,6 +2,8 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from core.base_page import BasePage
 
+_CMP_BUTTON_NAMES = ["Agree", "Accept", "Accept all", "I agree", "Allow all", "OK"]
+
 
 class HomePage(BasePage):
     def navigate(self):
@@ -15,12 +17,15 @@ class HomePage(BasePage):
         except PlaywrightTimeoutError:
             return  # no consent banner on this environment
 
-        try:
-            button = self.resolve("cookie_accept_button")
-            button.wait_for(state="visible", timeout=5000)
-            button.click()
-        except PlaywrightTimeoutError:
-            pass
+        # Try common accept-button labels — Catawiki's CMP text varies by region
+        for label in _CMP_BUTTON_NAMES:
+            try:
+                btn = self.page.get_by_role("button", name=label)
+                btn.wait_for(state="visible", timeout=2000)
+                btn.click()
+                break
+            except PlaywrightTimeoutError:
+                continue
 
         # Ensure the CMP overlay is gone before proceeding
         try:
@@ -28,6 +33,9 @@ class HomePage(BasePage):
         except PlaywrightTimeoutError:
             # Force-remove via JS as last resort
             self.page.evaluate("document.getElementById('usercentrics-cmp-ui')?.remove()")
+
+        # Reset any body overflow/scroll-lock the CMP may have left behind
+        self.page.evaluate("document.body.style.overflow = ''; document.body.style.height = '';")
 
     def close_register_popup_if_present(self):
         try:
