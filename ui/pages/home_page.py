@@ -12,8 +12,10 @@ class HomePage(BasePage):
 
     def accept_cookies(self):
         cmp = self.page.locator("#usercentrics-cmp-ui")
+        # The CMP aside is often empty (dialog lives in its Shadow DOM) so
+        # Playwright's "visible" check times out — use "attached" instead.
         try:
-            cmp.wait_for(state="visible", timeout=5000)
+            cmp.wait_for(state="attached", timeout=5000)
         except PlaywrightTimeoutError:
             return  # no consent banner on this environment
 
@@ -27,15 +29,17 @@ class HomePage(BasePage):
             except PlaywrightTimeoutError:
                 continue
 
-        # Ensure the CMP overlay is gone before proceeding
-        try:
-            cmp.wait_for(state="hidden", timeout=5000)
-        except PlaywrightTimeoutError:
-            # Force-remove via JS as last resort
-            self.page.evaluate("document.getElementById('usercentrics-cmp-ui')?.remove()")
-
-        # Reset any body overflow/scroll-lock the CMP may have left behind
-        self.page.evaluate("document.body.style.overflow = ''; document.body.style.height = '';")
+        # Always force-remove the element and any Usercentrics backdrop nodes,
+        # then reset scroll-lock styles — regardless of whether the click worked.
+        self.page.evaluate("""
+            document.getElementById('usercentrics-cmp-ui')?.remove();
+            document.querySelectorAll(
+                '[id^="usercentrics"], [class*="uc-backdrop"], #uc-center-container'
+            ).forEach(el => el.remove());
+            document.body.style.overflow = '';
+            document.body.style.height = '';
+            document.body.style.position = '';
+        """)
 
     def close_register_popup_if_present(self):
         try:
