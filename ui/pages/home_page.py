@@ -9,13 +9,25 @@ class HomePage(BasePage):
         self.page.goto(base_url)
 
     def accept_cookies(self):
+        cmp = self.page.locator("#usercentrics-cmp-ui")
+        try:
+            cmp.wait_for(state="visible", timeout=5000)
+        except PlaywrightTimeoutError:
+            return  # no consent banner on this environment
+
         try:
             button = self.resolve("cookie_accept_button")
             button.wait_for(state="visible", timeout=5000)
             button.click()
-            self.resolve("cookie_overlay").wait_for(state="hidden")
         except PlaywrightTimeoutError:
             pass
+
+        # Ensure the CMP overlay is gone before proceeding
+        try:
+            cmp.wait_for(state="hidden", timeout=5000)
+        except PlaywrightTimeoutError:
+            # Force-remove via JS as last resort
+            self.page.evaluate("document.getElementById('usercentrics-cmp-ui')?.remove()")
 
     def close_register_popup_if_present(self):
         try:
