@@ -2,40 +2,35 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from core.base_page import BasePage
 
-_CMP_BUTTON_NAMES = ["Agree", "Accept", "Accept all", "I agree", "Allow all", "OK"]
+# Block Usercentrics CMP at the network level — the aside uses Shadow DOM so
+# JS removal races against the SDK re-inserting it; preventing the script from
+# loading is the only reliable approach.
+_CMP_BLOCK_PATTERNS = [
+    "**/usercentrics.eu/**",
+    "**/usercentrics.com/**",
+    "**privacy-proxy.usercentrics.eu/**",
+    "**aggregator.service.usercentrics**",
+]
 
 
 class HomePage(BasePage):
     def navigate(self):
-        base_url = self.config.get_base_url()
-        self.page.goto(base_url)
+        for pattern in _CMP_BLOCK_PATTERNS:
+            self.page.route(pattern, lambda route: route.abort())
+        self.page.goto(self.config.get_base_url())
 
     def accept_cookies(self):
-        cmp = self.page.locator("#usercentrics-cmp-ui")
+        # CMP is blocked at network level; this is a safety net for environments
+        # where a different consent banner may still appear.
         try:
-            cmp.wait_for(state="visible", timeout=5000)
+            self.page.locator("#usercentrics-cmp-ui").wait_for(state="attached", timeout=3000)
+            self.page.evaluate("""
+                document.getElementById('usercentrics-cmp-ui')?.remove();
+                document.querySelectorAll('[id^="usercentrics"]').forEach(el => el.remove());
+                document.body.style.overflow = '';
+            """)
         except PlaywrightTimeoutError:
-            return  # no consent banner on this environment
-
-        # Try common accept-button labels — Catawiki's CMP text varies by region
-        for label in _CMP_BUTTON_NAMES:
-            try:
-                btn = self.page.get_by_role("button", name=label)
-                btn.wait_for(state="visible", timeout=2000)
-                btn.click()
-                break
-            except PlaywrightTimeoutError:
-                continue
-
-        # Ensure the CMP overlay is gone before proceeding
-        try:
-            cmp.wait_for(state="hidden", timeout=5000)
-        except PlaywrightTimeoutError:
-            # Force-remove via JS as last resort
-            self.page.evaluate("document.getElementById('usercentrics-cmp-ui')?.remove()")
-
-        # Reset any body overflow/scroll-lock the CMP may have left behind
-        self.page.evaluate("document.body.style.overflow = ''; document.body.style.height = '';")
+            pass
 
     def close_register_popup_if_present(self):
         try:
