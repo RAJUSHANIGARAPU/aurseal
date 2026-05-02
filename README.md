@@ -472,3 +472,97 @@ pytest --env prod
 ```
 
 The `ConfigReader` class resolves base URLs per environment. Add new environments by extending `environments.json` — no code changes needed.
+
+---
+
+## AI Test Plugin Framework
+
+The framework ships with a multi-tier plugin system that extends the base test automation with AI-driven analysis, generation, and governance capabilities.
+
+### Architecture
+
+```
+plugins/
+  _base_plugin.py      — BasePlugin ABC (execute/dry_run/run), PluginResult, PluginPriority
+  cost_governor.py     — LLM budget tracking, model downgrade, prompt-level caching
+  registry.py          — Auto-discovers *.plugin.py files, dispatches by trigger event
+  tier1/               — Foundational plugins (unit-ai, integration-graph, api-contract, e2e-playwright)
+  tier2/               — Quality & Safety (visual-regression, security-scan, accessibility-a11y, mutation-testing)
+  tier3/               — Performance & Resilience (load-performance, chaos-resilience, property-fuzz)
+  tier4/               — Novel (behavioral-equivalence, test-meta-quality, llm-output-oracle,
+                         business-rule-compliance, state-machine-exhaustive,
+                         synthetic-data-edge, temporal-regression)
+
+orchestration/
+  storage.py           — SQLite persistence (7 tables: runs, results, findings, costs, edge cases, snapshots, compliance)
+  master_orchestrator.py — Runs plugins by priority tier, computes health score, fires deploy webhook
+  evolution_agent.py   — Reads run history, uses Claude to generate improvement proposals
+```
+
+### Running the orchestrator
+
+```bash
+# Run all plugins for a trigger event
+python -m orchestration.master_orchestrator --trigger manual
+
+# Dry-run — no side effects, just report what would happen
+python -m orchestration.master_orchestrator --trigger deploy --dry-run
+
+# Run evolution agent to generate improvement proposals
+python -m orchestration.evolution_agent
+```
+
+### Environment variables
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `PLUGIN_BUDGET_USD` | `5.0` | Total LLM spend cap per orchestrator run |
+| `ANTHROPIC_API_KEY` | — | Claude API key (plugins degrade gracefully without it) |
+| `DEPLOY_WEBHOOK_URL` | — | URL to POST health score + deploy decision |
+| `COMPLIANCE_WEBHOOK_URL` | — | URL to POST compliance check failures |
+| `PROD_EVENT_LOG_PATH` | — | Path to JSONL event log for temporal regression plugin |
+
+### Health score formula
+
+Plugins are weighted by priority tier:
+
+- **CRITICAL** (40%) — sequential, stops on first failure
+- **HIGH** (35%) — parallel execution
+- **NORMAL** (25%) — parallel execution
+- **BACKGROUND** (0%) — fire-and-forget daemon threads
+
+`health_score >= 70` → `deploy=True`
+
+### Writing a new plugin
+
+1. Create `plugins/tier{N}/my_plugin.plugin.py`
+2. Inherit from `plugins._base_plugin.BasePlugin`
+3. Set `name`, `priority`, `trigger_conditions`
+4. Implement `run(context: dict) -> PluginResult`
+5. Respect `context.get("dry_run")` — skip side effects when True
+6. Add `if __name__ == "__main__":` block with `--dry-run` arg support
+
+The registry auto-discovers the plugin on next scan. No registration needed.
+
+### Plugin outputs
+
+Generated artifacts are written to:
+
+```
+ai_generated_tests/
+  unit/         — AI-generated unit tests (unit-ai plugin)
+  integration/  — Integration test stubs (integration-graph plugin)
+  a11y/         — Axe-core accessibility scripts (accessibility-a11y plugin)
+  load/         — k6 load test scripts (load-performance plugin)
+  chaos/        — Multi-fault scenario docs (chaos-resilience plugin)
+  property/     — Hypothesis property tests (property-fuzz plugin)
+  state_machine/ — State transition tests (state-machine-exhaustive plugin)
+  synthetic/    — Extreme profile JSON + Playwright tests (synthetic-data-edge plugin)
+
+reports/
+  plugin_runs.db           — SQLite database of all runs
+  visual_baselines/        — Screenshot baselines (visual-regression plugin)
+  behavioral_snapshots/    — Function output snapshots (behavioral-equivalence plugin)
+  test_quality/            — Per-file quality scores (test-meta-quality plugin)
+  evolution/               — LLM-generated improvement proposals
+```
