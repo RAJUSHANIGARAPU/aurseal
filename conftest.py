@@ -55,6 +55,13 @@ def pytest_configure(config):
 
             config.pluginmanager.register(WebDiscoveryPlugin(), "web_discovery_plugin")
 
+    # Knowledge Graph Layer — opt-in via ENABLE_GRAPHIFY=true
+    graphify_enabled = os.environ.get("ENABLE_GRAPHIFY", "").lower() == "true"
+    if graphify_enabled and not config.pluginmanager.hasplugin("graphify-knowledge-graph"):
+        from core.graphify.pytest_plugin import GraphifyPlugin
+
+        config.pluginmanager.register(GraphifyPlugin.from_env(), "graphify-knowledge-graph")
+
 
 # =========================================================
 # GLOBAL LOGGING SETUP
