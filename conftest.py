@@ -37,9 +37,25 @@ def pytest_configure(config):
 
         config.pluginmanager.register(MemoryPlugin.from_config(mem_config), "memory-tracker")
 
-    # Knowledge Graph Layer — opt-in via ENABLE_GRAPHIFY=true
-    import os
+    # Contract Testing Layer — opt-in via ENABLE_CONTRACT_TESTING=true
+    from contract_testing.config import ContractConfig
 
+    ct_config = ContractConfig.from_env()
+    if ct_config.enabled and not config.pluginmanager.hasplugin("contract-testing"):
+        from contract_testing.pytest_plugin import ContractPlugin
+
+        config.pluginmanager.register(ContractPlugin.from_config(ct_config), "contract-testing")
+
+    # Web Discovery Layer — opt-in via ENABLE_WEB_DISCOVERY=true
+    import os as _os
+
+    if _os.getenv("ENABLE_WEB_DISCOVERY", "false").lower() in ("1", "true", "yes"):
+        if not config.pluginmanager.hasplugin("web_discovery_plugin"):
+            from web_discovery.pytest_plugin import WebDiscoveryPlugin
+
+            config.pluginmanager.register(WebDiscoveryPlugin(), "web_discovery_plugin")
+
+    # Knowledge Graph Layer — opt-in via ENABLE_GRAPHIFY=true
     graphify_enabled = os.environ.get("ENABLE_GRAPHIFY", "").lower() == "true"
     if graphify_enabled and not config.pluginmanager.hasplugin("graphify-knowledge-graph"):
         from core.graphify.pytest_plugin import GraphifyPlugin
