@@ -1,6 +1,9 @@
 import json
+import re
 
 import pytest
+
+from ui.pages.home_page import HomePage
 
 
 @pytest.mark.contract
@@ -10,11 +13,13 @@ def test_search_triggers_correct_network_call(page, config):
 
     keyword = data["valid_search"]
 
-    page.goto(config.get_base_url())
+    home = HomePage(page, config)
+    home.navigate()
+    home.accept_cookies()
 
     search_input = page.get_by_test_id("search-field").first
 
-    with page.expect_response(f"**/s?q={keyword}") as response_info:
+    with page.expect_response(re.compile(rf"/s\?q={re.escape(keyword)}")) as response_info:
         search_input.fill(keyword)
         search_input.press("Enter")
 
