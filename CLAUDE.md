@@ -62,6 +62,43 @@ pyproject.toml       # project metadata + tool config
 
 Skills live in `.claude/commands/`. All use `ANTHROPIC_API_KEY` via `core/ai/` modules.
 
+## Specs Directory
+
+`specs/` contains human-readable test plans that are the output of the **Planner** stage in the
+Planner → Generator → Healer workflow:
+
+| Stage   | Component                    | Role |
+|---------|------------------------------|------|
+| Planner | `web_discovery`              | Crawls the target site and produces scenario descriptions; output is committed to `specs/` |
+| Generator | `core/ai/TestGenerator`    | Reads spec files and generates pytest + Playwright test files under `ui/tests/` |
+| Healer  | `autonomous_ui/healer.py`    | Detects broken locators or regressions and applies targeted fixes |
+
+### Spec file format
+
+```
+---
+seed: true|false    # true = hand-written bootstrap spec
+feature: <name>     # used as pytest marker
+---
+
+## Scenario <name>
+
+### Preconditions
+- State required before the test starts
+
+### Steps
+1. Numbered UI/API actions
+
+### Expected
+- Verifiable outcomes
+
+### Tags
+`marker1` `marker2`
+```
+
+`TestGenerator` is invoked automatically by `python scripts/auto_runner.py` and reads specs as
+context when generating or healing test files.
+
 ## AI Modules (core/ai/)
 
 | Module | Purpose |
