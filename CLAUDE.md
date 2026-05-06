@@ -60,7 +60,44 @@ pyproject.toml       # project metadata + tool config
 | `/auto-run-fix` | Autonomous loop: run → analyze → fix → rerun until passing |
 | `/generate-test-from-trace` | Generates a complete pytest test from a trace ZIP |
 
-Skills live in `.claude/commands/`. All use `ANTHROPIC_API_KEY` via `core/ai/` modules.
+Skills live in `.claude/commands/`.
+
+## Specs Directory
+
+`specs/` contains human-readable test plans that are the output of the **Planner** stage in the
+Planner → Generator → Healer workflow:
+
+| Stage   | Component                    | Role |
+|---------|------------------------------|------|
+| Planner | `web_discovery`              | Crawls the target site and produces scenario descriptions; output is committed to `specs/` |
+| Generator | `core/ai/TestGenerator`    | Reads spec files and generates pytest + Playwright test files under `ui/tests/` |
+| Healer  | `autonomous_ui/healer.py`    | Detects broken locators or regressions and applies targeted fixes |
+
+### Spec file format
+
+```
+---
+seed: true|false    # true = hand-written bootstrap spec
+feature: <name>     # used as pytest marker
+---
+
+## Scenario <name>
+
+### Preconditions
+- State required before the test starts
+
+### Steps
+1. Numbered UI/API actions
+
+### Expected
+- Verifiable outcomes
+
+### Tags
+`marker1` `marker2`
+```
+
+`TestGenerator` is invoked automatically by `python scripts/auto_runner.py` and reads specs as
+context when generating or healing test files.
 
 ## AI Modules (core/ai/)
 
@@ -71,10 +108,19 @@ Skills live in `.claude/commands/`. All use `ANTHROPIC_API_KEY` via `core/ai/` m
 | `AutoFixer` | Generates targeted code fixes and applies them |
 | `TestGenerator` | Generates Page Objects + test files from traces |
 
+### Claude backend — API key vs CLI
+
+All AI modules resolve their backend automatically, in this order:
+
+1. **Anthropic API** (`ANTHROPIC_API_KEY`) — direct REST call via `ClaudeLLMClient`.
+2. **`claude -p` CLI** — fallback when no API key is set but `claude` CLI is installed and authenticated (`claude auth login`).
+
+No code change needed to switch. If neither is available, modules return an empty string or descriptive message.
+
 ## Autonomous Run-Fix Loop
 
 ```bash
-# Full autonomous loop (requires ANTHROPIC_API_KEY)
+# Full autonomous loop (uses ANTHROPIC_API_KEY or `claude` CLI automatically)
 python scripts/auto_runner.py
 
 # With test filter
