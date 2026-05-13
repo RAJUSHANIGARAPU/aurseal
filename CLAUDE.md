@@ -59,6 +59,8 @@ pyproject.toml       # project metadata + tool config
 | `/analyze-test-failure` | Reads pytest JUnit XML and diagnoses failures |
 | `/auto-run-fix` | Autonomous loop: run → analyze → fix → rerun until passing |
 | `/generate-test-from-trace` | Generates a complete pytest test from a trace ZIP |
+| `/generate-from-ts <file.ts>` | Converts a `playwright codegen` recording → Python Page Object + pytest test + locators + testdata; runs 3×, auto-fixes, reports push-ready |
+| `/test-health-report` | Runs full suite, parses JUnit XML + healing events, outputs pass/fail/healed summary with deploy-gate recommendation |
 
 Skills live in `.claude/commands/`.
 
