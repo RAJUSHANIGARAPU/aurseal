@@ -1,36 +1,34 @@
 #!/usr/bin/env python3
 """
-Autonomous test runner: run → analyze → fix → rerun until all tests pass.
+Autonomous test runner: run → Claude decides → fix/analyze/generate → rerun.
+
+Default mode: Claude uses tool_use to decide what action to take after each failure.
+Legacy mode:  hard-coded sequential analyze → fix → rerun (use --legacy).
 
 Usage:
     python scripts/auto_runner.py
     python scripts/auto_runner.py -k "test_wiki_search"
     python scripts/auto_runner.py --max-iterations 3
+    python scripts/auto_runner.py --no-fix          # analyze only, no code changes
+    python scripts/auto_runner.py --legacy          # old sequential behavior
 
-Requirements: ANTHROPIC_API_KEY env var for AI fix suggestions.
+Requirements: ANTHROPIC_API_KEY env var.
 """
 
 import argparse
+import re
 import subprocess
 import sys
 import time
 from pathlib import Path
 
-from core.ai.auto_fixer import AutoFixer
-from core.ai.log_analyzer import LogAnalyzer
-from core.ai.trace_analyzer import TraceAnalyzer
-
 
 def run_tests(pytest_args: list[str]) -> tuple[int, str]:
-    """Run pytest and return (exit_code, output)."""
+    """Run pytest and return (exit_code, combined output)."""
     cmd = (
         [sys.executable, "-m", "pytest"]
         + pytest_args
-        + [
-            "--tb=short",
-            "--junit-xml=reports/junit.xml",
-            "-v",
-        ]
+        + ["--tb=short", "--junit-xml=reports/junit.xml", "-v"]
     )
     print(f"\n{'=' * 60}")
     print(f"Running: {' '.join(cmd)}")
@@ -42,38 +40,84 @@ def run_tests(pytest_args: list[str]) -> tuple[int, str]:
     return result.returncode, combined
 
 
-def extract_failed_files(output: str) -> list[str]:
-    """Extract Python file paths from pytest failure output."""
-    import re
+# ---------------------------------------------------------------------------
+# Agent mode (default)
+# ---------------------------------------------------------------------------
 
-    files = set()
-    # FAILED ui/tests/test_wiki.py::TestWiki::test_search
+
+def _agent_loop(
+    pytest_args: list[str],
+    max_iterations: int,
+    no_fix: bool,
+) -> int:
+    from core.agents.planner_agent import PlannerAgent
+
+    planner = PlannerAgent()
+
+    for iteration in range(1, max_iterations + 1):
+        print(f"\n{'#' * 60}")
+        print(f"# ITERATION {iteration}/{max_iterations}  [agent mode]")
+        print("#" * 60)
+
+        exit_code, output = run_tests(pytest_args)
+
+        if exit_code == 0:
+            print("\nALL TESTS PASSED")
+            return 0
+
+        print(f"\nTests failed (exit {exit_code}). Asking planner agent what to do...")
+        result = planner.plan(output, exit_code, iteration, analyze_only=no_fix)
+
+        print(f"\n[PLANNER] status={result.status} | {result.reason}")
+        for action in result.actions:
+            print(f"  • {action}")
+
+        if result.status == "blocked":
+            print("\nPlanner blocked — stopping loop.")
+            break
+
+        if result.status == "passed" and iteration < max_iterations:
+            print("\nPlanner applied fixes. Waiting 2s before rerun...")
+            time.sleep(2)
+            continue
+
+        # status == "failed" or last iteration
+        break
+
+    print(f"\n--- FINAL STATUS: FAILED after {max_iterations} iteration(s) ---")
+    return 1
+
+
+# ---------------------------------------------------------------------------
+# Legacy mode (--legacy)
+# ---------------------------------------------------------------------------
+
+
+def _extract_failed_files(output: str) -> list[str]:
+    files: set[str] = set()
     for match in re.finditer(r"FAILED\s+([\w/]+\.py)", output):
         files.add(match.group(1))
-    # E   playwright._impl... File "ui/pages/wiki_page.py", line 42
     for match in re.finditer(r'File "([\w/]+\.py)", line', output):
         files.add(match.group(1))
     return [f for f in files if Path(f).exists()]
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Autonomous pytest run-analyze-fix loop")
-    parser.add_argument("-k", "--keyword", help="pytest -k filter")
-    parser.add_argument("--max-iterations", type=int, default=5)
-    parser.add_argument("--no-fix", action="store_true", help="Analyze only, do not apply fixes")
-    args = parser.parse_args()
-
-    pytest_args = []
-    if args.keyword:
-        pytest_args += ["-k", args.keyword]
+def _legacy_loop(
+    pytest_args: list[str],
+    max_iterations: int,
+    no_fix: bool,
+) -> int:
+    from core.ai.auto_fixer import AutoFixer
+    from core.ai.log_analyzer import LogAnalyzer
+    from core.ai.trace_analyzer import TraceAnalyzer
 
     analyzer = LogAnalyzer()
     fixer = AutoFixer()
     trace_analyzer = TraceAnalyzer()
 
-    for iteration in range(1, args.max_iterations + 1):
+    for iteration in range(1, max_iterations + 1):
         print(f"\n{'#' * 60}")
-        print(f"# ITERATION {iteration}/{args.max_iterations}")
+        print(f"# ITERATION {iteration}/{max_iterations}  [legacy mode]")
         print("#" * 60)
 
         exit_code, output = run_tests(pytest_args)
@@ -84,21 +128,18 @@ def main():
 
         print(f"\nTests failed (exit code {exit_code}). Analyzing...")
 
-        # Analyze failures
         diagnosis = analyzer.analyze_failures()
         print(f"\n--- AI DIAGNOSIS ---\n{diagnosis}\n---")
 
-        # Analyze latest trace
         latest_trace = trace_analyzer.find_latest_trace()
         if latest_trace:
             trace_report = trace_analyzer.analyze(latest_trace)
             print(f"\n--- TRACE ANALYSIS ---\n{trace_report}\n---")
 
-        if args.no_fix or iteration == args.max_iterations:
+        if no_fix or iteration == max_iterations:
             break
 
-        # Attempt fixes
-        failed_files = extract_failed_files(output)
+        failed_files = _extract_failed_files(output)
         if not failed_files:
             print("Could not identify files to fix from output.")
             break
@@ -116,9 +157,38 @@ def main():
         print("\nFixes applied. Waiting 2s before rerun...")
         time.sleep(2)
 
-    print(f"\n--- FINAL STATUS: FAILED after {args.max_iterations} iteration(s) ---")
-    print("Review the diagnosis above and the latest trace at: https://trace.playwright.dev")
+    print(f"\n--- FINAL STATUS: FAILED after {max_iterations} iteration(s) ---")
     return 1
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Autonomous pytest run-analyze-fix loop")
+    parser.add_argument("-k", "--keyword", help="pytest -k filter")
+    parser.add_argument("--max-iterations", type=int, default=5)
+    parser.add_argument(
+        "--no-fix",
+        action="store_true",
+        help="Analyze only — do not apply any code changes",
+    )
+    parser.add_argument(
+        "--legacy",
+        action="store_true",
+        help="Use hard-coded sequential analyze→fix loop instead of Claude tool_use",
+    )
+    args = parser.parse_args()
+
+    pytest_args: list[str] = []
+    if args.keyword:
+        pytest_args += ["-k", args.keyword]
+
+    if args.legacy:
+        return _legacy_loop(pytest_args, args.max_iterations, args.no_fix)
+    return _agent_loop(pytest_args, args.max_iterations, args.no_fix)
 
 
 if __name__ == "__main__":
