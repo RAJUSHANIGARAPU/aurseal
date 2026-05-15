@@ -59,6 +59,13 @@ pyproject.toml       # project metadata + tool config
 | `/analyze-test-failure` | Reads pytest JUnit XML and diagnoses failures |
 | `/auto-run-fix` | Autonomous loop: run → analyze → fix → rerun until passing |
 | `/generate-test-from-trace` | Generates a complete pytest test from a trace ZIP |
+| `/generate-from-ts <file.ts>` | Converts a `playwright codegen` recording → Python Page Object + pytest test + locators + testdata; runs 3×, auto-fixes, reports push-ready |
+| `/generate-from-postman <file.json>` | Converts a Postman collection → pytest API tests via existing `api/agents/` pipeline; falls back to manual generation |
+| `/generate-from-swagger <url\|file>` | Reads OpenAPI spec → pytest API test classes (happy path + auth + errors); runs 3× |
+| `/generate-from-prd <path\|url\|text>` | Reads PRD/user story → extracts scenarios → spec file + pytest tests; runs 3× |
+| `/detect-coverage-gaps [spec\|url\|all]` | Compares OpenAPI/spec files vs existing tests; reports untested endpoints/scenarios; optionally invokes generate skills |
+| `/test-health-report` | Runs full suite, parses JUnit XML + healing events, outputs pass/fail/healed summary with deploy-gate recommendation |
+| `/create-pr [title] [branch]` | Pushes branch, opens GitHub PR via `gh` CLI with test health summary attached |
 
 Skills live in `.claude/commands/`.
 
