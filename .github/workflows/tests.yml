@@ -21,20 +21,36 @@ jobs:
           cache: "pip"
 
       - name: Install Dependencies
-        run: |
-          pip install -r requirements.txt
+        run: pip install -r requirements.txt
 
-      - name: Install Playwright Browsers
-        run: playwright install --with-deps
+      - name: Get Playwright version
+        id: pw-version
+        run: echo "version=$(pip show playwright | grep Version | cut -d' ' -f2)" >> $GITHUB_OUTPUT
+
+      - name: Cache Playwright Chrome
+        uses: actions/cache@v4
+        id: pw-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chrome-${{ runner.os }}-${{ steps.pw-version.outputs.version }}
+
+      - name: Install Chrome + system deps
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: playwright install chrome --with-deps
+
+      - name: Install system deps only (cache hit)
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: playwright install-deps chrome
 
       - name: Run Linter
         run: ruff check .
 
-      - name: Install Xvfb
-        run: sudo apt-get update && sudo apt-get install -y xvfb
+      - name: Run Smoke Tests
+        run: pytest -m smoke -n auto
 
-      - name: Run Tests
-        run: xvfb-run pytest -n auto --browser chromium --headed
+      - name: Run Regression Tests
+        if: github.ref == 'refs/heads/main'
+        run: pytest -m regression -n auto
 
       - name: Upload Reports
         if: always()
