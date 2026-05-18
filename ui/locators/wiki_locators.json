@@ -39,10 +39,9 @@
     "type": "testid",
     "value": "lot-bid-status-section"
   },
-  "search_no_results_message": {
-    "type": "text",
-    "value": "No matches for",
-    "exact": false
+  "search_results_count": {
+    "type": "testid",
+    "value": "object-amount"
   },
   "bid_title": {
     "type": "text",

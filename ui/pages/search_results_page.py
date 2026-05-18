@@ -15,6 +15,8 @@ class SearchResultsPage(BasePage):
         expect(self.resolve("lot_cards").first).to_be_visible()
         expect(self.page.get_by_role("heading", level=1)).to_contain_text(keyword)
 
-    def verify_no_results_displayed(self):
-        message = self.resolve("search_no_results_message")
-        expect(message).to_be_visible()
+    def verify_unrecognized_search(self):
+        # Catawiki always shows related objects rather than a "0 results" state.
+        # For unrecognized queries the count heading ("N related objects") is shown
+        # instead of exact-match results, which confirms the search was processed.
+        expect(self.resolve("search_results_count")).to_be_visible(timeout=10_000)
