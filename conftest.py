@@ -158,13 +158,39 @@ def enable_artifacts(context, request):
 
 
 # =========================================================
+# BROWSER LAUNCH ARGS — stealth mode for external sites
+# =========================================================
+
+
+@pytest.fixture(scope="session")
+def browser_type_launch_args(browser_type_launch_args):
+    return {
+        **browser_type_launch_args,
+        "args": [
+            "--disable-blink-features=AutomationControlled",
+            "--no-sandbox",
+        ],
+    }
+
+
+# =========================================================
 # VIDEO RECORDING CONFIG (PLUGIN WAY)
 # =========================================================
 
 
 @pytest.fixture(scope="session")
 def browser_context_args(browser_context_args):
-    return {**browser_context_args, "record_video_dir": "reports/videos/"}
+    return {
+        **browser_context_args,
+        "record_video_dir": "reports/videos/",
+        "user_agent": (
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/124.0.0.0 Safari/537.36"
+        ),
+        "viewport": {"width": 1280, "height": 800},
+        "locale": "en-US",
+    }
 
 
 # =========================================================
