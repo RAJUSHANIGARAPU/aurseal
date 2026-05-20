@@ -123,7 +123,79 @@ expect(page.locator("#firstHeading")).to_contain_text("Python")
 
 ---
 
-## 10. Debugging Checklist
+## 10. Catawiki-Specific Behaviour
+
+**WAF / CDN block**: Catawiki's Edgesuit WAF blocks Playwright's bundled Chromium.
+Always run with real Chrome:
+```bash
+pytest --browser=chromium --browser-channel=chrome
+# or lock it in pytest.ini addopts (already done)
+```
+
+**No "zero results" state**: For any search, Catawiki shows related objects.
+Never assert `"No matches for"` — assert `data-testid="object-amount"` is visible instead.
+
+**Usercentrics CMP** loads via Shadow DOM and re-inserts itself if you try to JS-remove it.
+The only reliable approach is blocking it at the network level before `page.goto()`:
+```python
+page.route("**usercentrics.eu**", lambda r: r.abort())
+page.route("**usercentrics.com**", lambda r: r.abort())
+```
+After the JS removal, always `wait_for(state="detached")` before interacting — on CI
+(cold browser, no cache) the CMP can load after `domcontentloaded`.
+
+**Key URLs / selectors**:
+- Search results: `/en/s?q={keyword}`
+- Lot pages: `/en/l/\d+-`
+- Search input: `data-testid="search-field"`
+- Results count: `data-testid="object-amount"`
+- Lot cards: `article` elements
+
+---
+
+## 11. Never Assert on UI Copy
+
+Catawiki copy strings ("No matches for", button labels, headings) change without notice.
+Always prefer `data-testid` > ARIA role > text. If you must check text, use `contain_text`
+with a short, stable substring — never full sentences.
+
+---
+
+## 12. CI — Browser Install Caching
+
+Playwright browser install takes 10–14 minutes if uncached. Cache pattern:
+```yaml
+- uses: actions/cache@v4
+  with:
+    path: ~/.cache/ms-playwright
+    key: playwright-chrome-${{ runner.os }}-${{ steps.pw-version.outputs.version }}
+- run: playwright install chrome --with-deps   # only on cache miss
+- run: playwright install-deps chrome          # on cache hit — system deps only
+```
+Never run `playwright install --with-deps` (installs all 3 browsers, ~600 MB).
+
+---
+
+## 13. Agentic Auto-Fix Loop (tool_use)
+
+`scripts/auto_runner.py` now uses Claude tool_use by default — Claude decides whether
+to analyze, fix, trace-analyze, or generate rather than hard-coded sequential logic.
+
+```bash
+python scripts/auto_runner.py               # agent mode (default)
+python scripts/auto_runner.py --legacy      # old sequential mode
+python scripts/auto_runner.py --no-fix      # analyze only, no changes
+```
+
+Agent infrastructure lives in `core/agents/`:
+- `BaseAgent` — Anthropic tool_use agentic loop
+- `PlannerAgent` — top-level orchestrator (used by auto_runner)
+- `FixerAgent`, `HealerAgent`, `GeneratorAgent` — specialized agents
+- `AgentBus` — pub/sub for future concurrent agent coordination
+
+---
+
+## 14. Debugging Checklist
 
 When a test fails:
 
