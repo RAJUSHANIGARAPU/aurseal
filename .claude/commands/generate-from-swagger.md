@@ -33,7 +33,7 @@ for path in list(paths)[:10]: print(' ', path)
 "
 ```
 
-Extract endpoints, tags, schemas, security schemes — same as the original counterpart.
+Extract endpoints, tags, schemas, security schemes.
 
 ---
 
