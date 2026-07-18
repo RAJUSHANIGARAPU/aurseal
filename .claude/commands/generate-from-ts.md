@@ -139,7 +139,7 @@ Rules:
 ## Phase 4 — Compile / syntax check
 
 ```bash
-cd /Users/RajuS/Documents/rajan_werk_github/wiki_project
+cd /path/to/wiki_project
 python -m py_compile ui/pages/${flowName}_page.py && echo "OK"
 python -m py_compile ui/tests/${flowName}_test.py && echo "OK"
 ```
@@ -162,7 +162,7 @@ If response is not 200/302: **stop and tell the user the target app is not reach
 ### Run loop — up to 5 fix iterations, targeting 3 consecutive passes
 
 ```bash
-cd /Users/RajuS/Documents/rajan_werk_github/wiki_project
+cd /path/to/wiki_project
 source venv/bin/activate 2>/dev/null || true
 pytest --env=development -k "${TEST_FUNCTION_NAME}" --tb=short -q 2>&1 | tail -80
 ```
@@ -218,7 +218,7 @@ cat reports/last_run.log 2>/dev/null | tail -50
 When 3 consecutive passes are achieved:
 
 ```bash
-cd /Users/RajuS/Documents/rajan_werk_github/wiki_project
+cd /path/to/wiki_project
 git add \
   ui/pages/${flowName}_page.py \
   ui/tests/${flowName}_test.py \

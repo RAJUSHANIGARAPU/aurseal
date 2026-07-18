@@ -35,7 +35,7 @@ find ui/tests -name "test_*.py" | xargs grep -l "^def test_\|^async def test_" |
 ## Phase 2 — Run tests
 
 ```bash
-cd /Users/RajuS/Documents/rajan_werk_github/wiki_project
+cd /path/to/wiki_project
 source venv/bin/activate 2>/dev/null || true
 pytest --env=development ${ARGS} \
   --tb=short -q \

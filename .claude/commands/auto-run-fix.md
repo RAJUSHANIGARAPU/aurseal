@@ -23,7 +23,7 @@ Repeat until `consecutive_passes == 3` or `fix_attempts == 5`:
 ### Step 1 — Run tests
 
 ```bash
-cd /Users/RajuS/Documents/rajan_werk_github/wiki_project
+cd /path/to/wiki_project
 source venv/bin/activate 2>/dev/null || true
 pytest <filter_args> --junit-xml=target/junit/results.xml -q --tb=short 2>&1 | tail -80
 ```

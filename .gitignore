@@ -27,3 +27,8 @@ eval\ *
 .claude/*
 !.claude/commands/
 !.claude/commands/**
+
+# Environment (never commit real secrets)
+.env
+.env.*
+!.env.example
