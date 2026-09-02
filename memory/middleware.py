@@ -11,8 +11,10 @@ No existing orchestrator behaviour is modified — this is purely additive.
 from __future__ import annotations
 
 import logging
+import re
 from typing import TYPE_CHECKING
 
+from api.agents.generation import generated_nodeid_suffix
 from memory.intelligence import FailureIntelligenceEngine
 from memory.summarizer import MemorySummarizer
 
@@ -27,6 +29,33 @@ if TYPE_CHECKING:
     from memory.store import MemoryStore
 
 logger = logging.getLogger(__name__)
+
+_PARAM_CASE_RE = re.compile(r"\[.*\]$")
+
+
+def nodeid_suffix(nodeid: str) -> str:
+    """Reduce a pytest nodeid to the ``file.py::function`` part.
+
+    The directory in front of it comes from the orchestrator's ``output_dir``,
+    which is configurable, so it is not part of a test's identity; the file name
+    is, because two collections can hold a request of the same name in different
+    folders and they generate into different files.
+
+    Returns "" for anything that is not a nodeid. That matters more than it
+    looks: the Postman item title used to be compared against nodeids directly,
+    and an empty result is what stops a title from ever being treated as a test
+    identity again.
+    """
+    if "::" not in nodeid:
+        return ""
+    path, _, rest = nodeid.partition("::")
+    # A parametrised case is still the same function; the [...] tail names one
+    # of its cases. Class-based nodeids carry an extra ::Class segment.
+    function = _PARAM_CASE_RE.sub("", rest.split("::")[-1])
+    file_name = path.replace("\\", "/").rsplit("/", 1)[-1]
+    if not file_name or not function:
+        return ""
+    return f"{file_name}::{function}"
 
 
 class MemoryMiddleware:
@@ -62,7 +91,7 @@ class MemoryMiddleware:
 
         summaries: list[str] = []
         for req in requests:
-            records = self._store.get_for_test(req.name)
+            records = self._store.get_for_test_suffix(generated_nodeid_suffix(req))
             if not records:
                 records = self._store.query(endpoint=req.url)
             if records:
@@ -93,11 +122,23 @@ class MemoryMiddleware:
 
         Runs in both passive and active mode.
         """
-        request_map = {req.name: req for req in requests}
+        # fa.test_name is a pytest nodeid; requests are keyed by the nodeid the
+        # generator gives them. Keying by req.name compared an item title
+        # ("Get User By ID") against a nodeid and matched nothing, ever, so
+        # every record was stored with no endpoint and no method — and an empty
+        # endpoint makes MemoryStore.query drop its filter and rank the insight
+        # against every unrelated record in the database.
+        request_map = {generated_nodeid_suffix(req): req for req in requests}
         insights: list[MemoryInsight] = []
 
         for fa in analyses:
-            req = request_map.get(fa.test_name)
+            req = request_map.get(nodeid_suffix(fa.test_name))
+            if req is None:
+                # Hand-written and UI tests share this store and were never
+                # generated from a request. Leaving the record bare is the
+                # honest outcome; guessing a near match would file one test's
+                # failure history under another test's endpoint.
+                logger.debug("[memory] no request matches %s — storing bare record", fa.test_name)
             record = self._summarizer.from_failure_analysis(fa, req, run_id, environment)
             self._store.save(record)
             logger.debug("[memory] stored failure record for %s", fa.test_name)

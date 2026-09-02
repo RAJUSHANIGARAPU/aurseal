@@ -22,11 +22,44 @@ def _slugify(text: str) -> str:
     return _SAFE_NAME.sub("_", text).lower().strip("_")
 
 
+def _folder_key(req: PostmanRequest) -> str:
+    return "_".join(req.folder_path) if req.folder_path else "default"
+
+
+def _module_name_for_folder(folder_key: str) -> str:
+    return f"test_{_slugify(folder_key)}.py"
+
+
+def generated_module_name(req: PostmanRequest) -> str:
+    """File name this request's test is written into, e.g. ``test_users.py``."""
+    return _module_name_for_folder(_folder_key(req))
+
+
+def generated_function_name(req: PostmanRequest) -> str:
+    """Function name generated for this request, e.g. ``test_get_user_by_id``."""
+    return f"test_{_slugify(req.name)}"
+
+
+def generated_nodeid_suffix(req: PostmanRequest) -> str:
+    """The ``file.py::function`` a pytest nodeid for this request will end with.
+
+    This is the only reliable link between a Postman item and the test it turns
+    into: the item name and the folder path are both slugified on the way in, so
+    neither survives in a form a nodeid can be compared against. The full nodeid
+    is out of reach here because the directory comes from ``output_dir``, which
+    the caller chooses.
+
+    Anything matching a nodeid to a request has to go through this, so the two
+    cannot drift apart — the memory layer had its own idea of the naming and
+    silently matched nothing for as long as it existed.
+    """
+    return f"{generated_module_name(req)}::{generated_function_name(req)}"
+
+
 def _group_by_folder(requests: list[PostmanRequest]) -> dict[str, list[PostmanRequest]]:
     groups: dict[str, list[PostmanRequest]] = {}
     for req in requests:
-        folder = "_".join(req.folder_path) if req.folder_path else "default"
-        groups.setdefault(folder, []).append(req)
+        groups.setdefault(_folder_key(req), []).append(req)
     return groups
 
 
@@ -63,7 +96,7 @@ class GenerationAgent:
         generated: list[Path] = []
 
         for folder_name, folder_requests in groups.items():
-            file_path = self._output_dir / f"test_{_slugify(folder_name)}.py"
+            file_path = self._output_dir / _module_name_for_folder(folder_name)
             content = self._render_module(folder_name, folder_requests)
             file_path.write_text(content, encoding="utf-8")
             logger.info("Generated: %s (%d tests)", file_path, len(folder_requests))
@@ -91,7 +124,7 @@ class GenerationAgent:
         return "\n".join(lines) + "\n\n".join(test_blocks) + "\n"
 
     def _render_test(self, req: PostmanRequest) -> str:
-        fn_name = f"test_{_slugify(req.name)}"
+        fn_name = generated_function_name(req)
         method = req.method
 
         # Strip query string from URL if params will be passed separately,

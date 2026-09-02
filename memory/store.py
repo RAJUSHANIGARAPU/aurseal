@@ -143,6 +143,31 @@ class MemoryStore:
             logger.debug("MemoryStore.get_for_test failed", exc_info=True)
             return []
 
+    def get_for_test_suffix(self, suffix: str, limit: int | None = None) -> list[MemoryRecord]:
+        """Return records for a test identified by its ``file.py::function`` tail.
+
+        Records are keyed by the full pytest nodeid, but callers that only hold
+        a Postman request cannot reconstruct the directory in front of it — that
+        comes from the orchestrator's ``output_dir``. Matching on a path
+        boundary keeps this exact: ``%/test_users.py::test_get`` cannot be
+        satisfied by ``test_other_users.py::test_get``.
+        """
+        if not suffix:
+            return []
+        cap = limit or self._config.max_records_per_test
+        expiry = self._expiry_ts()
+        try:
+            cur = self._conn.execute(
+                """SELECT * FROM memory_records
+                   WHERE (test_id = ? OR test_id LIKE ?) AND timestamp > ?
+                   ORDER BY timestamp DESC LIMIT ?""",
+                (suffix, f"%/{suffix}", expiry, cap),
+            )
+            return [MemoryRecord.from_row(row) for row in cur.fetchall()]
+        except Exception:  # noqa: BLE001
+            logger.debug("MemoryStore.get_for_test_suffix failed", exc_info=True)
+            return []
+
     def update_outcome(self, test_id: str, outcome: str) -> None:
         """Update all pending records for test_id to the given outcome."""
         try:

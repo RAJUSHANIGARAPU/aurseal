@@ -112,19 +112,15 @@ class MasterOrchestrator:
         deploy = health_score >= 70
         self._logger.log("orchestrator", "health_score", {"score": health_score, "deploy": deploy})
 
-        # Fire deploy webhook if set
+        # Fire deploy webhook if set. A dry run is documented as having no side
+        # effects, so it must not reach the real deploy hook — this block used
+        # to post regardless, which made the README's own --dry-run example
+        # notify a deploy.
         webhook_url = os.environ.get("DEPLOY_WEBHOOK_URL")
-        if webhook_url:
-            try:
-                import requests
-
-                requests.post(
-                    webhook_url,
-                    json={"run_id": run_id, "health_score": health_score, "deploy": deploy},
-                    timeout=10,
-                )
-            except Exception:  # noqa: BLE001
-                pass
+        if webhook_url and context.get("dry_run"):
+            self._logger.log("orchestrator", "webhook_skipped", {"reason": "dry_run"})
+        elif webhook_url:
+            self._notify_deploy(webhook_url, run_id, health_score, deploy)
 
         # Persist run
         plugins_run = list(results.keys())
@@ -149,29 +145,77 @@ class MasterOrchestrator:
             "summary": summary,
         }
 
+    def _notify_deploy(
+        self,
+        webhook_url: str,
+        run_id: str,
+        health_score: int,
+        deploy: bool,
+    ) -> None:
+        """POST the run verdict to the deploy webhook.
+
+        Delivery is best-effort — a webhook that is down must not fail the run —
+        but it is never silent. The previous ``except Exception: pass`` left no
+        trace anywhere of a hook that was unreachable, misconfigured or
+        rejecting the payload, so a deploy that was never notified looked
+        exactly like one that was.
+        """
+        try:
+            import requests
+
+            response = requests.post(
+                webhook_url,
+                json={"run_id": run_id, "health_score": health_score, "deploy": deploy},
+                timeout=10,
+            )
+        except Exception as exc:  # noqa: BLE001
+            self._logger.log("orchestrator", "webhook_error", {"error": str(exc)})
+            return
+
+        # A rejected payload is a delivery failure too; it just does not raise.
+        if response.status_code >= 400:
+            self._logger.log(
+                "orchestrator", "webhook_failed", {"status_code": response.status_code}
+            )
+
     def _compute_health(
         self,
         results: dict[str, PluginResult],
         by_priority: dict[PluginPriority, list],
     ) -> int:
-        """Compute weighted health score: CRITICAL 40%, HIGH 35%, NORMAL 25%."""
+        """Compute weighted health score: CRITICAL 40%, HIGH 35%, NORMAL 25%.
+
+        Scored against the plugins that were expected to run, not the ones that
+        reported back. A plugin missing from ``results`` counts as not passing:
+        it may have failed to import (PluginRegistry logs that and carries on),
+        died in its worker, or sat behind a CRITICAL failure that stopped the
+        tier — in every case the run learned nothing about it, and nothing
+        learned is not a pass.
+
+        Scoring only the reporters is what made a broken run look perfect: one
+        unimportable dependency dropped its plugins from the denominator, and
+        with every plugin gone the score was 100 and the deploy went green —
+        a better result than an honest run where everything fails and scores 0.
+        """
         total_weight = 0.0
         weighted_score = 0.0
 
         for priority, weight in _WEIGHTS.items():
-            plugins_in_tier = by_priority.get(priority, [])
-            run_in_tier = [p for p in plugins_in_tier if p.name in results]
-            if not run_in_tier:
+            expected = by_priority.get(priority, [])
+            if not expected:
                 continue
             passing = sum(
-                1 for p in run_in_tier if results[p.name].status in ("pass", "skip", "warn")
+                1
+                for p in expected
+                if p.name in results and results[p.name].status in ("pass", "skip", "warn")
             )
-            tier_score = passing / len(run_in_tier)
-            weighted_score += weight * tier_score
+            weighted_score += weight * (passing / len(expected))
             total_weight += weight
 
         if total_weight == 0:
-            return 100  # no plugins run
+            # Nothing carrying weight was even expected, so the run holds no
+            # evidence at all. It must not clear the deploy threshold.
+            return 0
         return round((weighted_score / total_weight) * 100)
 
 
