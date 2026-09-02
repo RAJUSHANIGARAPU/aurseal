@@ -28,6 +28,7 @@ from contract_testing.models import (
     RequestSchema,
     ResponseSchema,
 )
+from contract_testing.redaction import redact_headers, redact_query
 
 if TYPE_CHECKING:
     from api.agents.ingestion import PostmanRequest
@@ -134,19 +135,17 @@ class ConsumerContractGenerator:
         if ci.response_body is not None:
             resp_body_schema = infer_schema(ci.response_body)
 
-        # Strip auth headers from request (noise + security)
-        clean_headers = {
-            k: v
-            for k, v in ci.request_headers.items()
-            if k.lower() not in {"authorization", "cookie", "x-api-key"}
-        }
+        # Applied again here even though captures arrive redacted: this method
+        # also serves interactions rebuilt from stored JSON, and the Postman
+        # path below never passes through capture at all.
+        clean_headers = redact_headers(ci.request_headers)
 
         return Interaction(
             description=description,
             request=RequestSchema(
                 method=ci.method.upper(),
                 path=norm_path,
-                query=ci.query,
+                query=redact_query(ci.query),
                 headers=clean_headers,
                 body_schema=req_body_schema,
             ),
@@ -188,11 +187,7 @@ class ConsumerContractGenerator:
                 request=RequestSchema(
                     method=req.method.upper(),
                     path=path,
-                    headers={
-                        k: v
-                        for k, v in req.headers.items()
-                        if k.lower() not in {"authorization", "cookie"}
-                    },
+                    headers=redact_headers(req.headers),
                     body_schema=body_schema,
                 ),
                 response=ResponseSchema(status=200),

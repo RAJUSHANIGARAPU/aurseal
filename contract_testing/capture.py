@@ -17,6 +17,8 @@ import logging
 import threading
 from urllib.parse import urlparse
 
+from contract_testing.redaction import redact_headers, redact_query
+
 logger = logging.getLogger(__name__)
 
 _local = threading.local()
@@ -110,14 +112,21 @@ def _record(request, response) -> None:
     except Exception:  # noqa: BLE001
         pass
 
+    # Redacted here, at the earliest point, rather than only where the contract
+    # is assembled — otherwise a live credential sits in this list in memory for
+    # the whole session and any future consumer of a capture inherits the leak.
     interaction = {
         "method": request.method,
         "path": parsed.path,
-        "query": parsed.query or "",
-        "request_headers": _filter_headers(dict(request.headers), _SKIP_REQUEST_HEADERS),
+        "query": redact_query(parsed.query),
+        "request_headers": redact_headers(
+            _filter_headers(dict(request.headers), _SKIP_REQUEST_HEADERS)
+        ),
         "request_body": req_body,
         "status": response.status_code,
-        "response_headers": _filter_headers(dict(response.headers), _SKIP_RESPONSE_HEADERS),
+        "response_headers": redact_headers(
+            _filter_headers(dict(response.headers), _SKIP_RESPONSE_HEADERS)
+        ),
         "response_body": resp_body,
         "test_name": getattr(_local, "test_name", ""),
     }

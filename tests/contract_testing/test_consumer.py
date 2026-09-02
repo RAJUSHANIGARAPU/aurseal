@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from contract_testing.consumer import ConsumerContractGenerator, infer_schema, normalize_path
+from contract_testing.redaction import REDACTED
 
 
 @dataclass
@@ -182,10 +183,17 @@ def test_from_captures_deduplicates_by_method_path():
     assert len(contract.interactions) == 1
 
 
-def test_from_captures_strips_auth_headers():
+def test_from_captures_redacts_auth_headers():
+    """
+    The credential must not reach the contract. The header NAME is kept: that
+    this endpoint requires authorization is part of the request shape, and the
+    provider side validates responses only, so nothing compares the value.
+    """
     g = _generator()
     raw = _raw()
     raw["request_headers"] = {"Authorization": "Bearer tok", "Accept": "application/json"}
     contract = g.from_captures([raw])
     headers = contract.interactions[0].request.headers
-    assert "Authorization" not in headers
+    assert headers["Authorization"] == REDACTED
+    assert "tok" not in headers["Authorization"]
+    assert headers["Accept"] == "application/json"
