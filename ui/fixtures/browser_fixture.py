@@ -8,6 +8,12 @@ This fixture exists for advanced scenarios such as:
 • custom browser launch options
 • remote browsers
 • mobile device emulation
+
+Nothing imports this module and it is not a ``conftest.py``, so none of it runs
+today. To use it, import the fixtures you want into the relevant ``conftest.py``
+— and import them **by name**. ``browser`` and ``page`` here shadow
+pytest-playwright's own fixtures, so pulling in the whole module replaces the
+working ones with these.
 """
 
 import os
@@ -24,12 +30,26 @@ def playwright_instance():
         yield p
 
 
+def _requested_browser(config) -> str:
+    """
+    Resolve ``--browser`` to a single engine name.
+
+    The option is declared ``action="append"`` with a default of ``[]``, so it
+    is a list. This used to be passed straight to ``getattr``, which raises
+    ``TypeError: attribute name must be string`` — meaning the fixture below
+    could never have run, template or not.
+    """
+    requested = config.getoption("--browser") or ["chromium"]
+    return requested[0]
+
+
 @pytest.fixture(scope="function")
 def browser(playwright_instance, request):
-    browser_name = request.config.getoption("--browser")
     headless = request.config.getoption("--headless") == "true"
 
-    browser = getattr(playwright_instance, browser_name).launch(headless=headless)
+    browser = getattr(playwright_instance, _requested_browser(request.config)).launch(
+        headless=headless
+    )
 
     yield browser
     browser.close()
