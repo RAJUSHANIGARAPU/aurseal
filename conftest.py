@@ -5,6 +5,7 @@ from datetime import datetime
 
 import pytest
 
+from core import artifact_names
 from core.config_reader import ConfigReader
 from core.failure_reporter import write_failure_bundle
 
@@ -132,17 +133,19 @@ def collect_browser_evidence(page, request):
 
 
 @pytest.fixture(autouse=True)
-def enable_artifacts(context, request):
-    os.makedirs("reports/videos", exist_ok=True)
-    os.makedirs("reports/traces", exist_ok=True)
+def enable_artifacts(context, request, browser_name):
+    os.makedirs(artifact_names.VIDEO_DIR, exist_ok=True)
+    os.makedirs(artifact_names.TRACE_DIR, exist_ok=True)
     context.tracing.start(screenshots=True, snapshots=True, sources=True)
     yield
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     test_name = request.node.name
-    browser = request.config.getoption("--browser")
 
-    trace_path = f"reports/traces/{test_name}_{browser}_{timestamp}.zip"
-    context.tracing.stop(path=trace_path)
+    # `browser_name` is pytest-playwright's own fixture and is a string. The
+    # previous `request.config.getoption("--browser")` is declared
+    # action="append" with a default of [], so it put a literal "[]" in every
+    # filename.
+    context.tracing.stop(path=artifact_names.trace_path(test_name, browser_name, timestamp))
 
     videos = []
     for page in context.pages:
@@ -151,10 +154,11 @@ def enable_artifacts(context, request):
 
     context.close()
 
-    for video in videos:
-        video_path = video.path()
-        new_video = f"reports/videos/{test_name}_{browser}_{timestamp}.webm"
-        shutil.move(video_path, new_video)
+    for index, video in enumerate(videos):
+        shutil.move(
+            video.path(),
+            artifact_names.video_path(test_name, browser_name, timestamp, index, len(videos)),
+        )
 
 
 # =========================================================
