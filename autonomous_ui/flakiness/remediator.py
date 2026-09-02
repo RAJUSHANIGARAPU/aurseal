@@ -43,9 +43,20 @@ class FlakinessRemediator:
         profile: FlakinessProfile,
         pattern: FlakPattern,
         records: list[FlakRecord],
+        use_llm: bool = True,
     ) -> RemediationResult:
+        """
+        Produce a fix recommendation for one flaky test.
+
+        ``use_llm`` mirrors :meth:`PatternAnalyzer.classify`. It exists because
+        this method had no such switch while ``classify`` did, so a caller that
+        had already said "no LLM" for classification had no way to say it here
+        and got a blocking model call anyway — see the note on the pytest
+        plugin, where that cost roughly 23 seconds per flaky test at the end of
+        every single run.
+        """
         strategy = _STRATEGY_MAP.get(pattern, "suggest_only")
-        suggestion = self._build_suggestion(profile, pattern, records, strategy)
+        suggestion = self._build_suggestion(profile, pattern, records, strategy, use_llm)
         return RemediationResult(
             test_id=profile.test_id,
             pattern=pattern,
@@ -60,9 +71,10 @@ class FlakinessRemediator:
         pattern: FlakPattern,
         records: list[FlakRecord],
         strategy: str,
+        use_llm: bool = True,
     ) -> str:
         base = self._rule_suggestion(profile, pattern, records)
-        if self._llm and base:
+        if use_llm and self._llm and base:
             # Enrich the rule-based suggestion with LLM specifics
             llm_detail = self._llm_enrich(profile, pattern, records, base)
             return f"{base}\n\nLLM DETAIL:\n{llm_detail}" if llm_detail else base

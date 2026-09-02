@@ -1,4 +1,4 @@
-name: Playwright Tests
+name: Tests
 
 on:
   push:
@@ -7,7 +7,40 @@ on:
     branches: [main]
 
 jobs:
-  test:
+  # The framework's own logic: contract testing, flakiness detection, memory,
+  # web discovery, plugins, autonomous UI healing. 514 tests, no browser, no
+  # network, ~25 seconds. None of it ran in CI until now — the marker-based
+  # selection below picked 7 tests out of 523 and said nothing about the rest.
+  # tests/test_ci_selection.py is what keeps that from happening again.
+  offline:
+    name: Offline suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install Dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Linter
+        run: ruff check .
+
+      - name: Run Offline Tests
+        run: pytest tests/ -n auto
+
+  # Everything that drives a real browser against a live third-party site.
+  # Kept separate from the job above so a remote DOM change reddens the build
+  # for what it is, rather than looking like a defect in framework code.
+  browser:
+    name: Browser suite
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -43,11 +76,11 @@ jobs:
         if: steps.pw-cache.outputs.cache-hit == 'true'
         run: playwright install-deps chrome
 
-      - name: Run Linter
-        run: ruff check .
-
+      # `api` and `contract` were the other two markers nobody selected: one
+      # test each, both needing the live site, both silently unrun since they
+      # were written.
       - name: Run Smoke Tests
-        run: pytest -m smoke -n auto
+        run: pytest -m "smoke or api or contract" -n auto
 
       - name: Run Regression Tests
         if: github.ref == 'refs/heads/main'
