@@ -202,6 +202,18 @@ class PlannerAgent(BaseAgent):
         output_path: str = "",
     ) -> dict:
         code = self._generator.generate_from_trace(page_name=page_name)
+        if code is None:
+            # Nothing to write. Writing the failure here would truncate the
+            # existing test at output_path, and reporting generated=True would
+            # let the loop carry on as if a test had been produced.
+            return {
+                "generated": False,
+                "path": output_path or "(preview)",
+                "error": (
+                    "generation produced no code (no trace, no ANTHROPIC_API_KEY, "
+                    "or the API call failed) — nothing was written"
+                ),
+            }
         if output_path:
             Path(output_path).parent.mkdir(parents=True, exist_ok=True)
             Path(output_path).write_text(code)

@@ -23,6 +23,24 @@ Generated tests must follow the project conventions:
 """
 
 
+def _not_generated(output_path: str) -> dict:
+    """Tool result for a generation that produced nothing.
+
+    Reported as generated=False and, crucially, without having touched
+    output_path — the previous code wrote the failure message over whatever
+    test file was already there and still reported generated=True, so a run
+    with an empty reports/traces/ silently truncated real tests.
+    """
+    return {
+        "generated": False,
+        "path": output_path or "(preview)",
+        "error": (
+            "generation produced no code (no trace, no ANTHROPIC_API_KEY, "
+            "unreadable spec, or the API call failed) — nothing was written"
+        ),
+    }
+
+
 class GeneratorAgent(BaseAgent):
     """Agent wrapping TestGenerator."""
 
@@ -98,22 +116,17 @@ class GeneratorAgent(BaseAgent):
     ) -> dict:
         resolved = Path(trace_path) if trace_path else None
         code = self._generator.generate_from_trace(trace_path=resolved, page_name=page_name)
+        if code is None:
+            return _not_generated(output_path)
         if output_path:
             Path(output_path).parent.mkdir(parents=True, exist_ok=True)
             Path(output_path).write_text(code)
         return {"generated": True, "path": output_path or "(preview)", "preview": code[:400]}
 
     def _tool_generate_from_spec(self, spec_path: str, output_path: str) -> dict:
-        if hasattr(self._generator, "generate_from_spec"):
-            code = self._generator.generate_from_spec(  # type: ignore[attr-defined]
-                Path(spec_path), Path(output_path)
-            )
-        else:
-            # Fallback: read spec as context, generate from latest trace
-            code = self._generator.generate_from_trace(
-                trace_path=None,
-                page_name=Path(spec_path).stem,
-            )
+        code = self._generator.generate_from_spec(Path(spec_path))
+        if code is None:
+            return _not_generated(output_path)
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
         Path(output_path).write_text(code)
-        return {"generated": True, "path": output_path}
+        return {"generated": True, "path": output_path, "preview": code[:400]}
