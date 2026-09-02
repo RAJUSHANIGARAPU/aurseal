@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+import os
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -25,7 +26,23 @@ def orchestrator() -> UIOrchestrator:
     return UIOrchestrator(llm=llm)
 
 
-def _make_bundle_file(directory: Path, test_name: str = "test_example") -> Path:
+def _make_bundle_file(
+    directory: Path,
+    test_name: str = "test_example",
+    mtime: datetime | None = None,
+) -> Path:
+    """
+    Write a bundle file, optionally pinning its modification time.
+
+    ``_collect_bundles_since`` compares ``st_mtime`` against a caller-supplied
+    instant, so a test that samples "now" and then writes a file is racing the
+    filesystem's timestamp resolution: where mtime is coarser than the few
+    microseconds in between, it rounds below the sampled instant and the file is
+    skipped. That passes on APFS and fails on CI, which is exactly the shape of
+    flake this project exists to find.
+
+    Passing ``mtime`` removes the clock from the test entirely.
+    """
     bundle = {
         "test": test_name,
         "timestamp": datetime.now(tz=timezone.utc).isoformat(),
@@ -38,6 +55,9 @@ def _make_bundle_file(directory: Path, test_name: str = "test_example") -> Path:
     }
     path = directory / f"{test_name}.json"
     path.write_text(json.dumps(bundle))
+    if mtime is not None:
+        stamp = mtime.timestamp()
+        os.utime(path, (stamp, stamp))
     return path
 
 
@@ -125,12 +145,33 @@ def test_run_does_not_exceed_max_iterations(orchestrator: UIOrchestrator) -> Non
 
 
 def test_collect_bundles_since_returns_new_files(tmp_path: Path) -> None:
-    before = datetime.now(tz=timezone.utc)
-    _make_bundle_file(tmp_path)
+    before = datetime(2020, 1, 1, tzinfo=timezone.utc)
+    _make_bundle_file(tmp_path, mtime=before + timedelta(minutes=1))
     with patch("autonomous_ui.orchestrator._BUNDLES_DIR", tmp_path):
         bundles = UIOrchestrator._collect_bundles_since(before)
     assert len(bundles) == 1
     assert bundles[0].test == "test_example"
+
+
+def test_collect_bundles_since_keeps_a_file_written_on_the_boundary(tmp_path: Path) -> None:
+    """
+    The comparison is ``mtime < since``, so a bundle written in the same instant
+    the run started is kept. Worth pinning: the production caller samples
+    ``run_start`` and then runs the tests that write the bundles, and an
+    off-by-one here would drop the first failure of a run.
+    """
+    since = datetime(2020, 1, 1, tzinfo=timezone.utc)
+    _make_bundle_file(tmp_path, mtime=since)
+    with patch("autonomous_ui.orchestrator._BUNDLES_DIR", tmp_path):
+        assert len(UIOrchestrator._collect_bundles_since(since)) == 1
+
+
+def test_collect_bundles_since_drops_a_file_one_second_older(tmp_path: Path) -> None:
+    """Negative control for the boundary above."""
+    since = datetime(2020, 1, 1, tzinfo=timezone.utc)
+    _make_bundle_file(tmp_path, mtime=since - timedelta(seconds=1))
+    with patch("autonomous_ui.orchestrator._BUNDLES_DIR", tmp_path):
+        assert UIOrchestrator._collect_bundles_since(since) == []
 
 
 def test_collect_bundles_since_ignores_old_files(tmp_path: Path) -> None:
