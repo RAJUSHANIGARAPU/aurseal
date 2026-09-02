@@ -39,6 +39,7 @@ class ContractPlugin:
     def __init__(self, config: ContractConfig) -> None:
         self._config = config
         self._raw_captures: list[dict] = []
+        self._capture_keys: set[str] = set()
         self._validation_results: list = []
         self._contracts_saved: int = 0
         self._environment = "qa"
@@ -127,7 +128,7 @@ class ContractPlugin:
         from contract_testing import capture
 
         interactions = capture.deactivate()
-        self._raw_captures.extend(interactions)
+        self._retain(interactions)
 
         if self._config.mode in ("provider", "hybrid") and self._validator_contract:
             self._run_provider_validation(interactions)
@@ -135,6 +136,24 @@ class ContractPlugin:
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    def _retain(self, interactions: list[dict]) -> None:
+        """Keep one capture per interaction key, on the way in.
+
+        ``from_captures`` throws duplicates away, but only at sessionfinish, so
+        a five-hundred-test run over twenty endpoints held ten thousand captures
+        — bodies included — to build twenty interactions. Deduplicating here
+        keeps the same first-occurrence-wins order and the same key, so the
+        contract that comes out is unchanged.
+        """
+        from contract_testing.consumer import normalize_path
+
+        for raw in interactions:
+            key = f"{raw.get('method', 'GET').upper()} {normalize_path(raw.get('path', '/'))}"
+            if key in self._capture_keys:
+                continue
+            self._capture_keys.add(key)
+            self._raw_captures.append(raw)
 
     def _save_consumer_contract(self, reporter) -> None:
         from contract_testing.differ import ContractDiffer
