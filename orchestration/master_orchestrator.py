@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import sys
 import uuid
@@ -15,6 +16,8 @@ from orchestration.storage import PluginStorage
 from plugins._base_plugin import PluginPriority, PluginResult
 from plugins.cost_governor import CostGovernor
 from plugins.registry import PluginRegistry
+
+logger = logging.getLogger(__name__)
 
 _WEIGHTS = {
     PluginPriority.CRITICAL: 0.40,
@@ -109,7 +112,28 @@ class MasterOrchestrator:
 
         # Compute health score
         health_score = self._compute_health(results, by_priority)
-        deploy = health_score >= 70
+
+        # A plugin that failed to load is not in `by_priority` either — the
+        # registry builds that list — so scoring the expected plugins cannot see
+        # it, and the score is computed over the survivors alone. The name and
+        # priority inside an unimportable file are unknowable, so the honest
+        # response is not a number but a refusal: a run that could not load part
+        # of its own suite does not know whether the product is well.
+        load_failures = [str(f) for f in getattr(self._registry, "load_failures", [])]
+        deploy = health_score >= 70 and not load_failures
+        if load_failures:
+            self._logger.log(
+                "orchestrator",
+                "plugins_failed_to_load",
+                {"count": len(load_failures), "failures": load_failures},
+            )
+            logger.error(
+                "[orchestrator] %d plugin file(s) did not load; deploy withheld regardless "
+                "of the health score: %s",
+                len(load_failures),
+                "; ".join(load_failures),
+            )
+
         self._logger.log("orchestrator", "health_score", {"score": health_score, "deploy": deploy})
 
         # Fire deploy webhook if set. A dry run is documented as having no side
@@ -133,6 +157,7 @@ class MasterOrchestrator:
             "plugins_run": plugins_run,
             "statuses": {name: r.status for name, r in results.items()},
             "total_cost_usd": total_cost,
+            "load_failures": load_failures,
         }
         self._logger.log(
             "orchestrator", "run_complete", {"run_id": run_id, "health_score": health_score}
