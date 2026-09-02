@@ -59,6 +59,13 @@ class CrawlSession:
         self._visited: set[str] = set()
         self._queue: deque[QueueEntry] = deque()
         self._queue.append(QueueEntry(url=root_url, depth=0))
+        # The root is seeded straight into the queue, so nothing else records
+        # that it has been seen. Without this, a homepage carrying a logo link
+        # to "/" re-enqueues the root and it gets crawled twice — links are
+        # enqueued while the page is being parsed, which is before the caller
+        # gets a chance to mark it visited.
+        self._visited.add(normalise_url(root_url) or root_url)
+        self.pages_attempted = 0
         self.pages_crawled = 0
 
     # ------------------------------------------------------------------
@@ -66,9 +73,21 @@ class CrawlSession:
     # ------------------------------------------------------------------
 
     def has_next(self) -> bool:
-        return bool(self._queue) and self.pages_crawled < self.max_pages
+        return bool(self._queue) and self.pages_attempted < self.max_pages
 
     def pop(self) -> QueueEntry:
+        """
+        Take the next URL to crawl, counting it against the page budget.
+
+        The budget is spent here rather than on success, because it is a limit
+        on how much traffic this crawler sends to a target — a page that timed
+        out still cost the target a request. Counting it in ``mark_visited``
+        made the limit depend on the caller remembering to call that on every
+        path: ``CrawlEngine`` only calls it when a page parses, so on a site
+        where pages fail the budget was not applied at all. Measured before the
+        change, with ``max_pages=5`` and 51 queued URLs that all fail: 51 popped.
+        """
+        self.pages_attempted += 1
         return self._queue.popleft()
 
     def enqueue(self, url: str, depth: int, referrer: str = "") -> bool:
@@ -89,6 +108,7 @@ class CrawlSession:
         return True
 
     def mark_visited(self, url: str) -> None:
+        """Record a page as successfully crawled. Does not affect the budget."""
         self._visited.add(normalise_url(url) or url)
         self.pages_crawled += 1
 

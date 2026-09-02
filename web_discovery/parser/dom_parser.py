@@ -6,19 +6,17 @@ import logging
 from typing import TYPE_CHECKING
 
 from web_discovery.parser.models import ElementSpec, FormSpec, PageSpec
+from web_discovery.parser.selectors import (
+    attribute_selector,
+    css_string,
+    id_selector,
+    text_selector,
+)
 
 if TYPE_CHECKING:
     from playwright.sync_api import Page
 
 logger = logging.getLogger(__name__)
-
-_SELECTOR_PRIORITY = [
-    ("data-testid", lambda el: el.get_attribute("data-testid")),
-    ("aria-label", lambda el: el.get_attribute("aria-label")),
-    ("placeholder", lambda el: el.get_attribute("placeholder")),
-    ("id", lambda el: el.get_attribute("id")),
-    ("name", lambda el: el.get_attribute("name")),
-]
 
 
 class DomParser:
@@ -98,7 +96,7 @@ class DomParser:
                         continue
                     text = _safe(el.inner_text).strip()[:120]
                     aria = el.get_attribute("aria-label") or ""
-                    selector = self._best_selector(el, "a") or f"a:has-text({text!r})"
+                    selector = self._best_selector(el, "a") or text_selector("a", text)
                     links.append(
                         ElementSpec(
                             tag="a",
@@ -173,38 +171,39 @@ class DomParser:
             # 1. data-testid
             v = el.get_attribute("data-testid")
             if v:
-                return f"[data-testid={v!r}]"
+                return attribute_selector("data-testid", v)
 
             # 2. aria-label
             v = el.get_attribute("aria-label")
             if v:
-                return f"[aria-label={v!r}]"
+                return attribute_selector("aria-label", v)
 
             # 3. placeholder (for inputs)
             v = el.get_attribute("placeholder")
             if v:
-                return f"[placeholder={v!r}]"
+                return attribute_selector("placeholder", v)
 
-            # 4. id
+            # 4. id — skipped when framework-generated, since those are not
+            #    stable across renders.
             v = el.get_attribute("id")
             if v and not v.startswith(("ember", "mat-", "ng-", "cdk-", ":")):
-                return f"#{v}"
+                return id_selector(v)
 
             # 5. name
             v = el.get_attribute("name")
             if v:
-                return f"[name={v!r}]"
+                return attribute_selector("name", v)
 
             # 6. visible text for buttons/links
             if tag in ("button", "a"):
                 text = _safe(el.inner_text).strip()
                 if text and len(text) < 60:
-                    return f"{tag}:has-text({text!r})"
+                    return text_selector(tag, text)
 
             # 7. role
             role = el.get_attribute("role")
             if role:
-                return f"[role={role!r}]"
+                return attribute_selector("role", role)
 
         except Exception:  # noqa: BLE001
             pass
@@ -216,7 +215,7 @@ class DomParser:
             el_id = el.get_attribute("id")
             if el_id:
                 page = el.page
-                label_el = page.locator(f"label[for={el_id!r}]").first
+                label_el = page.locator(f"label[for={css_string(el_id)}]").first
                 if label_el.count():
                     return _safe(label_el.inner_text).strip()
         except Exception:  # noqa: BLE001

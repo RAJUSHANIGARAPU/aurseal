@@ -141,11 +141,18 @@ class CrawlEngine:
             href = link.href or ""
             if not href:
                 continue
-            # Resolve relative URLs
+
+            # The href is passed as an argument rather than interpolated into
+            # the script source. `repr()` produces a Python literal, not a
+            # JavaScript one, and where the two disagree the evaluate raises,
+            # the old fallback assigned the still-relative href, and `enqueue`
+            # then rejected it for having no origin — so the link vanished with
+            # nothing logged.
             try:
-                abs_url = page.evaluate(f"new URL({href!r}, document.baseURI).href")
-            except Exception:  # noqa: BLE001
-                abs_url = href
+                abs_url = page.evaluate("h => new URL(h, document.baseURI).href", href)
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("[crawl] could not resolve %r against %s: %s", href, page.url, exc)
+                continue
 
             if is_destructive_text(link.text_content):
                 logger.debug("[crawl] skipping destructive link: %s", link.text_content)
