@@ -70,10 +70,13 @@ class LLMOutputOraclePlugin(BasePlugin):
                         f"Reply with one word: stable or variable.\n\n{sample}"
                     )
                     assessment = governor.cached_complete(prompt, llm.complete).strip().lower()
+                    # Same trap as behavioral_equivalence: complete() returns ""
+                    # when the model was not reached, and defaulting that to
+                    # "stable" reports a clean bill of health nobody checked.
                     if assessment not in ("stable", "variable"):
-                        assessment = "stable"
+                        assessment = "unknown"
                 except Exception:  # noqa: BLE001
-                    assessment = "stable"
+                    assessment = "unknown"
 
         return PluginResult(
             status="pass",

@@ -99,14 +99,17 @@ class BehavioralEquivalencePlugin(BasePlugin):
                     "Is this 'safe' (formatting only) or 'semantic' (logic changed)? "
                     "Reply with one word: safe or semantic."
                 )
-                classification = governor.cached_complete(prompt, llm.complete).strip().lower()
+                raw = governor.cached_complete(prompt, llm.complete).strip().lower()
+                # Anything we did not ask for is "unknown", never "semantic".
+                # complete() returns "" when the model was not reached, and the
+                # old else-branch turned that outage into a definitive "the
+                # refactor changed behaviour" verdict on every drifted function.
+                classification = raw if raw in ("safe", "semantic") else "unknown"
                 drift_classifications.append(
                     {
                         "added": list(added),
                         "removed": list(removed),
-                        "classification": classification
-                        if classification in ("safe", "semantic")
-                        else "semantic",
+                        "classification": classification,
                     }
                 )
             except Exception:  # noqa: BLE001
@@ -114,10 +117,13 @@ class BehavioralEquivalencePlugin(BasePlugin):
                     {"added": list(added), "removed": list(removed), "classification": "unknown"}
                 )
 
+        # Only "safe" clears the drift. An unclassified drift is still a drift —
+        # calling it "pass" because the model was unreachable is the same false
+        # green as calling it "semantic", just pointing the other way.
         status = (
-            "pass"
-            if not any(d.get("classification") == "semantic" for d in drift_classifications)
-            else "warn"
+            "warn"
+            if any(d.get("classification") != "safe" for d in drift_classifications)
+            else "pass"
         )
 
         return PluginResult(

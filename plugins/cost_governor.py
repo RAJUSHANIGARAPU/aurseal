@@ -34,10 +34,18 @@ class CostGovernor:
         self.budget_used += cost_usd
 
     def cached_complete(self, prompt: str, call_fn: Callable[[str], str]) -> str:
-        """Return cached LLM response for identical prompt content."""
+        """Return cached LLM response for identical prompt content.
+
+        Failures are not cached. ``complete()`` returns an empty string when the
+        model was not reached, and memoising that by prompt hash pinned a
+        transient 429 to the prompt for the life of the process — every later
+        caller got the outage back without a call being made, so the run could
+        not recover even after the throttle lifted.
+        """
         key = hashlib.sha256(prompt.encode()).hexdigest()
         if key in self._cache:
             return self._cache[key]
         result = call_fn(prompt)
-        self._cache[key] = result
+        if result:
+            self._cache[key] = result
         return result
