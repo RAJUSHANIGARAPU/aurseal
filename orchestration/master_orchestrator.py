@@ -13,7 +13,13 @@ from threading import Thread
 
 from api.engine.observability import AgentLogger
 from orchestration.storage import PluginStorage
-from plugins._base_plugin import PluginPriority, PluginResult
+from plugins._base_plugin import (
+    PluginPriority,
+    PluginResult,
+    PluginStatus,
+    is_passing,
+    is_scored,
+)
 from plugins.cost_governor import CostGovernor
 from plugins.registry import PluginRegistry
 
@@ -70,8 +76,14 @@ class MasterOrchestrator:
             self._logger.log(
                 "orchestrator", "plugin_done", {"plugin": name, "status": result.status}
             )
-            if result.status == "fail":
-                self._logger.log("orchestrator", "critical_failure", {"plugin": name})
+            # Stops on anything that is not a verdict of health, not only on
+            # "fail". Retry exhaustion returns "error" and an outage now returns
+            # "unknown", so a CRITICAL plugin that crashed or could not tell used
+            # to let the tier carry on as though it had approved.
+            if not is_passing(result.status) and result.status != PluginStatus.SKIP.value:
+                self._logger.log(
+                    "orchestrator", "critical_failure", {"plugin": name, "status": result.status}
+                )
                 break
 
         # HIGH — parallel
@@ -229,12 +241,22 @@ class MasterOrchestrator:
             expected = by_priority.get(priority, [])
             if not expected:
                 continue
+
+            # A SKIP means "not applicable to this run", so it leaves the
+            # fraction entirely rather than filling it. It used to count as
+            # passing, which handed a tier full marks for a plugin whose source
+            # directory was simply missing. A plugin with no result at all stays
+            # in the denominator — nothing learned is not a pass.
+            scored = [
+                p for p in expected if p.name not in results or is_scored(results[p.name].status)
+            ]
+            if not scored:
+                continue
+
             passing = sum(
-                1
-                for p in expected
-                if p.name in results and results[p.name].status in ("pass", "skip", "warn")
+                1 for p in scored if p.name in results and is_passing(results[p.name].status)
             )
-            weighted_score += weight * (passing / len(expected))
+            weighted_score += weight * (passing / len(scored))
             total_weight += weight
 
         if total_weight == 0:

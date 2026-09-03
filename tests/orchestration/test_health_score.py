@@ -129,13 +129,18 @@ class TestAHealthyRunStillScoresHealthy:
         results = _results(security="fail", contracts="fail", lint="error")
         assert _score(results, tiers) == 0
 
-    @pytest.mark.parametrize("status", ["pass", "skip", "warn"])
-    def test_skip_and_warn_count_as_passing(self, status):
+    @pytest.mark.parametrize("status", ["pass", "warn"])
+    def test_a_verdict_of_health_counts_as_passing(self, status):
+        """Both mean the plugin looked and formed an opinion."""
         tiers = _tiers(critical=["security"])
         assert _score(_results(security=status), tiers) == 100
 
-    @pytest.mark.parametrize("status", ["fail", "error"])
-    def test_fail_and_error_do_not_count_as_passing(self, status):
+    @pytest.mark.parametrize("status", ["fail", "error", "unknown"])
+    def test_anything_short_of_a_verdict_does_not(self, status):
+        """
+        `unknown` is new and is the point of it: a plugin that ran but could not
+        tell — an outage, an empty input — must not score as one that verified.
+        """
         tiers = _tiers(critical=["security"])
         assert _score(_results(security=status), tiers) == 0
 
@@ -154,3 +159,43 @@ class TestAHealthyRunStillScoresHealthy:
         """Weight 0.0 — they must not be able to fail a run they never joined."""
         tiers = _tiers(critical=["security"], background=["telemetry"])
         assert _score(_results(security="pass"), tiers) == 100
+
+
+class TestSkipLeavesTheFractionRatherThanFillingIt:
+    """
+    `skip` used to count as passing, so a tier whose only plugin skipped scored
+    full marks. `e2e_playwright` returns `skip` when its test directory is
+    missing, and on a `ui_change` trigger it is the entire HIGH tier — a wrong
+    working directory bought 35 points having run no browser test.
+
+    It is now scored neither way: excluded from numerator and denominator both.
+    "I could not run" is `unknown`; `skip` means nobody expected a verdict.
+    """
+
+    def test_a_lone_skip_contributes_no_weight(self):
+        tiers = _tiers(critical=["security"], normal=["lint"])
+        # CRITICAL skips entirely; the score is NORMAL's alone.
+        assert _score(_results(security="skip", lint="fail"), tiers) == 0
+
+    def test_a_skip_does_not_dilute_a_failure(self):
+        """Two plugins, one skipped and one failed, is 0 — not 50."""
+        tiers = _tiers(critical=["a", "b"])
+        assert _score(_results(a="skip", b="fail"), tiers) == 0
+
+    def test_a_skip_does_not_dilute_a_pass_either(self):
+        """The control: skipping must not cost points it never owed."""
+        tiers = _tiers(critical=["a", "b"])
+        assert _score(_results(a="skip", b="pass"), tiers) == 100
+
+    def test_a_run_where_everything_skipped_is_not_a_pass(self):
+        """No plugin was applicable, so the run holds no evidence at all."""
+        tiers = _tiers(critical=["security"], high=["contracts"])
+        assert _score(_results(security="skip", contracts="skip"), tiers) == 0
+
+    def test_an_unknown_still_sits_in_the_denominator(self):
+        """
+        The distinction that matters: `skip` leaves, `unknown` stays and counts
+        against. One plugin passing and one unable to tell is half marks.
+        """
+        tiers = _tiers(critical=["a", "b"])
+        assert _score(_results(a="pass", b="unknown"), tiers) == 50
