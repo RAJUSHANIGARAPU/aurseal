@@ -83,14 +83,19 @@ class TestAnOutageIsNotADriftVerdict:
         assert classifications, "the drift was not detected at all — the fixture is wrong"
         assert all(c["classification"] == "unknown" for c in classifications)
 
-    def test_an_unclassified_drift_does_not_report_pass(self, refactored_source):
+    def test_an_unclassified_drift_reports_unknown(self, refactored_source):
         """
         Calling it "pass" because the model was unreachable is the same false
         green as calling it "semantic", pointed the other way.
+
+        This asserted ``warn`` when it was written, which was the least-bad
+        status available at the time. ``warn`` counts toward the health score,
+        so it was still a pass wearing a different label — ``unknown`` is the
+        status the vocabulary now has for "ran, reached no verdict".
         """
         plugin = _load_plugin()
         result, _ = _classifications(plugin, refactored_source, _StubGovernor(""))
-        assert result.status == "warn"
+        assert result.status == "unknown"
 
 
 class TestTheClassifierStillClassifies:
@@ -104,12 +109,18 @@ class TestTheClassifierStillClassifies:
         assert result.status == "pass"
 
     def test_a_semantic_verdict_is_kept(self, refactored_source):
+        """A drift the model calls semantic is a found problem, so it fails.
+
+        This asserted ``warn`` when it was written, and ``warn`` counts toward
+        the health score: the plugin agreed the refactor had changed behaviour
+        and the deploy gate read it as healthy anyway.
+        """
         plugin = _load_plugin()
         result, classifications = _classifications(
             plugin, refactored_source, _StubGovernor("Semantic\n")
         )
         assert [c["classification"] for c in classifications] == ["semantic"]
-        assert result.status == "warn"
+        assert result.status == "fail"
 
     def test_the_model_was_actually_asked(self, refactored_source):
         """If the call stopped happening, "unknown" would be right for the wrong
