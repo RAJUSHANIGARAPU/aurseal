@@ -197,3 +197,26 @@ def test_worker_only_records_keep_resource_contention_detectable(store: HistoryS
 
     records = store.load_for_test("t::test_a")
     assert PatternAnalyzer()._is_parallel_contention(records) is True
+
+
+def test_worker_identity_comes_from_the_config_not_the_environment(monkeypatch) -> None:
+    """
+    This project's own suite runs under `-n auto` in CI, which sets
+    PYTEST_XDIST_WORKER in the process executing this very test. Reading it as a
+    fallback let the outer session's identity leak into a plugin built from a
+    config that declares no distribution — a sequential run tagged "gw3", which
+    made two tests here pass locally and fail in CI.
+
+    `workerinput` is what xdist sets on a worker, and it is the only thing that
+    should decide.
+    """
+    monkeypatch.setenv("PYTEST_XDIST_WORKER", "gw7")
+    plugin = FlakinessPlugin.from_config(_config(dist="no"))
+    assert plugin._worker == "main"
+
+
+def test_a_real_worker_still_reports_its_id(monkeypatch) -> None:
+    """Control: removing the env fallback must not lose the genuine id."""
+    monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
+    plugin = FlakinessPlugin.from_config(_config(dist="load", workerid="gw2"))
+    assert plugin._worker == "gw2"

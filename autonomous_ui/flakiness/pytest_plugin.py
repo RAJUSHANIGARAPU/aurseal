@@ -103,8 +103,14 @@ class FlakinessPlugin:
             store=store or HistoryStore(),
             run_id=run_id,
             environment=env,
-            worker=(worker_input or {}).get("workerid")
-            or os.environ.get("PYTEST_XDIST_WORKER", "main"),
+            # Taken from `workerinput` alone. Reading PYTEST_XDIST_WORKER as a
+            # fallback let the surrounding session's identity leak in: when this
+            # project's own suite runs under `-n auto`, that variable is set in
+            # the worker executing the test, so a config declaring dist="no" was
+            # still tagged "gw3" and a sequential run looked parallel. xdist
+            # always sets `workerinput` on a worker, so the variable was a second
+            # source of truth that could only disagree.
+            worker=(worker_input or {}).get("workerid", "main"),
             record_enabled=is_worker or not distributing,
             report_enabled=not is_worker,
         )
