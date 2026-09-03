@@ -55,8 +55,10 @@ def test_jaccard_partial_overlap():
     assert _jaccard(a, b) == pytest.approx(1 / 3, abs=1e-6)
 
 
-def test_jaccard_both_empty():
-    assert _jaccard(frozenset(), frozenset()) == 1.0
+def test_jaccard_both_empty_is_no_evidence_not_a_perfect_match():
+    # Used to be 1.0, which let endpoint-less pytest records take the whole
+    # 0.50 endpoint weight and outrank records with a real endpoint.
+    assert _jaccard(frozenset(), frozenset()) == 0.0
 
 
 def test_tokens_strips_noise_words():

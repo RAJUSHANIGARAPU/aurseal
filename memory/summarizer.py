@@ -16,13 +16,12 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from memory.models import MemoryRecord
+from memory.normalize import normalize_endpoint as _canonical_endpoint
 
 if TYPE_CHECKING:
     from api.agents.analysis import FailureAnalysis
     from api.agents.ingestion import PostmanRequest
 
-_UUID_RE = re.compile(r"[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}", re.I)
-_NUM_SEG_RE = re.compile(r"/\d+")
 _TIMESTAMP_RE = re.compile(
     r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?"
 )
@@ -142,10 +141,10 @@ class MemorySummarizer:
 
     @staticmethod
     def _normalize_endpoint(url: str) -> str:
-        url = url.split("?")[0].lower().rstrip("/")
-        url = _UUID_RE.sub("{id}", url)
-        url = _NUM_SEG_RE.sub("/{id}", url)
-        return url
+        # Delegates to memory.normalize so the read path in MemoryStore.query
+        # computes the identical string. The two used to differ ({id} here,
+        # "" there) and id-bearing endpoints scored 0 hits as a result.
+        return _canonical_endpoint(url)
 
     @staticmethod
     def _normalize_error(error: str) -> str:

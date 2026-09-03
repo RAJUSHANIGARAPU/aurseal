@@ -57,16 +57,22 @@ class FailureIntelligenceEngine:
         3. If records found and LLM enabled: enrich with LLM
         4. Return MemoryInsight
         """
+        # No request means no endpoint, and MemoryStore.query now returns
+        # nothing rather than everything for that. It is the honest answer:
+        # this engine retrieves by endpoint similarity, and a failure with no
+        # endpoint gives it nothing to be similar to. Retrieval by test
+        # identity is a different question, answered by get_for_test_suffix.
         endpoint = request.url if request else ""
         candidates = self._store.query(endpoint=endpoint, category=analysis.category.value)
 
-        ranked = self._retriever.rank(
+        scored = self._retriever.rank_scored(
             candidates,
             query_error=analysis.raw_message,
             query_endpoint=endpoint,
         )
+        ranked = [record for _, record in scored]
 
-        confidence = self._compute_confidence(ranked)
+        confidence = self._compute_confidence(ranked, [score for score, _ in scored])
         pattern_summary = self._summarize_records(ranked)
         suggested_fix = self._best_fix(ranked, analysis.suggested_fix)
 
@@ -124,14 +130,30 @@ class FailureIntelligenceEngine:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _compute_confidence(records: list[MemoryRecord]) -> float:
-        """Higher confidence when past fixes were marked as resolved."""
+    def _compute_confidence(records: list[MemoryRecord], scores: list[float]) -> float:
+        """How much this history is worth: how much of it, how well it worked, how alike it is.
+
+        The first two terms were the whole formula, and neither of them looks
+        at whether the records have anything to do with the current failure.
+        Three resolved records that the retriever scored at roughly zero still
+        gave ``base=0.6`` plus a full ``0.4`` resolution bonus — confidence 1.0
+        on unrelated history, which is the number the /api/billing probe
+        reported for a failure on /api/orders.
+
+        ``scores`` comes from ``MemoryRetriever.rank_scored`` and is the mean
+        relevance of exactly the records being summarised, so evidence that
+        does not resemble the failure cannot carry full weight. An empty
+        ``scores`` list means nobody measured relevance; that is 0.0, not 1.0.
+        """
         if not records:
+            return 0.0
+        if not scores:
             return 0.0
         resolved = sum(1 for r in records if r.fix_outcome == "resolved")
         base = min(len(records) / 5, 0.6)  # up to 0.6 from volume
         resolution_bonus = (resolved / len(records)) * 0.4  # up to 0.4 from success rate
-        return round(base + resolution_bonus, 2)
+        relevance = sum(scores) / len(scores)
+        return round((base + resolution_bonus) * relevance, 2)
 
     @staticmethod
     def _summarize_records(records: list[MemoryRecord]) -> str:

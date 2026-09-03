@@ -194,16 +194,16 @@ def test_build_prompt_no_history_block():
 
 
 def test_confidence_zero_with_no_records():
-    assert FailureIntelligenceEngine._compute_confidence([]) == 0.0
+    assert FailureIntelligenceEngine._compute_confidence([], []) == 0.0
 
 
 def test_confidence_increases_with_resolved_records():
     records = [_record("resolved"), _record("resolved")]
-    conf = FailureIntelligenceEngine._compute_confidence(records)
+    conf = FailureIntelligenceEngine._compute_confidence(records, [1.0, 1.0])
     assert conf > 0.3
 
 
 def test_confidence_capped_at_one():
     records = [_record("resolved")] * 20
-    conf = FailureIntelligenceEngine._compute_confidence(records)
+    conf = FailureIntelligenceEngine._compute_confidence(records, [1.0] * 20)
     assert conf <= 1.0

@@ -141,7 +141,10 @@ def test_query_by_category_filters(tmp_path):
     store = MemoryStore(_config(tmp_path))
     store.save(_record(category="ASSERTION_ERROR"))
     store.save(_record(category="TIMEOUT_ERROR"))
-    results = store.query(category="ASSERTION_ERROR")
+    # allow_unfiltered is required now: a category-only query has no endpoint,
+    # and an absent endpoint filter must be asked for, never assumed.
+    results = store.query(category="ASSERTION_ERROR", allow_unfiltered=True)
+    assert len(results) == 1
     assert all(r.category == "ASSERTION_ERROR" for r in results)
     store.close()
 

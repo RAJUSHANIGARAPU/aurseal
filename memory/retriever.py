@@ -19,6 +19,8 @@ import re
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
+from memory.normalize import ID_PLACEHOLDER
+
 if TYPE_CHECKING:
     from memory.models import MemoryRecord
 
@@ -31,8 +33,15 @@ def _tokens(text: str) -> frozenset[str]:
 
 
 def _jaccard(a: frozenset[str], b: frozenset[str]) -> float:
-    if not a and not b:
-        return 1.0
+    """Overlap of two token sets. Two empty sets share nothing, they match nothing.
+
+    This returned 1.0 for empty-vs-empty, and that one line let records with no
+    endpoint outrank records with a real one. Every ``from_pytest_report``
+    record carries ``endpoint=""``, so for a query with no endpoint a pytest
+    record scored 0.70 while a genuine record on a related endpoint scored
+    0.20 — the absence of data took the entire 0.50 endpoint weight as a
+    perfect match. Nothing compared to nothing is no evidence, so it is 0.0.
+    """
     union = a | b
     if not union:
         return 0.0
@@ -41,7 +50,15 @@ def _jaccard(a: frozenset[str], b: frozenset[str]) -> float:
 
 def _path_segments(url: str) -> frozenset[str]:
     url = url.split("?")[0].lower()
-    return frozenset(s for s in url.split("/") if s and not s.isdigit() and len(s) > 2)
+    return frozenset(
+        s
+        for s in url.split("/")
+        # {id} is the placeholder both the write and the read path substitute
+        # for an id-shaped segment. It says nothing about which resource this
+        # is, so counting it would make /api/users/{id} and /api/orders/{id}
+        # look one-third similar purely because both take an id.
+        if s and s != ID_PLACEHOLDER and not s.isdigit() and len(s) > 2
+    )
 
 
 def _recency_score(timestamp: str, half_life_days: float = 30.0) -> float:
@@ -67,12 +84,28 @@ class MemoryRetriever:
         query_endpoint: str,
     ) -> list[MemoryRecord]:
         """Return top-k records sorted by descending relevance score."""
+        return [r for _, r in self.rank_scored(records, query_error, query_endpoint)]
+
+    def rank_scored(
+        self,
+        records: list[MemoryRecord],
+        query_error: str,
+        query_endpoint: str,
+    ) -> list[tuple[float, MemoryRecord]]:
+        """Top-k as ``(score, record)`` pairs, highest first.
+
+        ``rank`` computed these scores and threw them away, so every consumer
+        downstream treated "the retriever returned three rows" as if it meant
+        "three relevant rows" — which is how three records scoring near zero
+        produced a confidence of 1.0. Callers that judge relevance need the
+        number, not just the ordering.
+        """
         if not records:
             return []
 
         scored = [(self._score(r, query_error, query_endpoint), r) for r in records]
         scored.sort(key=lambda x: x[0], reverse=True)
-        return [r for _, r in scored[: self._top_k]]
+        return scored[: self._top_k]
 
     def score(self, record: MemoryRecord, query_error: str, query_endpoint: str) -> float:
         """Public accessor for individual score — useful for testing."""
