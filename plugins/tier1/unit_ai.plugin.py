@@ -36,18 +36,10 @@ from plugins._base_plugin import (
     PluginStatus,
     is_passing,
 )
-from plugins.cost_governor import CostGovernor
+from plugins.cost_governor import CostGovernor, estimate_cost
 from plugins.tier1._paths import iter_source_files, resolve_dir
 
 _PREFERRED_MODEL = "claude-haiku-4-5-20251001"
-
-# Haiku 4.5 list price: $1.00 per MTok in, $5.00 per MTok out. Approximate —
-# character count over four is the usual rough conversion — but it has to scale
-# with what was sent and received, or the governor's budget never moves and its
-# downgrade is dead code.
-_USD_PER_INPUT_TOKEN = 1.00 / 1_000_000
-_USD_PER_OUTPUT_TOKEN = 5.00 / 1_000_000
-_CHARS_PER_TOKEN = 4
 
 _MAX_FILES = 5
 _PROMPT_SOURCE_CHARS = 2000
@@ -130,12 +122,13 @@ class UnitAIPlugin(BasePlugin):
             out_file.write_text(response, encoding="utf-8")
             generated.append(str(out_file))
 
-            in_tokens = len(prompt) // _CHARS_PER_TOKEN
-            out_tokens = len(response) // _CHARS_PER_TOKEN
-            cost = in_tokens * _USD_PER_INPUT_TOKEN + out_tokens * _USD_PER_OUTPUT_TOKEN
-            total_tokens += in_tokens + out_tokens
+            # Reported on the result, not recorded against the budget: the
+            # governor now prices and records every call routed through
+            # `cached_complete`, and recording here as well would count this
+            # spend twice.
+            tokens, cost = estimate_cost(prompt, response)
+            total_tokens += tokens
             total_cost += cost
-            governor.record(model, in_tokens + out_tokens, cost)
 
         finding = {
             "generated_files": generated,
