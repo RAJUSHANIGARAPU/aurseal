@@ -144,3 +144,45 @@ def test_flak_record_from_dict_handles_missing_fields() -> None:
     assert rec.outcome == "unknown"
     assert rec.duration_s == 0.0
     assert rec.worker == "main"
+
+
+# ------------------------------------------------------------------
+# Bounded growth
+# ------------------------------------------------------------------
+
+
+def test_prune_keeps_only_the_newest_records(tmp_path: Path) -> None:
+    # Live in the source repo when this was found: history.jsonl at 5.4 MB /
+    # 18,486 records, with no rotation anywhere and sessionfinish parsing the
+    # whole file twice per run.
+    store = HistoryStore(store_path=tmp_path / "history.jsonl", max_records=5)
+    for i in range(20):
+        store.record(_record(test_id=f"test_{i}"))
+    store.prune()
+
+    ids = [r.test_id for r in store.load_all()]
+    assert ids == [f"test_{i}" for i in range(15, 20)]
+
+
+def test_prune_is_a_no_op_below_the_cap(tmp_path: Path) -> None:
+    # Positive control: pruning must not throw away history that fits.
+    store = HistoryStore(store_path=tmp_path / "history.jsonl", max_records=100)
+    for i in range(10):
+        store.record(_record(test_id=f"test_{i}"))
+    store.prune()
+
+    assert len(store.load_all()) == 10
+
+
+def test_prune_on_a_missing_file_is_safe(tmp_path: Path) -> None:
+    HistoryStore(store_path=tmp_path / "nothing.jsonl", max_records=5).prune()
+
+
+def test_record_rotates_without_an_explicit_prune(tmp_path: Path) -> None:
+    # A run that never reaches sessionfinish (crash, -x, SIGINT) must not be
+    # able to grow the file without limit.
+    store = HistoryStore(store_path=tmp_path / "history.jsonl", max_records=4, prune_every=4)
+    for i in range(40):
+        store.record(_record(test_id=f"test_{i}"))
+
+    assert len(store.load_all()) <= 8

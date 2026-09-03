@@ -13,6 +13,9 @@ from pathlib import Path
 
 from autonomous_ui.flakiness.models import FlakinessProfile, FlakPattern, RemediationResult
 
+# How many report pairs to keep on disk. See FlakinessReporter._prune.
+_MAX_REPORT_PAIRS = 20
+
 _SEVERITY_ICON = {"high": "CRITICAL", "medium": "WARNING", "low": "LOW"}
 _PATTERN_LABEL = {
     FlakPattern.TIMING: "Timing / Wait",
@@ -125,6 +128,7 @@ class FlakinessReporter:
         profiles: list[FlakinessProfile],
         analyses: dict[str, tuple[FlakPattern, RemediationResult]],
         output_dir: Path = Path("reports/flakiness"),
+        max_pairs: int = _MAX_REPORT_PAIRS,
     ) -> tuple[Path, Path]:
         """Write both reports to disk. Returns (markdown_path, json_path)."""
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -137,4 +141,28 @@ class FlakinessReporter:
         json_path.write_text(
             json.dumps(self.generate_json(profiles, analyses), indent=2), encoding="utf-8"
         )
+        self._prune(output_dir, max_pairs)
         return md_path, json_path
+
+    @staticmethod
+    def _prune(output_dir: Path, max_pairs: int) -> None:
+        """Keep only the newest ``max_pairs`` report pairs in *output_dir*.
+
+        Nothing removed a report before this, and one pair is written per pytest
+        invocation for as long as anything is flaky. In the source repo
+        reports/flakiness/ held 664 files. They are also strictly superseded —
+        each report is a full snapshot of the current history, so the newest one
+        already says everything the older ones do.
+        """
+        if max_pairs < 1:
+            return
+        # Filenames are UTC timestamps in a sortable format, so lexical order is
+        # chronological order.
+        reports = (p for p in output_dir.glob("report-*") if p.suffix in (".md", ".json"))
+        stems = sorted({p.stem for p in reports})
+        for stem in stems[: max(0, len(stems) - max_pairs)]:
+            for suffix in (".md", ".json"):
+                try:
+                    (output_dir / f"{stem}{suffix}").unlink(missing_ok=True)
+                except OSError:
+                    pass  # non-fatal — a stale report must not fail the run

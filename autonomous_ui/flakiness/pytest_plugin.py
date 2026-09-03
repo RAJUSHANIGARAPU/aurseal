@@ -46,34 +46,86 @@ def _llm_enabled() -> bool:
     return os.getenv("ENABLE_FLAKINESS_LLM", "false").lower() in ("1", "true", "yes")
 
 
+# Outcomes worth an error message. "rerun" is pytest-rerunfailures' outcome for
+# an attempt it will retry — and on a test that then passes, that attempt is the
+# ONLY place the failure text exists. Dropping it left PatternAnalyzer with an
+# empty error corpus for precisely the flaky tests it is meant to classify.
+_OUTCOMES_WITH_ERROR = ("failed", "rerun")
+
+
 class FlakinessPlugin:
     """Records test outcomes and emits a flakiness report at session end."""
 
-    def __init__(self, store: HistoryStore, run_id: str, environment: str) -> None:
+    def __init__(
+        self,
+        store: HistoryStore,
+        run_id: str,
+        environment: str,
+        worker: str = "main",
+        record_enabled: bool = True,
+        report_enabled: bool = True,
+    ) -> None:
         self._store = store
         self._run_id = run_id
         self._environment = environment
+        self._worker = worker
+        self._record_enabled = record_enabled
+        self._report_enabled = report_enabled
 
     @classmethod
-    def from_config(cls, config) -> FlakinessPlugin:
+    def from_config(cls, config, store: HistoryStore | None = None) -> FlakinessPlugin:
         run_id = datetime.now(tz=timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         try:
             env = config.getoption("--env", default="qa")
         except (ValueError, AttributeError):
             env = "qa"
-        return cls(store=HistoryStore(), run_id=run_id, environment=env)
+
+        # `workerinput` is set by xdist on worker processes only, so its presence
+        # is what separates a worker from the controller.
+        worker_input = getattr(config, "workerinput", None)
+        is_worker = worker_input is not None
+        distributing = getattr(getattr(config, "option", None), "dist", "no") not in (None, "no")
+
+        # Under xdist the controller REPLAYS every worker's logreport as its own,
+        # so recording on both sides stores every outcome twice. Measured: 6
+        # tests with `-n 2` produced 12 records (main:6, gw0:3, gw1:3), which
+        # doubles total_runs and max_consecutive_failures and reaches MIN_RUNS in
+        # half the real runs. It also made PatternAnalyzer's contention rule dead
+        # code: every parallel record had a mirrored "main" record with the same
+        # outcome, so parallel_rate could never reach 3x sequential_rate and
+        # RESOURCE_CONTENTION was unreachable for xdist history.
+        #
+        # The workers are the ones that actually execute, so they record and the
+        # controller stays quiet. Reporting is the other way round: the
+        # controller reads the shared file once at the end, instead of every
+        # worker writing its own report pair.
+        return cls(
+            store=store or HistoryStore(),
+            run_id=run_id,
+            environment=env,
+            worker=(worker_input or {}).get("workerid")
+            or os.environ.get("PYTEST_XDIST_WORKER", "main"),
+            record_enabled=is_worker or not distributing,
+            report_enabled=not is_worker,
+        )
 
     # ------------------------------------------------------------------
     # pytest hooks
     # ------------------------------------------------------------------
 
     def pytest_runtest_logreport(self, report) -> None:
-        if report.when != "call":
+        if report.when != "call" or not self._record_enabled:
             return
 
-        outcome = "passed" if report.passed else "failed" if report.failed else "skipped"
-        error = str(report.longrepr)[:2000] if report.failed else ""
-        worker = os.environ.get("PYTEST_XDIST_WORKER", "main")
+        # Taken from report.outcome, never inferred from passed/failed. A
+        # "rerun" report is neither: report.passed and report.failed are both
+        # False, so the old ternary fell through to "skipped" and inverted the
+        # whole signal. A genuinely flaky test recorded ['skipped', 'passed'],
+        # scored failure_count 0, and was never flagged flaky — while a test
+        # failing all three attempts recorded ['skipped', 'skipped', 'failed'],
+        # scored rate 0.33 and WAS.
+        outcome = getattr(report, "outcome", "") or "skipped"
+        error = str(report.longrepr)[:2000] if outcome in _OUTCOMES_WITH_ERROR else ""
 
         self._store.record(
             FlakRecord(
@@ -83,21 +135,28 @@ class FlakinessPlugin:
                 duration_s=getattr(report, "duration", 0.0),
                 error=error,
                 timestamp=datetime.now(tz=timezone.utc).isoformat(),
-                worker=worker,
+                worker=self._worker,
                 environment=self._environment,
             )
         )
 
     def pytest_sessionfinish(self, session, exitstatus) -> None:  # noqa: ARG002
-        """Generate a flakiness report if there is enough history."""
+        """Bound the history file, then report if there is enough of it."""
+        if not self._report_enabled:
+            return
+
+        # Before the early return below, not after: a checkout where nothing is
+        # flaky enough to profile is exactly the one that would never rotate.
+        self._store.prune()
+
+        groups = self._store.grouped_by_test()
         detector = FlakinessDetector(self._store)
-        profiles = detector.get_profiles()
+        profiles = detector.get_profiles(groups=groups)
         if not profiles:
             return
 
         analyzer = PatternAnalyzer()
         remediator = FlakinessRemediator()
-        groups = self._store.grouped_by_test()
         analyses = {}
         for profile in profiles:
             if not profile.is_flaky:

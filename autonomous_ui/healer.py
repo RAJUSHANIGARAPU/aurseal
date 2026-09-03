@@ -2,8 +2,11 @@
 
 Healing strategies, in order of safety:
   locator_patch   — rewrites the failing entry in wiki_locators.json with an
-                    LLM-suggested alternative selector. Safe: only touches JSON,
-                    never touches test code.
+                    LLM-suggested alternative selector, after checking the
+                    suggestion is a shape core/base_page.py can resolve. Touches
+                    only JSON, never test code — but that JSON is loaded by every
+                    page object, so an unvalidated write breaks far more than the
+                    test that failed (see _locator_shape_error).
   wait_retry      — records the test in healing_overrides.json so the orchestrator
                     adds --reruns on the next pytest run. Safe: no code change.
   assertion_patch — delegates to AutoFixer to rewrite the test file. Guarded:
@@ -15,12 +18,21 @@ When NOT to auto-heal:
   - confidence == "low" (UNKNOWN failure type)
   - same locator key has already been patched this session (avoid loops)
   - assertion fix touches expected values that look like business rules
+  - the suggested locator is not a shape base_page.resolve() understands
+  - the suggested locator is the value already in the registry (a no-op is not
+    a fix, and reporting it as one made the heal log unreadable)
+
+A heal that did nothing must never report applied=True. Everything above
+returns strategy="none" with the reason, which is deliberately NOT the same as
+"wait_retry": that strategy schedules `--reruns 2` on the next run, and a rerun
+feeds the flakiness history.
 """
 
 from __future__ import annotations
 
 import json
 import re
+from dataclasses import dataclass
 from pathlib import Path
 
 from api.llm.base import BaseLLMClient
@@ -33,6 +45,61 @@ _HEALING_OVERRIDES = Path("reports/healing_overrides.json")
 
 # JSON block extractor — handles ```json fences from LLM responses
 _JSON_FENCE_RE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL)
+
+# The reply is one small JSON object, but it echoes a locator entry plus a
+# sentence of reasoning. At 512 a long reasoning string could cut the object in
+# half, and a truncated reply used to come back as strategy="wait_retry",
+# applied=True — a silent non-heal reported as a heal. Named here so the failure
+# message can quote the actual limit.
+_PATCH_MAX_TOKENS = 1024
+
+# The locator shapes core/base_page.py:resolve() can turn into a Playwright
+# locator, and what each one has to carry. Anything else raises there — for the
+# whole page object, on every test using the key, not just the healed one.
+_LOCATOR_VALUE_TYPES = ("css", "testid", "placeholder", "text")
+_LOCATOR_TYPES = (*_LOCATOR_VALUE_TYPES, "role")
+
+
+@dataclass(frozen=True)
+class _PatchProposal:
+    """What came back from the model, with "nothing" and "unusable" kept apart."""
+
+    patch: dict | None = None
+    # Non-empty when a response ARRIVED and could not be used. Distinct from
+    # patch=None with no reason, which means the model was never reached.
+    unusable: str = ""
+
+
+def _locator_shape_error(locator: object) -> str:
+    """Return why *locator* is not a registry entry, or "" when it is fine.
+
+    The heal writes straight into wiki_locators.json, which every page object
+    loads at construction, so an unvalidated write is not scoped to the test
+    that failed. Probed: the model answered
+    ``"new_locator": "[data-testid=search-field]"`` — a bare string where a
+    mapping belongs — it was written verbatim, and core/base_page.py:16 then
+    raised ``TypeError: string indices must be integers`` for every test using
+    that key. A locator is cheap to check and expensive to get wrong.
+    """
+    if not isinstance(locator, dict):
+        return f"expected a locator mapping, got {type(locator).__name__}"
+
+    kind = locator.get("type")
+    if not isinstance(kind, str) or not kind:
+        return "locator has no 'type'"
+    if kind not in _LOCATOR_TYPES:
+        return f"unsupported locator type '{kind}' — base_page.resolve() would raise"
+
+    if kind == "role":
+        role = locator.get("role")
+        if not isinstance(role, str) or not role.strip():
+            return "role locator has no 'role'"
+        return ""
+
+    value = locator.get("value")
+    if not isinstance(value, str) or not value.strip():
+        return f"{kind} locator has no usable 'value'"
+    return ""
 
 
 class UIHealer:
@@ -78,16 +145,45 @@ class UIHealer:
         if analysis.failure_type == FailureType.TIMEOUT and not analysis.selectors_mentioned:
             return self._record_retry(analysis)
 
-        patch = self._ask_llm_for_locator_patch(analysis, registry, dom_snapshot)
-        if not patch:
-            # LLM could not suggest a fix — fall back to retry-with-reruns
+        proposal = self._ask_llm_for_locator_patch(analysis, registry, dom_snapshot)
+        if proposal.unusable:
+            # A response arrived and could not be used. That is NOT "no heal
+            # needed": the old code funnelled it into _record_retry, which
+            # reports applied=True and "recorded for retry with --reruns 2",
+            # so a truncated or malformed reply looked like a successful heal
+            # and then poisoned the flakiness history through the reruns.
+            return self._no_heal(analysis, f"locator patch rejected — {proposal.unusable}")
+        if proposal.patch is None:
+            # The model was never reached / said nothing at all. Genuinely no
+            # answer, so retry-with-reruns is the honest fallback.
             return self._record_retry(analysis)
 
+        patch = proposal.patch
         key = patch.get("locator_key", "")
         new_locator = patch.get("new_locator")
 
-        if not key or not new_locator or key not in registry:
-            return self._record_retry(analysis)
+        if not key:
+            return self._no_heal(analysis, "locator patch rejected — no 'locator_key' in response")
+        if key not in registry:
+            return self._no_heal(
+                analysis, f"locator patch rejected — key '{key}' is not in the registry"
+            )
+        if new_locator is None:
+            return self._no_heal(
+                analysis, f"locator patch rejected — no 'new_locator' for key '{key}'"
+            )
+
+        shape_error = _locator_shape_error(new_locator)
+        if shape_error:
+            return self._no_heal(analysis, f"locator patch rejected — '{key}': {shape_error}")
+
+        if new_locator == registry[key]:
+            # The model handed back the value already in the registry. Writing
+            # it changes nothing, and reporting applied=True with
+            # "patched 'k': X → X" counted a no-op as a fix.
+            return self._no_heal(
+                analysis, f"locator '{key}' unchanged — the suggestion matches the current entry"
+            )
 
         if key in self._patched_locator_keys:
             return HealingResult(
@@ -115,9 +211,19 @@ class UIHealer:
             patched_files=[_LOCATOR_REGISTRY],
         )
 
+    @staticmethod
+    def _no_heal(analysis: FailureAnalysis, details: str) -> HealingResult:
+        """Nothing was changed and nothing was scheduled — say exactly that."""
+        return HealingResult(
+            test_name=analysis.test_name,
+            strategy="none",
+            applied=False,
+            details=details,
+        )
+
     def _ask_llm_for_locator_patch(
         self, analysis: FailureAnalysis, registry: dict, dom_snapshot: str
-    ) -> dict | None:
+    ) -> _PatchProposal:
         selectors_str = ", ".join(analysis.selectors_mentioned) or "(see error below)"
         dom_section = f"\n\nDOM (first 4000 chars):\n{dom_snapshot[:4000]}" if dom_snapshot else ""
         prompt = f"""You are a Playwright Python automation expert performing locator self-healing.
@@ -147,10 +253,34 @@ Return ONLY valid JSON in exactly this structure, no other text:
   "reasoning": "<one sentence>"
 }}"""
 
-        raw = self._llm.complete(prompt, max_tokens=512)
-        if not raw:
-            return None
-        return self._parse_json(raw)
+        raw = self._llm.complete(prompt, max_tokens=_PATCH_MAX_TOKENS)
+        if not raw or not raw.strip():
+            return _PatchProposal()  # no answer at all
+
+        parsed = self._parse_json(raw)
+        if parsed is None:
+            return _PatchProposal(unusable=self._describe_parse_failure(raw))
+        return _PatchProposal(patch=parsed)
+
+    @staticmethod
+    def _describe_parse_failure(raw: str) -> str:
+        """Name what came back, so a truncation is not filed as an outage.
+
+        Truncation at max_tokens produced a response that opens a JSON object
+        and never closes it. There was nothing in the old path that could tell
+        that apart from the model declining, and both ended as a "successful"
+        wait_retry.
+        """
+        candidate = raw.strip()
+        fence = _JSON_FENCE_RE.search(candidate)
+        if fence:
+            candidate = fence.group(1).strip()
+        if candidate.startswith("{") and not candidate.endswith("}"):
+            return (
+                f"response looks truncated at max_tokens={_PATCH_MAX_TOKENS} "
+                f"({len(raw)} chars, unterminated JSON object)"
+            )
+        return f"response is not the JSON object we asked for ({len(raw)} chars)"
 
     def _record_retry(self, analysis: FailureAnalysis) -> HealingResult:
         _HEALING_OVERRIDES.parent.mkdir(parents=True, exist_ok=True)

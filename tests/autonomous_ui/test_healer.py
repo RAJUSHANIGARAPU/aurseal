@@ -256,3 +256,194 @@ def test_parse_json_invalid_returns_none(healer: UIHealer) -> None:
 
 def test_parse_json_list_returns_none(healer: UIHealer) -> None:
     assert healer._parse_json("[1, 2, 3]") is None
+
+
+# ------------------------------------------------------------------
+# A locator write must be validated in shape before it lands
+# ------------------------------------------------------------------
+
+
+def _registry_file(tmp_path: Path) -> Path:
+    path = tmp_path / "wiki_locators.json"
+    path.write_text(json.dumps({"search_input": {"type": "testid", "value": "search-field"}}))
+    return path
+
+
+def _healer_returning(payload) -> UIHealer:
+    llm = MagicMock()
+    llm.complete.return_value = payload if isinstance(payload, str) else json.dumps(payload)
+    return UIHealer(llm=llm)
+
+
+def test_string_new_locator_is_refused(tmp_path: Path) -> None:
+    # Probed against the unfixed healer: the model returned
+    # "new_locator": "[data-testid=search-field]" as a STRING where a mapping
+    # is expected, it was written straight to wiki_locators.json, and
+    # core/base_page.py:16 then raised "string indices must be integers" for
+    # every test using that key. One heal, whole page object down.
+    registry_file = _registry_file(tmp_path)
+    healer = _healer_returning(
+        {
+            "locator_key": "search_input",
+            "new_locator": "[data-testid=search-field]",
+            "reasoning": "flat selector",
+        }
+    )
+    with patch("autonomous_ui.healer._LOCATOR_REGISTRY", registry_file):
+        result = healer.heal(_analysis(failure_type=FailureType.LOCATOR))
+
+    assert not result.applied
+    assert json.loads(registry_file.read_text())["search_input"]["type"] == "testid"
+
+
+@pytest.mark.parametrize(
+    "new_locator",
+    [
+        {"value": "search-field"},  # no type
+        {"type": "quantum", "value": "x"},  # type base_page cannot resolve
+        {"type": "css"},  # css with no value
+        {"type": "css", "value": ""},  # css with an empty value
+        {"type": "role"},  # role with no role name
+        ["testid", "search-field"],  # a list, not a mapping
+    ],
+)
+def test_malformed_new_locator_is_refused(tmp_path: Path, new_locator) -> None:
+    registry_file = _registry_file(tmp_path)
+    healer = _healer_returning(
+        {"locator_key": "search_input", "new_locator": new_locator, "reasoning": "x"}
+    )
+    with patch("autonomous_ui.healer._LOCATOR_REGISTRY", registry_file):
+        result = healer.heal(_analysis(failure_type=FailureType.LOCATOR))
+
+    assert not result.applied
+    assert json.loads(registry_file.read_text())["search_input"] == {
+        "type": "testid",
+        "value": "search-field",
+    }
+
+
+@pytest.mark.parametrize(
+    "new_locator",
+    [
+        {"type": "css", "value": "input[name='q']"},
+        {"type": "role", "role": "button", "name": "Search"},
+        {"type": "testid", "value": "search-box"},
+        {"type": "text", "value": "Search", "exact": False},
+        {"type": "placeholder", "value": "Search here"},
+    ],
+)
+def test_well_shaped_new_locator_is_applied(tmp_path: Path, new_locator) -> None:
+    # Positive control: validation that refuses everything is a broken healer,
+    # not a safe one. Every shape core/base_page.resolve() understands must land.
+    registry_file = _registry_file(tmp_path)
+    healer = _healer_returning(
+        {"locator_key": "search_input", "new_locator": new_locator, "reasoning": "x"}
+    )
+    with patch("autonomous_ui.healer._LOCATOR_REGISTRY", registry_file):
+        result = healer.heal(_analysis(failure_type=FailureType.LOCATOR))
+
+    assert result.applied
+    assert json.loads(registry_file.read_text())["search_input"] == new_locator
+
+
+def test_unchanged_locator_is_not_reported_as_a_fix(tmp_path: Path) -> None:
+    # The unfixed healer reported applied=True and "patched 'k': X → X" when the
+    # model echoed the value already in the registry — a no-op counted as a fix.
+    registry_file = _registry_file(tmp_path)
+    healer = _healer_returning(
+        {
+            "locator_key": "search_input",
+            "new_locator": {"type": "testid", "value": "search-field"},
+            "reasoning": "looks fine to me",
+        }
+    )
+    with patch("autonomous_ui.healer._LOCATOR_REGISTRY", registry_file):
+        result = healer.heal(_analysis(failure_type=FailureType.LOCATOR))
+
+    assert not result.applied
+    assert "→" not in result.details
+
+
+def test_unknown_locator_key_is_not_reported_as_a_retry(tmp_path: Path) -> None:
+    registry_file = _registry_file(tmp_path)
+    healer = _healer_returning(
+        {
+            "locator_key": "not_in_registry",
+            "new_locator": {"type": "css", "value": "input"},
+            "reasoning": "x",
+        }
+    )
+    with (
+        patch("autonomous_ui.healer._LOCATOR_REGISTRY", registry_file),
+        patch("autonomous_ui.healer._HEALING_OVERRIDES", tmp_path / "overrides.json"),
+    ):
+        result = healer.heal(_analysis(failure_type=FailureType.LOCATOR))
+
+    assert not result.applied
+    assert result.strategy != "wait_retry"
+
+
+# ------------------------------------------------------------------
+# A parse failure is not "no heal needed"
+# ------------------------------------------------------------------
+
+
+def test_truncated_json_is_not_reported_as_an_applied_heal(tmp_path: Path) -> None:
+    # max_tokens cut the response mid-object. The unfixed healer turned that
+    # into strategy="wait_retry", applied=True, "recorded for retry with
+    # --reruns 2" — which then poisons the flakiness history via the reruns.
+    registry_file = _registry_file(tmp_path)
+    healer = _healer_returning('{"locator_key": "search_input", "new_locator": {"type": "cs')
+
+    with (
+        patch("autonomous_ui.healer._LOCATOR_REGISTRY", registry_file),
+        patch("autonomous_ui.healer._HEALING_OVERRIDES", tmp_path / "overrides.json"),
+    ):
+        result = healer.heal(_analysis(failure_type=FailureType.LOCATOR))
+
+    assert not result.applied
+    assert result.strategy != "wait_retry"
+
+
+def test_truncated_json_says_it_was_truncated(tmp_path: Path) -> None:
+    registry_file = _registry_file(tmp_path)
+    healer = _healer_returning('{"locator_key": "search_input", "new_locator": {"type": "cs')
+
+    with (
+        patch("autonomous_ui.healer._LOCATOR_REGISTRY", registry_file),
+        patch("autonomous_ui.healer._HEALING_OVERRIDES", tmp_path / "overrides.json"),
+    ):
+        result = healer.heal(_analysis(failure_type=FailureType.LOCATOR))
+
+    assert "truncat" in result.details.lower()
+
+
+def test_prose_instead_of_json_is_not_reported_as_an_applied_heal(tmp_path: Path) -> None:
+    registry_file = _registry_file(tmp_path)
+    healer = _healer_returning("I could not find that element in the DOM you gave me.")
+
+    with (
+        patch("autonomous_ui.healer._LOCATOR_REGISTRY", registry_file),
+        patch("autonomous_ui.healer._HEALING_OVERRIDES", tmp_path / "overrides.json"),
+    ):
+        result = healer.heal(_analysis(failure_type=FailureType.LOCATOR))
+
+    assert not result.applied
+    assert not (tmp_path / "overrides.json").exists()
+
+
+def test_empty_response_still_records_a_retry(tmp_path: Path) -> None:
+    # Positive control, and the line between the two cases: "the model was never
+    # reached" is genuinely a no-answer and retry is the right fallback. Only a
+    # response that arrived and could not be used is the new failure.
+    registry_file = _registry_file(tmp_path)
+    healer = _healer_returning("")
+
+    with (
+        patch("autonomous_ui.healer._LOCATOR_REGISTRY", registry_file),
+        patch("autonomous_ui.healer._HEALING_OVERRIDES", tmp_path / "overrides.json"),
+    ):
+        result = healer.heal(_analysis(failure_type=FailureType.LOCATOR))
+
+    assert result.applied
+    assert result.strategy == "wait_retry"

@@ -27,9 +27,16 @@ class FlakRecord:
 
     test_id: str  # pytest node id: "ui/tests/test_search.py::test_search_train"
     run_id: str  # timestamp string: "20260425T143022Z"
-    outcome: str  # "passed" | "failed" | "skipped"
+    # "passed" | "failed" | "skipped" | "rerun".
+    #
+    # "rerun" is pytest-rerunfailures' own outcome for an attempt that failed
+    # and will be retried, and it is a first-class value here rather than a
+    # variant of "failed": the collapse in detector.py needs to tell a retried
+    # attempt apart from a final verdict, and one failed attempt plus one
+    # passing retry is one flaky *test*, not two runs.
+    outcome: str
     duration_s: float
-    error: str  # empty string when passed or skipped
+    error: str  # empty when passed or skipped; the attempt's failure text on "rerun"
     timestamp: str  # ISO-8601
     worker: str  # "main" for sequential, "gw0" / "gw1" for xdist
     environment: str  # "qa" | "staging" | "prod"
@@ -65,15 +72,22 @@ class FlakinessProfile:
     """Computed flakiness statistics for one test, derived from its run history."""
 
     test_id: str
-    total_runs: int
-    failure_count: int
-    flakiness_rate: float  # failure_count / total_runs
+    total_runs: int  # executions with a verdict — skips and unresolved retries excluded
+    failure_count: int  # executions whose FINAL attempt failed
+    # (failure_count + flaky_pass_count) / total_runs — "how often did this test
+    # not pass cleanly". Not failure_count/total_runs any more: a run that failed
+    # and then passed on retry is a misbehaviour with a failure_count of zero,
+    # and reporting it at rate 0.0 filed the worst offenders as severity "low".
+    flakiness_rate: float
     confidence: float  # min(total_runs / MIN_RUNS, 1.0)
     is_flaky: bool
     most_common_error: str
     avg_duration_s: float
-    last_failure_ts: str  # ISO-8601 of most recent failure, empty if none
-    max_consecutive_failures: int  # longest failure streak
+    last_failure_ts: str  # ISO-8601 of most recent failed attempt, empty if none
+    max_consecutive_failures: int  # longest streak of executions that ended failed
+    # Executions that failed at least once and then passed on a retry. Direct,
+    # single-observation proof of flakiness — no rate window needed.
+    flaky_pass_count: int = 0
 
     @property
     def severity(self) -> str:

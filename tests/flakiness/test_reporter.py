@@ -134,3 +134,44 @@ def test_write_json_is_valid(reporter, tmp_path, flaky_profiles, analyses) -> No
     parsed = json.loads(json_path.read_text())
     assert "summary" in parsed
     assert "flaky_tests" in parsed
+
+
+# ------------------------------------------------------------------
+# Bounded report directory
+# ------------------------------------------------------------------
+
+
+def test_write_prunes_old_report_pairs(reporter, tmp_path, flaky_profiles, analyses) -> None:
+    # Live in the source repo when this was found: reports/flakiness/ held 664
+    # files, roughly one .md/.json pair per invocation once anything is flaky.
+    for i in range(10):
+        (tmp_path / f"report-2026010{i}T000000Z.md").write_text("old")
+        (tmp_path / f"report-2026010{i}T000000Z.json").write_text("{}")
+
+    md_path, _ = reporter.write(flaky_profiles, analyses, output_dir=tmp_path, max_pairs=3)
+
+    remaining = sorted(p.name for p in tmp_path.glob("report-*"))
+    assert len(remaining) == 6  # 3 pairs
+    assert md_path.name in remaining
+
+
+def test_write_keeps_the_newest_reports(reporter, tmp_path, flaky_profiles, analyses) -> None:
+    for i in range(5):
+        (tmp_path / f"report-2026010{i}T000000Z.md").write_text("old")
+        (tmp_path / f"report-2026010{i}T000000Z.json").write_text("{}")
+
+    reporter.write(flaky_profiles, analyses, output_dir=tmp_path, max_pairs=2)
+
+    stems = sorted({p.stem for p in tmp_path.glob("report-*")})
+    assert "report-20260100T000000Z" not in stems  # oldest went first
+
+
+def test_write_below_the_cap_deletes_nothing(reporter, tmp_path, flaky_profiles, analyses) -> None:
+    # Positive control: rotation must not eat a directory that is within budget.
+    (tmp_path / "report-20260101T000000Z.md").write_text("old")
+    (tmp_path / "report-20260101T000000Z.json").write_text("{}")
+
+    reporter.write(flaky_profiles, analyses, output_dir=tmp_path, max_pairs=5)
+
+    assert (tmp_path / "report-20260101T000000Z.md").exists()
+    assert len(list(tmp_path.glob("report-*"))) == 4
