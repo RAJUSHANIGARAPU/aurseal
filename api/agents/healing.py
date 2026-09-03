@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import logging
 import re
 from dataclasses import dataclass
@@ -71,6 +72,21 @@ class SelfHealingAgent:
             logger.info("No healing changes for %s", test_file_path)
             return HealingResult(fixed=False, changes_made=[], new_file_path=None)
 
+        # The file on disk works, or at least runs; the replacement is not
+        # allowed to be worse than that. A file that does not parse cannot even
+        # be collected, so the next run reports a collection error instead of
+        # the failure we were healing, and the original is gone.
+        try:
+            ast.parse(code)
+        except SyntaxError as exc:
+            logger.warning(
+                "Discarding healed content for %s: does not parse (%s at line %s)",
+                test_file_path,
+                exc.msg,
+                exc.lineno,
+            )
+            return HealingResult(fixed=False, changes_made=[], new_file_path=None)
+
         test_file_path.write_text(code, encoding="utf-8")
         logger.info("Healed %s with %d change(s)", test_file_path, len(changes))
         return HealingResult(fixed=True, changes_made=changes, new_file_path=test_file_path)
@@ -105,11 +121,13 @@ class SelfHealingAgent:
                 code = new_code
 
         if category == FailureCategory.DATA_ERROR:
-            # Add a comment hint for regenerating data — actual regen happens at orchestrator level
-            marker = "# DATA_ERROR: regenerate test data on next run\n"
-            if marker not in code:
-                code = marker + code
-                changes.append("Marked file for data regeneration (DATA_ERROR rule)")
+            # No rule fix here: regeneration happens at orchestrator level. This
+            # used to prepend a comment, which changed the file without changing
+            # anything that runs — and the caller counted it as a heal, spending
+            # a retry and logging a fix for a test that could not have improved.
+            logger.info(
+                "DATA_ERROR in %s needs regenerated data — no code fix applies", analysis.test_name
+            )
 
         return code, changes
 
@@ -141,15 +159,33 @@ class SelfHealingAgent:
             f"- Do not change import paths\n"
         )
 
-        fixed = self._llm.complete(prompt, max_tokens=4096) if self._llm else ""
-        if not fixed or fixed.startswith("Claude API error"):
+        # complete_result() says why nothing came back. The old prefix check on
+        # "Claude API error" could only recognise one phrasing of one client's
+        # failure, and anything else was pasted over a working test file.
+        completion = self._llm.complete_result(prompt, max_tokens=4096)
+        if not completion.ok or not completion.text.strip():
+            logger.info("No LLM fix for %s: %s", file_path.name, completion.failure)
             return code, []
 
         # Strip markdown fences if model included them
-        fixed = re.sub(r"^```python\n?", "", fixed.strip())
+        fixed = re.sub(r"^```python\n?", "", completion.text.strip())
         fixed = re.sub(r"\n?```$", "", fixed.strip())
 
         if fixed == code:
+            return code, []
+
+        # A completion that ran into max_tokens is a real file cut off mid-line.
+        # It reads like source and is not, so check before offering it as a fix.
+        try:
+            ast.parse(fixed)
+        except SyntaxError as exc:
+            logger.warning(
+                "Rejected LLM fix for %s: does not parse (%s at line %s) — "
+                "likely truncated at the token limit",
+                file_path.name,
+                exc.msg,
+                exc.lineno,
+            )
             return code, []
 
         return fixed, ["Applied LLM-based fix"]

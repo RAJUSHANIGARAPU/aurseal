@@ -37,6 +37,10 @@ class FailureAnalysis:
     llm_diagnosis: dict = field(default_factory=dict)
 
 
+# Test identifiers, stripped before categorisation: a nodeid, a test file path,
+# and any test_* name wherever it appears. See AnalysisAgent._evidence.
+_NODEID_TOKEN = re.compile(r"\S*\.py(::\S+)?|\btest_\w+")
+
 # Pattern-based categorisation rules (order matters — first match wins)
 _PATTERNS: list[tuple[re.Pattern, FailureCategory, str]] = [
     (
@@ -55,12 +59,19 @@ _PATTERNS: list[tuple[re.Pattern, FailureCategory, str]] = [
         "Assertion failed in test",
     ),
     (
-        re.compile(r"(4\d\d|Bad Request|Unauthorized|Forbidden|Not Found|Unprocessable)", re.I),
+        re.compile(
+            r"((?<![\w.])4\d\d(?![\w.])|Bad Request|Unauthorized"
+            r"|Forbidden|Not Found|Unprocessable)",
+            re.I,
+        ),
         FailureCategory.API_ERROR,
         "API returned a 4xx client error",
     ),
     (
-        re.compile(r"(5\d\d|Internal Server Error|Bad Gateway|Service Unavailable)", re.I),
+        re.compile(
+            r"((?<![\w.])5\d\d(?![\w.])|Internal Server Error|Bad Gateway|Service Unavailable)",
+            re.I,
+        ),
         FailureCategory.API_ERROR,
         "API returned a 5xx server error",
     ),
@@ -117,7 +128,7 @@ class AnalysisAgent:
         test_name = detail.get("test_name", "unknown")
         message = str(detail.get("message", ""))
 
-        category = self._categorize(message)
+        category = self._categorize(self._evidence(message, test_name))
         suggested_fix = _SUGGESTED_FIXES[category]
 
         llm_diagnosis: dict = {}
@@ -132,6 +143,21 @@ class AnalysisAgent:
             raw_message=message,
             llm_diagnosis=llm_diagnosis,
         )
+
+    @staticmethod
+    def _evidence(message: str, test_name: str) -> str:
+        """The part of the message categorisation is allowed to read.
+
+        A test's own name is not evidence about why it failed. When pytest gives
+        no structured detail the message IS the ``FAILED
+        tests/api/test_users.py::test_get_user_404`` line, so a test named after
+        its scenario matched the 4xx rule and every failure in it — connection
+        refused, NameError, anything — was reported as an API error.
+        """
+        text = message
+        if test_name:
+            text = text.replace(test_name, " ")
+        return _NODEID_TOKEN.sub(" ", text)
 
     @staticmethod
     def _categorize(message: str) -> FailureCategory:
@@ -161,10 +187,15 @@ class AnalysisAgent:
             f"Failure message:\n{message[:1000]}\n\n"
             f"Return only the JSON object, no markdown fences."
         )
-        raw = self._llm.complete(prompt, max_tokens=512) if self._llm else ""
-        if not raw or raw.startswith("Claude API error"):
+        if not self._llm:
+            return {}
+        # complete_result() distinguishes "the model said nothing" from "the
+        # model was never reached"; a prefix check on an error string cannot.
+        completion = self._llm.complete_result(prompt, max_tokens=512)
+        if not completion.ok or not completion.text.strip():
+            logger.debug("No LLM diagnosis for %s: %s", test_name, completion.failure)
             return {}
         try:
-            return json.loads(raw)
+            return json.loads(completion.text)
         except json.JSONDecodeError:
-            return {"raw_response": raw}
+            return {"raw_response": completion.text}
