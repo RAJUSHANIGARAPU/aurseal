@@ -1,4 +1,29 @@
-"""Orchestrator: coordinate generate → execute → analyze → heal → rerun loop."""
+"""Orchestrator: coordinate generate → execute → analyze → heal → rerun loop.
+
+Three of the loop's verdicts were wrong, and two of them in opposite
+directions — which is why the fixes below are deliberately separate.
+
+* **A run that never happened was a success.** The success gate was
+  ``result.failed == 0 and result.errors == 0``, and an ExecutionResult that
+  could not produce a verdict satisfies it with zeros. A pytest crash that left
+  the previous run's report on disk reported ``success=True,
+  final_pass_count=7`` off numbers no test in this run produced. The gate now
+  asks ``result.ran`` first, and a run with no verdict stops the loop rather
+  than being healed — healing cannot fix a usage error, and retrying it four
+  times just spends four timeouts.
+* **An all-green run was a failure.** With ``stop_on_success=False`` — a
+  documented option — a suite where everything passed fell out of the loop into
+  the exhausted branch, which hardcoded ``success=False``. Measured: 5 passed,
+  0 failed, ``OrchestrationResult(success=False)``. The final verdict is now
+  computed from the last run on every path.
+* **A passing file was healed with another file's failures.** ``[a for a in
+  analyses if gen_file.stem in a.test_name] or analyses`` — when a file had no
+  failures the comprehension was empty and the ``or`` handed it *all* of them,
+  so a green file was rewritten from unrelated diagnoses. The substring also
+  cross-fired (``test_users`` matches ``test_users_admin.py``), and
+  AnalysisAgent's fabricated ``unknown_test_N`` names match nothing at all, so
+  they always took the fallback.
+"""
 
 from __future__ import annotations
 
@@ -25,7 +50,13 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class OrchestrationResult:
-    """Final result of an orchestration run."""
+    """Final result of an orchestration run.
+
+    Args:
+        error: why the run produced no verdict at all, as distinct from tests
+            having failed. Empty when the suite actually ran; ``final_pass_count``
+            and ``final_fail_count`` mean nothing when it is set.
+    """
 
     success: bool
     total_runs: int
@@ -35,6 +66,7 @@ class OrchestrationResult:
     report_path: Path | None
     session_id: str = ""
     failure_analyses: list = field(default_factory=list)
+    error: str = ""
 
 
 class Orchestrator:
@@ -125,6 +157,19 @@ class Orchestrator:
             self._agent_logger.log("execution", "start", {"attempt": label})
             result = exec_agent.run(generated_files)
             last_result = result
+
+            if not result.ran:
+                # No verdict: a crash, a usage error, nothing collected, a
+                # timeout. Healing has nothing to work from and a rerun would
+                # break the same way, so stop here rather than spending the
+                # retry budget and then reporting on numbers nobody produced.
+                self._agent_logger.log(
+                    "execution",
+                    "no_verdict",
+                    {"attempt": label, "exit_code": result.exit_code, "reason": result.error},
+                )
+                return self._failure_result(result.error, total_runs=total_runs)
+
             self._agent_logger.log(
                 "execution",
                 "complete",
@@ -145,7 +190,7 @@ class Orchestrator:
                         final_pass_count=result.passed,
                         final_fail_count=0,
                         healing_attempts=healing_attempts,
-                        report_path=self._report_path(),
+                        report_path=self._report_path(exec_agent),
                         session_id=self._session_id,
                         failure_analyses=[],
                     )
@@ -170,10 +215,15 @@ class Orchestrator:
                 )
                 self._agent_logger.log("memory", "enriched", {"insights_count": len(insights)})
 
-            # Heal — one healing pass per generated file
+            # Heal — one healing pass per generated file, using only that
+            # file's own failures. A file nothing failed in is left alone.
             self._agent_logger.log("healing", "start", {"file_count": len(generated_files)})
+            attributed = 0
             for gen_file in generated_files:
-                file_analyses = [a for a in analyses if gen_file.stem in a.test_name] or analyses
+                file_analyses = self._analyses_for(analyses, gen_file)
+                if not file_analyses:
+                    continue
+                attributed += len(file_analyses)
                 heal_result = healing_agent.heal(file_analyses, gen_file)
                 if heal_result.fixed:
                     healing_attempts += 1
@@ -182,30 +232,66 @@ class Orchestrator:
                         "fix_applied",
                         {"file": gen_file.name, "changes": heal_result.changes_made},
                     )
+            if analyses and not attributed:
+                # Every diagnosis named a file that is not in this run — the
+                # fabricated unknown_test_N names do exactly this. Nothing was
+                # healed, so the next run will be identical; say so out loud
+                # rather than letting it look like a healing pass happened.
+                self._agent_logger.log(
+                    "healing",
+                    "unattributed",
+                    {"analysis_count": len(analyses)},
+                )
             self._agent_logger.log("healing", "complete", {"healing_attempts": healing_attempts})
 
-        # Exhausted retries
+        # Loop finished without an early return: either the retries are spent,
+        # or the last run was green and stop_on_success is off. The verdict
+        # comes from the last run either way — hardcoding False here is what
+        # reported an all-green suite as a failure.
         fail_count = last_result.failed + last_result.errors if last_result else 0
         pass_count = last_result.passed if last_result else 0
+        success = last_result is not None and last_result.ran and fail_count == 0
         self._agent_logger.log(
             "orchestrator",
-            "exhausted",
+            "success" if success else "exhausted",
             {"total_runs": total_runs, "final_failures": fail_count},
         )
         return OrchestrationResult(
-            success=False,
+            success=success,
             total_runs=total_runs,
             final_pass_count=pass_count,
             final_fail_count=fail_count,
             healing_attempts=healing_attempts,
-            report_path=self._report_path(),
+            report_path=self._report_path(exec_agent),
             session_id=self._session_id,
-            failure_analyses=last_analyses,
+            failure_analyses=[] if success else last_analyses,
         )
 
-    def _report_path(self) -> Path | None:
-        p = Path("reports/pytest_report.json")
-        return p if p.exists() else None
+    @staticmethod
+    def _analyses_for(analyses: list, gen_file: Path) -> list:
+        """The analyses whose pytest nodeid names this exact file.
+
+        A nodeid is ``path/to/test_users.py::test_get``, so the file is the
+        segment before the first ``::`` and comparing its name is a real path
+        match. Anything without a ``::`` — AnalysisAgent's ``unknown_test_N``
+        placeholders, or a bare function name — belongs to no file and is
+        deliberately handed to none, rather than to all of them.
+        """
+        matches = []
+        for analysis in analyses:
+            nodeid = str(getattr(analysis, "test_name", ""))
+            if "::" not in nodeid:
+                continue
+            if Path(nodeid.split("::", 1)[0]).name == gen_file.name:
+                matches.append(analysis)
+        return matches
+
+    @staticmethod
+    def _report_path(exec_agent: ExecutionAgent) -> Path | None:
+        # The agent's own report file, not a hardcoded path — and only when
+        # this run wrote it, since the agent clears it before every run.
+        path = exec_agent.report_file
+        return path if path.exists() else None
 
     @staticmethod
     def _summarize(analyses: list) -> dict:
@@ -232,14 +318,17 @@ class Orchestrator:
             logger.warning("Memory layer failed to initialise — running without memory")
             return None
 
-    def _failure_result(self, reason: str) -> OrchestrationResult:
+    def _failure_result(self, reason: str, total_runs: int = 0) -> OrchestrationResult:
+        # Counts stay at zero on purpose: this run measured nothing, and any
+        # number here would be read as a result it did not produce.
         logger.error("Orchestration failed: %s", reason)
         return OrchestrationResult(
             success=False,
-            total_runs=0,
+            total_runs=total_runs,
             final_pass_count=0,
             final_fail_count=0,
             healing_attempts=0,
             report_path=None,
             session_id=self._session_id,
+            error=reason,
         )
