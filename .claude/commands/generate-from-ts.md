@@ -1,3 +1,8 @@
+---
+description: "Use to convert a Playwright codegen TypeScript recording (.spec.ts) into a Python page object, pytest file, locators JSON and testdata, then run it until it passes 3 times and commit."
+disable-model-invocation: true
+---
+
 # generate-from-ts
 
 Read a Playwright TypeScript recording (.spec.ts from `playwright codegen`) and produce a
@@ -153,7 +158,7 @@ Fix any syntax or import errors before proceeding.
 ### Pre-flight: check environment
 
 ```bash
-BASE_URL=$(grep base_url config/development.yml 2>/dev/null | awk '{print $2}' | tr -d '"')
+BASE_URL=$(python3 -c "import json; print(json.load(open('config/environments.json'))['qa']['base_url'])" 2>/dev/null)
 curl -s -o /dev/null -w "%{http_code}" "$BASE_URL" --max-time 10
 ```
 
@@ -164,7 +169,7 @@ If response is not 200/302: **stop and tell the user the target app is not reach
 ```bash
 cd /path/to/wiki_project
 source venv/bin/activate 2>/dev/null || true
-pytest --env=development -k "${TEST_FUNCTION_NAME}" --tb=short -q 2>&1 | tail -80
+pytest --env=qa -k "${TEST_FUNCTION_NAME}" --tb=short -q 2>&1 | tail -80
 ```
 
 **On PASSED:**
@@ -177,13 +182,13 @@ pytest --env=development -k "${TEST_FUNCTION_NAME}" --tb=short -q 2>&1 | tail -8
 ```bash
 # JUnit XML report
 find reports -name "*.xml" | xargs grep -l "failure\|error" 2>/dev/null | head -3
-cat reports/junit/*.xml 2>/dev/null | grep -A 20 "<failure\|<error"
+cat reports/*.xml 2>/dev/null | grep -A 20 "<failure\|<error"
 
 # Most recent trace
 ls -t reports/traces/*.zip 2>/dev/null | head -1
 
 # stdout from last run
-cat reports/last_run.log 2>/dev/null | tail -50
+tail -50 reports/logs/test.log 2>/dev/null
 ```
 
 **Always read `docs/ai_learnings.md` before fixing.**

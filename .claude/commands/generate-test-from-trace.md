@@ -1,3 +1,8 @@
+---
+description: "Use to generate a pytest + Playwright test (and optionally a page object) from a trace ZIP via core.ai.TestGenerator, writing it into ui/tests or ui/pages and checking it compiles and runs."
+disable-model-invocation: true
+---
+
 # generate-test-from-trace
 
 Generate a complete pytest + Playwright test file from a trace ZIP.

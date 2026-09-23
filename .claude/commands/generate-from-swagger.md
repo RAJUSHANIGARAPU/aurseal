@@ -1,3 +1,8 @@
+---
+description: "Use to generate pytest API tests from an OpenAPI/Swagger spec (URL or file): happy path, 400, 401 and 404 per tag, plus client classes and testdata; runs, fixes and commits them."
+disable-model-invocation: true
+---
+
 # generate-from-swagger
 
 Fetch an OpenAPI/Swagger spec (URL or file) and generate pytest API tests covering every
@@ -87,7 +92,7 @@ python3 -m py_compile api/tests/test_*_api.py api/clients/*_client.py
 
 ```bash
 source venv/bin/activate 2>/dev/null || true
-pytest --env=development -m api api/tests/ -q --tb=short 2>&1 | tail -60
+pytest --env=qa -m api api/tests/ -q --tb=short 2>&1 | tail -60
 ```
 
 **Fix decision tree:**

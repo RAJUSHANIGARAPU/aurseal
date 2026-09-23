@@ -1,3 +1,8 @@
+---
+description: "Use to turn a Postman collection JSON into pytest API tests: runs the api/agents orchestrator (falls back to manual generation), runs the tests, fixes them, and commits the generated files."
+disable-model-invocation: true
+---
+
 # generate-from-postman
 
 Convert a Postman collection export (.json) into pytest API tests using the framework's
@@ -30,11 +35,11 @@ from api.agents.orchestrator import Orchestrator
 from api.llm.claude_client import ClaudeLLMClient
 
 llm = ClaudeLLMClient()
-orch = Orchestrator(llm=llm, output_dir="generated_tests")
-result = orch.run("$COLLECTION_JSON")
+orch = Orchestrator(collection_path="$COLLECTION_JSON", llm=llm, output_dir="generated_tests")
+result = orch.run()
 print("Success:", result.success)
-print("Generated files:", result.generated_files)
-print("Test results:", result.execution_result)
+print("Passed/failed:", result.final_pass_count, result.final_fail_count)
+print("Report:", result.report_path)
 EOF
 ```
 
@@ -80,14 +85,14 @@ Generate pytest files following the pattern in `api/tests/test_search_api.py`:
 ## Phase 3 — Run → auto-fix loop (3 passes, max 5 fix iterations)
 
 ```bash
-BASE_URL=$(python3 -c "import yaml; d=yaml.safe_load(open('config/development.yml')); print(d.get('base_url',''))" 2>/dev/null)
+BASE_URL=$(python3 -c "import json; print(json.load(open('config/environments.json'))['qa']['base_url'])" 2>/dev/null)
 curl -s -o /dev/null -w "%{http_code}" "$BASE_URL" --max-time 10
 ```
 
 If not reachable: stop, report the API is down.
 
 ```bash
-pytest --env=development -m api generated_tests/ api/tests/ -q --tb=short 2>&1 | tail -60
+pytest --env=qa -m api generated_tests/ api/tests/ -q --tb=short 2>&1 | tail -60
 ```
 
 **Fix decision tree:**
@@ -116,6 +121,6 @@ Report generated files and push command.
 ## Notes
 
 - Generated tests land in `generated_tests/` first — review before moving to `api/tests/`
-- Postman `{{env_variables}}` map to `config/development.yml` keys
+- Postman `{{env_variables}}` map to `config/environments.json` keys
 - Strip any hardcoded tokens/passwords from generated code
 - Run with `-m api` marker to keep API and UI test runs separate

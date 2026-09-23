@@ -1,3 +1,8 @@
+---
+description: "Use to get a failing pytest suite green unattended: runs the tests, diagnoses failures, fixes locators and timing in page objects, commits each fix, and repeats until 3 consecutive passes or 5 fix rounds."
+disable-model-invocation: true
+---
+
 # auto-run-fix
 
 Autonomously run tests, analyze failures, fix code, and rerun until the suite passes
@@ -6,13 +11,13 @@ Autonomously run tests, analyze failures, fix code, and rerun until the suite pa
 ## Usage
 
 ```
-/auto-run-fix [-k "test_name_filter"] [--env development]
+/auto-run-fix [-k "test_name_filter"] [--env qa]
 ```
 
 Examples:
 - `/auto-run-fix` — run full suite
 - `/auto-run-fix -k "test_article_search"`
-- `/auto-run-fix -k "test_wiki_login" --env development`
+- `/auto-run-fix -k "test_wiki_login" --env qa`
 
 ## Loop
 
@@ -25,7 +30,7 @@ Repeat until `consecutive_passes == 3` or `fix_attempts == 5`:
 ```bash
 cd /path/to/wiki_project
 source venv/bin/activate 2>/dev/null || true
-pytest <filter_args> --junit-xml=target/junit/results.xml -q --tb=short 2>&1 | tail -80
+pytest <filter_args> --junit-xml=reports/junit.xml -q --tb=short 2>&1 | tail -80
 ```
 
 ### Step 2 — Check result
@@ -46,7 +51,7 @@ If any test failed (exit code != 0):
 # JUnit XML failures
 python3 -c "
 import glob, xml.etree.ElementTree as ET
-for f in glob.glob('target/junit/*.xml'):
+for f in glob.glob('reports/junit.xml'):
     root = ET.parse(f).getroot()
     for tc in root.iter('testcase'):
         for child in tc:
@@ -57,7 +62,7 @@ for f in glob.glob('target/junit/*.xml'):
 "
 
 # Most recent trace
-ls -t target/traces/*.zip 2>/dev/null | head -1
+ls -t reports/traces/*.zip 2>/dev/null | head -1
 ```
 
 ### Step 4 — Diagnose

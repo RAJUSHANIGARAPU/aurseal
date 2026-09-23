@@ -1,9 +1,13 @@
+---
+description: "Use to build or query a knowledge graph of this codebase with graphifyy: build or update the graph, ask questions, find test coverage gaps, explain a module, or trace a path between two nodes."
+---
+
 # /graphify — Knowledge Graph for wiki_project
 
 Builds an interactive knowledge graph of this codebase using [graphifyy](https://github.com/safishamsi/graphify) and answers questions about it via Claude.
 
 ## What it does
-1. Runs `graphify build` on the project root (or `--update` if a graph already exists)
+1. Runs `graphify <project root>` on the project root (or `--update` if a graph already exists)
 2. Produces `graph.html` (interactive vis.js graph) and `graph.json` (queryable data)
 3. Exposes `GraphifyClient` and `KnowledgeGraphQuery` from `core/graphify/`
 
@@ -47,7 +51,7 @@ Activate the optional plugin by setting `ENABLE_GRAPHIFY=true`. It updates the g
 before the session starts and prints stats in the terminal summary.
 
 ```bash
-ENABLE_GRAPHIFY=true pytest --env=development
+ENABLE_GRAPHIFY=true pytest --env=qa
 ```
 
 A `knowledge_graph` session-scoped fixture is also available for tests that need

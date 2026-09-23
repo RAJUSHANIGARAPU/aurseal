@@ -1,3 +1,7 @@
+---
+description: "Use when a pytest run has failed and you want the cause: reads the JUnit XML and log under reports/, runs LogAnalyzer, checks docs/ai_learnings.md, and proposes a fix with file and line."
+---
+
 # analyze-test-failure
 
 Read pytest output / JUnit XML and diagnose test failures.

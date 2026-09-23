@@ -1,3 +1,7 @@
+---
+description: "Use when a Playwright UI test failed and you have a trace ZIP (default: newest in reports/traces/): runs TraceAnalyzer, lists what ran and what broke, and gives the root cause and fix."
+---
+
 # analyze-trace
 
 Analyze the latest Playwright trace ZIP and diagnose what happened.

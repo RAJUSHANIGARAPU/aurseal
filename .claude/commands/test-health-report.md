@@ -1,3 +1,7 @@
+---
+description: "Use before a merge or when asking how healthy the suite is: runs pytest, parses the JUnit XML, lists failures, healing events and flakiness signals, and gives a PASS/WARN/BLOCK deploy-gate call."
+---
+
 # test-health-report
 
 Run the full test suite and produce a clean health report: pass/fail per test, healing events,
@@ -19,7 +23,7 @@ Examples:
 ## Phase 1 — Pre-flight
 
 ```bash
-BASE_URL=$(python3 -c "import yaml; d=yaml.safe_load(open('config/development.yml')); print(d.get('base_url',''))" 2>/dev/null)
+BASE_URL=$(python3 -c "import json; print(json.load(open('config/environments.json'))['qa']['base_url'])" 2>/dev/null)
 curl -s -o /dev/null -w "%{http_code}" "$BASE_URL" --max-time 10
 ```
 
@@ -37,7 +41,8 @@ find ui/tests -name "test_*.py" | xargs grep -l "^def test_\|^async def test_" |
 ```bash
 cd /path/to/wiki_project
 source venv/bin/activate 2>/dev/null || true
-pytest --env=development ${ARGS} \
+RUN_START=$(date -u +%Y-%m-%dT%H:%M:%S+00:00)
+pytest --env=qa ${ARGS} \
   --tb=short -q \
   --junit-xml=reports/health-run.xml \
   2>&1 | tee /tmp/wiki-health-run.log | tail -40
@@ -76,12 +81,34 @@ EOF
 
 ## Phase 4 — Check healing events
 
+Healing decisions are appended to `reports/ui_healing_sessions.jsonl` by
+`autonomous_ui/orchestrator.py` (`_log_session`), one JSON object per line with
+`timestamp, test, failure_type, root_cause, confidence, strategy, applied, details, patched_files`.
+Only `python -m autonomous_ui.orchestrator` writes it; a plain `pytest` run (Phase 2) never heals.
+So an absent or empty log, or no rows since `RUN_START`, means **NOT MEASURED**, not zero heals.
+
 ```bash
-# Healing events from autonomous_ui
-find reports -name "healing_*.json" -newer /tmp/wiki-health-run.log 2>/dev/null | head -10
-for f in $(find reports -name "healing_*.json" -newer /tmp/wiki-health-run.log 2>/dev/null); do
-  python3 -c "import json; d=json.load(open('$f')); print(d.get('test','?'), '|', d.get('locator_key','?'), '->', d.get('healed_selector','?'))" 2>/dev/null
-done
+python3 - "$RUN_START" <<'PY'
+import json, sys
+from datetime import datetime
+from pathlib import Path
+log = Path("reports/ui_healing_sessions.jsonl")
+lines = [l for l in log.read_text().splitlines() if l.strip()] if log.exists() else []
+if not lines:
+    print("healing data: NOT MEASURED (reports/ui_healing_sessions.jsonl absent or empty)")
+    sys.exit()
+since = datetime.fromisoformat(sys.argv[1])
+rows = [r for r in map(json.loads, lines) if datetime.fromisoformat(r["timestamp"]) >= since]
+if not rows:
+    print(f"healing data: NOT MEASURED (no orchestrator session since {sys.argv[1]})")
+    sys.exit()
+applied = [r for r in rows if r.get("applied")]
+print(f"HEALED: {len(applied)} applied of {len(rows)} decisions")
+for r in rows:
+    files = ", ".join(r.get("patched_files") or []) or "-"
+    print(f"{'applied' if r.get('applied') else 'not applied'} | {r.get('test','?')} | "
+          f"{r.get('failure_type','?')} | {r.get('strategy','?')} | {files}")
+PY
 ```
 
 ---
@@ -105,7 +132,7 @@ Output a clean markdown report:
 
 ```
 ## Test Health Report — <date> <time>
-**Environment:** development  |  **Branch:** <git branch>  |  **Duration:** <Xs>
+**Environment:** qa  |  **Branch:** <git branch>  |  **Duration:** <Xs>
 
 ### Summary
 | Status    | Count |
@@ -113,13 +140,13 @@ Output a clean markdown report:
 | ✓ Passed  | N |
 | ✗ Failed  | N |
 | ↷ Skipped | N |
-| 🔧 Healed | N |
+| 🔧 Healed | N, or NOT MEASURED |
 
 ### Failed Tests
 (class name, function name, first line of failure message)
 
 ### Healing Events
-(test name, locator key, old selector → new selector)
+(test, failure type, strategy, patched files — or `healing data: NOT MEASURED`)
 
 ### Flakiness Signals
 (retried tests, unusually slow tests)
@@ -129,7 +156,8 @@ Output a clean markdown report:
 
 **Deploy gate logic:**
 - `PASS` — zero failures, zero errors
-- `WARN` — zero test failures but healing events > 0 — locators were auto-fixed; review before deploying
+- `WARN` — zero test failures but applied heals > 0 — locators were patched; review before deploying.
+  If healing data is NOT MEASURED, print that in the report; do not count it as 0 heals
 - `BLOCK` — any test failures or errors — do not deploy
 
 ---
@@ -148,6 +176,6 @@ Print the full report to the conversation.
 ## Notes
 
 - Run before every PR merge to main
-- Healing events > 0 means the site changed; commit updated locator JSONs
+- Applied heals > 0 means the site changed; commit updated locator JSONs
 - Fully autonomous framework goal: 0 failures, 0 healing events, 0 retries on a stable build
 - Read `docs/ai_learnings.md` if you see repeated `TimeoutError` patterns

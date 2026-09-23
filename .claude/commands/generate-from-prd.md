@@ -1,3 +1,8 @@
+---
+description: "Use to turn a PRD, user story or requirements text (file, URL or inline) into tests: extracts scenarios, writes specs/, generates page objects and pytest files, runs and fixes them, and commits."
+disable-model-invocation: true
+---
+
 # generate-from-prd
 
 Read a Product Requirements Document (PRD, user story, acceptance criteria, or any requirements
@@ -93,7 +98,7 @@ python3 -m py_compile ui/pages/*.py ui/tests/*.py api/tests/*.py 2>&1
 
 ```bash
 source venv/bin/activate 2>/dev/null || true
-pytest --env=development -k "<test_function_name>" -q --tb=short 2>&1 | tail -60
+pytest --env=qa -k "<test_function_name>" -q --tb=short 2>&1 | tail -60
 ```
 
 Use the same fix decision trees as `/generate-from-ts` (UI) and `/generate-from-swagger` (API).
