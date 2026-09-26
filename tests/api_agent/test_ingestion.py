@@ -76,9 +76,9 @@ def test_post_json_body_parsed(requests_list: list[PostmanRequest]) -> None:
 def test_folder_paths_set(requests_list: list[PostmanRequest]) -> None:
     """Requests inside folders must have folder_path set."""
     requests_with_folders = [r for r in requests_list if r.folder_path]
-    assert len(requests_with_folders) == len(
-        requests_list
-    ), "All sample requests are inside named folders"
+    assert len(requests_with_folders) == len(requests_list), (
+        "All sample requests are inside named folders"
+    )
 
 
 def test_request_names_are_strings(requests_list: list[PostmanRequest]) -> None:

@@ -62,7 +62,7 @@ class EvolutionAgent:
         out_dir.mkdir(parents=True, exist_ok=True)
         out_file = out_dir / f"proposals_{date_str}.md"
         content = f"# Evolution Proposals — {date_str}\n\n" + "\n\n".join(
-            f"## Proposal {i+1}: {p}" if not p.startswith("Proposal") else p
+            f"## Proposal {i + 1}: {p}" if not p.startswith("Proposal") else p
             for i, p in enumerate(proposals)
         )
         out_file.write_text(content, encoding="utf-8")

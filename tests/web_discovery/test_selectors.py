@@ -128,7 +128,7 @@ class TestAttributeAndTextSelectors:
         assert attribute_selector("data-testid", "sign-in") == '[data-testid="sign-in"]'
 
     def test_attribute_value_with_a_bracket_cannot_close_the_selector(self):
-        selector = attribute_selector("aria-label", 'close] , [href')
+        selector = attribute_selector("aria-label", "close] , [href")
         assert selector == '[aria-label="close] , [href"]'
 
     def test_text_selector_quotes_the_text(self):

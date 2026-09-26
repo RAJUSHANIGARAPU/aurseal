@@ -246,9 +246,7 @@ class BehavioralEquivalencePlugin(BasePlugin):
         resigned = {k for k in survived if prev[k].get("signature") != curr[k].get("signature")}
         signature_changed = sorted(resigned)
         body_changed = sorted(
-            k
-            for k in survived - resigned
-            if prev[k].get("body_hash") != curr[k].get("body_hash")
+            k for k in survived - resigned if prev[k].get("body_hash") != curr[k].get("body_hash")
         )
 
         drift = {

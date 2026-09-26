@@ -81,6 +81,7 @@ _CREATE_INDICES = (
     "CREATE INDEX IF NOT EXISTS idx_mem_category  ON memory_records(category)",
 )
 
+
 def _endpoint_stem(url: str) -> str:
     """Canonical match key for a URL — the same one the write path stores."""
     return normalize_endpoint(url).strip("/")
@@ -356,6 +357,8 @@ class MemoryStore:
             conn.commit()
         except Exception:  # noqa: BLE001
             logger.error(
-                "MemoryStore could not enforce the %d-record cap for %s", cap, test_id,
+                "MemoryStore could not enforce the %d-record cap for %s",
+                cap,
+                test_id,
                 exc_info=True,
             )

@@ -25,7 +25,7 @@ import pytest
 
 from orchestration.master_orchestrator import MasterOrchestrator
 
-WORKING = '''
+WORKING = """
 from plugins._base_plugin import BasePlugin, PluginPriority, PluginResult
 
 
@@ -36,7 +36,7 @@ class Working(BasePlugin):
 
     def run(self, context):
         return PluginResult(status="pass", findings=[], cost_usd=0.0)
-'''
+"""
 
 UNIMPORTABLE = """
 import a_dependency_that_is_not_installed  # noqa: F401

@@ -43,10 +43,7 @@ _RULE_PATTERN = re.compile(r"^\s*(?:\d+\.|[-*•])\s+(.+)", re.MULTILINE)
 _MAX_RULES = 20
 
 #: Said plainly in every result, because the plugin's own name overstates it.
-_SCOPE = (
-    "rules are assessed for testability only; no source code was read or "
-    "compared against them"
-)
+_SCOPE = "rules are assessed for testability only; no source code was read or compared against them"
 
 
 def _extract_rules(docs_dir: Path) -> list[str]:

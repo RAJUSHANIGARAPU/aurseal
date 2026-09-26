@@ -33,6 +33,9 @@ jobs:
       - name: Run Linter
         run: ruff check .
 
+      - name: Check Formatting
+        run: ruff format --check .
+
       - name: Run Offline Tests
         run: pytest tests/ -n auto
 

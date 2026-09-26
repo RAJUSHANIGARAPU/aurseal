@@ -27,7 +27,7 @@ from tests.plugins._tier4 import load, venv_tree
 
 _INVENTED = ["init", "process", "complete", "error"]
 
-MACHINE = '''class Order:
+MACHINE = """class Order:
     state = "new"
 
     def transition_to(self, target):
@@ -35,14 +35,14 @@ MACHINE = '''class Order:
 
     def transition_back(self):
         self.state = "new"
-'''
+"""
 
-LOOKS_LIKE_ONE = '''class Ledger:
+LOOKS_LIKE_ONE = """class Ledger:
     state = "open"
 
     def post(self, amount):
         return amount
-'''
+"""
 
 
 @pytest.fixture

@@ -177,9 +177,9 @@ class TestAnOperatorCanTellWhichFailureHappened:
         with caplog.at_level(logging.WARNING, logger="api.llm.claude_client"):
             ClaudeLLMClient(api_key=KEY).complete(PROMPT)
 
-        assert any(
-            kind in record.getMessage() for record in caplog.records
-        ), f"nothing in the log names the {kind} failure"
+        assert any(kind in record.getMessage() for record in caplog.records), (
+            f"nothing in the log names the {kind} failure"
+        )
 
     def test_a_healthy_call_logs_no_warning(self, monkeypatch, cli, caplog):
         """Control: the log must stay quiet when the call worked."""

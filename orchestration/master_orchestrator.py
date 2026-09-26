@@ -276,8 +276,7 @@ def main() -> int:
     orchestrator = MasterOrchestrator(budget_usd=args.budget)
     result = orchestrator.run({"trigger": args.trigger, "dry_run": args.dry_run})
     print(
-        f"health_score={result['health_score']} deploy={result['deploy']}"
-        f" run_id={result['run_id']}"
+        f"health_score={result['health_score']} deploy={result['deploy']} run_id={result['run_id']}"
     )
     return 0 if result["deploy"] else 1
 

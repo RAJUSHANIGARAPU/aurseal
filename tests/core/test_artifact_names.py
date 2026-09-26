@@ -58,16 +58,17 @@ class TestTheOrdinaryCaseIsUnchanged:
         assert video_path(NAME, BROWSER, STAMP, 0, 0).endswith(f"{STAMP}.webm")
 
     def test_the_trace_is_never_numbered(self):
-        assert trace_path(NAME, BROWSER, STAMP) == (
-            f"reports/traces/{NAME}_{BROWSER}_{STAMP}.zip"
-        )
+        assert trace_path(NAME, BROWSER, STAMP) == (f"reports/traces/{NAME}_{BROWSER}_{STAMP}.zip")
 
 
 class TestTheBrowserNameIsUsedLiterally:
-    @pytest.mark.parametrize("path_fn", [
-        lambda b: trace_path(NAME, b, STAMP),
-        lambda b: video_path(NAME, b, STAMP, 0, 1),
-    ])
+    @pytest.mark.parametrize(
+        "path_fn",
+        [
+            lambda b: trace_path(NAME, b, STAMP),
+            lambda b: video_path(NAME, b, STAMP, 0, 1),
+        ],
+    )
     def test_a_list_shaped_string_never_appears(self, path_fn):
         """
         The old code interpolated `--browser`, an append-action option whose
@@ -83,9 +84,7 @@ class TestTheBrowserNameIsUsedLiterally:
         assert f"_{browser}_" in video_path(NAME, browser, STAMP, 0, 1)
 
     def test_different_browsers_do_not_collide(self):
-        assert video_path(NAME, "chromium", STAMP, 0, 1) != video_path(
-            NAME, "firefox", STAMP, 0, 1
-        )
+        assert video_path(NAME, "chromium", STAMP, 0, 1) != video_path(NAME, "firefox", STAMP, 0, 1)
 
 
 class TestPathsLandInTheRightPlace:

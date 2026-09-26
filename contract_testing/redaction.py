@@ -53,9 +53,7 @@ def is_sensitive_name(name: str) -> bool:
 
 def redact_headers(headers: dict) -> dict[str, str]:
     """Replace the value of every credential-carrying header, keeping the name."""
-    return {
-        key: (REDACTED if is_sensitive_name(key) else value) for key, value in headers.items()
-    }
+    return {key: (REDACTED if is_sensitive_name(key) else value) for key, value in headers.items()}
 
 
 def redact_query(query: str) -> str:

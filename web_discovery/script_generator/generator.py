@@ -53,8 +53,7 @@ def _step_to_code(step: dict, indent: str = "    ") -> str:
 
     elif stype == "assert_no_error":
         lines.append(
-            f"{indent}assert page.locator({sel!r}).count() == 0, "
-            '"Unexpected error message visible"'
+            f'{indent}assert page.locator({sel!r}).count() == 0, "Unexpected error message visible"'
         )
 
     elif stype == "assert_text":

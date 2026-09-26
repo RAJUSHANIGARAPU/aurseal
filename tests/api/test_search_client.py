@@ -32,9 +32,7 @@ class TestSearchUrl:
 
     @pytest.mark.parametrize("base", [BASE, BASE.rstrip("/")])
     def test_trailing_slash_on_the_base_makes_no_difference(self, base):
-        assert SearchClient(base).search_url("rolex") == (
-            "https://www.catawiki.com/en/s?q=rolex"
-        )
+        assert SearchClient(base).search_url("rolex") == ("https://www.catawiki.com/en/s?q=rolex")
 
     def test_keyword_is_query_encoded(self):
         url = SearchClient(BASE).search_url("rolex watch")
@@ -47,6 +45,4 @@ class TestSearchUrl:
         client should be aimed at the same endpoint; when the two drifted apart
         nothing noticed.
         """
-        assert SearchClient(BASE).search_url("rolex") == (
-            "https://www.catawiki.com/en/s?q=rolex"
-        )
+        assert SearchClient(BASE).search_url("rolex") == ("https://www.catawiki.com/en/s?q=rolex")

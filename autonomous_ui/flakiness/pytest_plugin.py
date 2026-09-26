@@ -176,6 +176,6 @@ class FlakinessPlugin:
         if flaky_count > 0:
             reporter = FlakinessReporter()
             md_path, json_path = reporter.write(profiles, analyses)
-            print(f"\n[flakiness] {flaky_count} flaky test(s) detected." f" Report: {md_path}")
+            print(f"\n[flakiness] {flaky_count} flaky test(s) detected. Report: {md_path}")
         else:
             print(f"\n[flakiness] {len(profiles)} test(s) tracked — no flakiness detected.")
