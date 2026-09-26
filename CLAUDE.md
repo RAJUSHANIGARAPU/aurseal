@@ -7,29 +7,29 @@ Clean Page Object Model, JSON-based locator management, Docker-ready.
 ## Run commands
 ```bash
 # Setup
-python3 -m venv venv && source venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
-# Run all tests
-pytest --env=development
+# Offline suite — no browser, no network (what CI's offline job runs)
+ruff check .
+pytest tests/ -n auto
 
-# Run with Docker
+# Browser suite against the live site (--env is qa or staging, default qa)
+pytest -m "smoke or api or contract" -n auto --env=qa
+pytest -m regression -n auto   # CI runs this on main only
+
 docker compose up
-
-# Run specific marker
-pytest -m smoke
-pytest -m regression
 ```
 
 ## Project structure
 ```
 conftest.py          # root fixtures, CLI options, Playwright plugin
 api/                 # API layer — direct HTTP calls
-ui/                  # page objects, locators, flows
-core/                # transport primitives, YAML helpers
-config/              # environment config files
-data/                # test data, payloads
+ui/                  # page objects, locators, flows, testdata
+core/                # base page, config reader, logger, core/ai modules
+config/              # environments.json (qa, staging), settings.py
 reports/             # test artifacts and screenshots
+tests/               # offline framework tests
 pytest.ini           # markers and options
 pyproject.toml       # project metadata + tool config
 ```
@@ -37,18 +37,22 @@ pyproject.toml       # project metadata + tool config
 ## Key design rules
 - Page Object Model — UI interactions belong in `ui/`, not in test files
 - Locators are JSON-managed — do not hardcode selectors in test code
-- All network calls go through the transport layer in `core/`
+- HTTP to the system under test goes through the clients in `api/clients/`
 - Structured logging — use the framework logger, not `print()`
 - Tests are independent — no shared mutable state between tests
 
 ## Coding standards
-- PEP 8, 4-space indent, max 120 chars
+- PEP 8, 4-space indent, max 100 chars (`pyproject.toml`)
 - Type hints everywhere
-- `flake8` / `pylint` before commit
+- `ruff check .` before commit — CI runs it
+
+## CI gate
+`tests/test_ci_selection.py` fails when any collected test is not selected by a pytest
+command in `.github/workflows/tests.yml`. A new test directory or marker must be wired
+into the workflow in the same change — never widen the gate to tolerate the gap.
 
 ## Constraints
 - No hardcoded URLs — use config files
-- No `print()` in tests — use structured logger
 - Screenshots and artifacts go to `reports/` only
 
 ## AI Skills (Claude Code slash commands)
@@ -66,19 +70,19 @@ pyproject.toml       # project metadata + tool config
 | `/detect-coverage-gaps [spec\|url\|all]` | Compares OpenAPI/spec files vs existing tests; reports untested endpoints/scenarios; optionally invokes generate skills |
 | `/test-health-report` | Runs full suite, parses JUnit XML + healing events, outputs pass/fail/healed summary with deploy-gate recommendation |
 | `/create-pr [title] [branch]` | Pushes branch, opens GitHub PR via `gh` CLI with test health summary attached |
+| `/graphify` | Builds or queries a knowledge graph of this codebase |
 
 Skills live in `.claude/commands/`.
 
 ## Specs Directory
 
-`specs/` contains human-readable test plans that are the output of the **Planner** stage in the
-Planner → Generator → Healer workflow:
+`specs/` holds hand-written, version-controlled test plans. `web_discovery` crawls a site and
+builds scenarios in memory; it does not write to `specs/`.
 
-| Stage   | Component                    | Role |
-|---------|------------------------------|------|
-| Planner | `web_discovery`              | Crawls the target site and produces scenario descriptions; output is committed to `specs/` |
-| Generator | `core/ai/TestGenerator`    | Reads spec files and generates pytest + Playwright test files under `ui/tests/` |
-| Healer  | `autonomous_ui/healer.py`    | Detects broken locators or regressions and applies targeted fixes |
+| Component | Role |
+|-----------|------|
+| `TestGenerator.generate_from_spec(path)` (`core/ai/test_generator.py`) | Turns one spec into a pytest + Playwright test for `ui/tests/` |
+| `autonomous_ui/healer.py` | Detects broken locators or regressions and applies targeted fixes |
 
 ### Spec file format
 
@@ -103,8 +107,8 @@ feature: <name>     # used as pytest marker
 `marker1` `marker2`
 ```
 
-`TestGenerator` is invoked automatically by `python scripts/auto_runner.py` and reads specs as
-context when generating or healing test files.
+`scripts/auto_runner.py` does not read specs; generate from a spec by calling
+`generate_from_spec` directly.
 
 ## AI Modules (core/ai/)
 
@@ -113,21 +117,19 @@ context when generating or healing test files.
 | `TraceAnalyzer` | Parses Playwright trace ZIPs, calls Claude for analysis |
 | `LogAnalyzer` | Reads pytest JUnit XML + logs, diagnoses failures |
 | `AutoFixer` | Generates targeted code fixes and applies them |
-| `TestGenerator` | Generates Page Objects + test files from traces |
+| `TestGenerator` | Generates Page Objects + test files from traces or specs |
 
 ### Claude backend — API key vs CLI
 
-All AI modules resolve their backend automatically, in this order:
-
-1. **Anthropic API** (`ANTHROPIC_API_KEY`) — direct REST call via `ClaudeLLMClient`.
-2. **`claude -p` CLI** — fallback when no API key is set but `claude` CLI is installed and authenticated (`claude auth login`).
-
-No code change needed to switch. If neither is available, modules return an empty string or descriptive message.
+- The four `core/ai/` modules call the Anthropic API directly and need `ANTHROPIC_API_KEY`;
+  without it they return `None` or a descriptive message. They have no CLI fallback.
+- `ClaudeLLMClient` (`api/llm/claude_client.py`, used by `autonomous_ui/`, `plugins/`,
+  `orchestration/`, `core/agents/healer_agent.py`) uses the API key when set, else falls back to the `claude -p` CLI.
 
 ## Autonomous Run-Fix Loop
 
 ```bash
-# Full autonomous loop (uses ANTHROPIC_API_KEY or `claude` CLI automatically)
+# Full autonomous loop (needs ANTHROPIC_API_KEY)
 python scripts/auto_runner.py
 
 # With test filter
