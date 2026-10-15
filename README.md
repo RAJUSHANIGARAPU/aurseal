@@ -122,6 +122,13 @@ Supporting engines: DynamicDataEngine, ValidationEngine, ContextMemory, AgentLog
 - Targeted remediation: timing gap stats, worker breakdown, env breakdown — each with LLM-enriched, file-specific guidance
 - Report output: `reports/flakiness/report-<run_id>.{md,json}` printed at session end
 
+**Verification Oracles** (`verification/`, stdlib only)
+- Twin equivalence: compare two paths' results with ignore-paths, numeric tolerance and date-shift rules; diff table of path / left / right / rule — `assert_equivalent(a, b, EquivalenceOracle(ignore=["**.id"]))`
+- Invariants: declarative before/after rules (`advanced_by`, `scaled_by`, `unchanged`, `non_empty`, `no_item_in_state`, `custom`), composable with `+`, all violations reported at once
+- Batch truthfulness: `verify_batch` re-reads item state after a run and flags FALSE_SUCCESS, FALSE_FAILURE (timeout after commit), FALSE_SKIP, DOUBLE_PROCESSED, MISCLASSIFIED, UNREPORTED
+- Idempotency: `probe` / `probe_async` submit an operation twice or more (sequential, threads behind a barrier, asyncio) and assert exactly-once effect
+- Expected-red: `@pytest.mark.known_defect("ID", raises=...)` — strict xfail with a defect reference; an unexpected pass fails and names the defect to close; `KNOWN_DEFECTS_CLOSED=ID,...` turns it off
+
 **Infrastructure**
 - Environment-aware config (`--env qa/staging/prod`)
 - Docker images for both UI and API agent execution
@@ -160,6 +167,7 @@ wiki_project/
 │   ├── config_reader.py
 │   ├── failure_reporter.py
 │   └── logger.py
+├── verification/        — equivalence oracle, invariants, batch + idempotency probes, known_defect marker
 ├── ui/
 │   ├── pages/
 │   ├── flows/
@@ -401,6 +409,8 @@ pytest -m negative
 pytest -m api
 pytest -m contract
 ```
+
+`known_defect("ID", reason=..., raises=...)` marks an expected-red test for an open defect (see Verification Oracles).
 
 ---
 
