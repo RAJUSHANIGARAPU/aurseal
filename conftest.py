@@ -29,6 +29,11 @@ def pytest_configure(config):
     if not config.pluginmanager.hasplugin("flakiness-tracker"):
         config.pluginmanager.register(FlakinessPlugin.from_config(config), "flakiness-tracker")
 
+    # Expected-red tests for open defects: @pytest.mark.known_defect("ID", raises=...)
+    from verification.pytest_plugin import register as register_known_defects
+
+    register_known_defects(config)
+
     # Memory Intelligence Layer — opt-in via ENABLE_MEMORY=true
     from memory.config import MemoryConfig
 
