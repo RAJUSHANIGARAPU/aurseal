@@ -27,6 +27,7 @@ conftest.py          # root fixtures, CLI options, Playwright plugin
 api/                 # API layer — direct HTTP calls
 ui/                  # page objects, locators, flows, testdata
 core/                # base page, config reader, logger, core/ai modules
+verification/        # equivalence oracle, invariants, batch/idempotency probes, known_defect
 config/              # environments.json (qa, staging), settings.py
 reports/             # test artifacts and screenshots
 tests/               # offline framework tests
