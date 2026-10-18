@@ -10,16 +10,29 @@ that record. `testkeel report` picks the importer by sniffing the start of each 
 | `junit` | JUnit XML (pytest, Maven Surefire and compatible reporters) | `pytest --junitxml=junit.xml`, Surefire's default reports |
 | `playwright` | Playwright's JSON reporter | `reporter: [["json", { outputFile: "results.json" }]]` |
 | `testkeel` | The canonical upload document (`RunUpload` JSON) | the [pytest plugin](#pytest-plugin) |
+| `cypress` | mochawesome JSON (one spec or a `mochawesome-merge` report); the Cypress Module API results | `--reporter mochawesome --reporter-options json=true`; `JSON.stringify(await cypress.run())` |
 
 ## Status mapping
 
 Every importer maps its format onto the same statuses: `passed`, `failed` (an assertion
 or a timeout), `broken` (an error outside the assertion: setup, teardown, interrupted),
 `skipped`. A `reason` keeps what the status alone loses: `timeout`, `xfail`, `xpass`,
-`xpass_strict`, `expected_failure`.
+`xpass_strict`, `expected_failure`, `not_run`.
 
 A record's status is its last attempt's status. A record that failed and then passed on a
 retry is `passed` with `flaky_in_run` set.
+
+## Cypress
+
+Both inputs give a test the same identity: the spec file is the path, the `describe`
+titles are the suite, the `it` title is the name.
+
+- **Module API results** (`cypress.run()`): every entry in `attempts` is an attempt, and
+  the browser is the configuration.
+- **mochawesome** keeps only the final attempt and a retry count. Mocha retries a test
+  only after it failed, so the earlier attempts are recorded as failed attempts without
+  detail. A failed hook is a `broken` record named after the hook; the tests it stopped
+  are `skipped` with reason `not_run`. mochawesome does not name the browser.
 
 ## pytest plugin
 

@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import IO
 
 from testkeel.importers._build import ReportError
+from testkeel.importers.cypress import CypressImporter
 from testkeel.importers.junit import JUnitImporter
 from testkeel.importers.playwright import PlaywrightImporter
 from testkeel.importers.upload import UploadImporter
@@ -24,6 +25,7 @@ BUILTIN: dict[str, Importer] = {
     JUnitImporter.name: JUnitImporter(),
     PlaywrightImporter.name: PlaywrightImporter(),
     UploadImporter.name: UploadImporter(),
+    CypressImporter.name: CypressImporter(),
 }
 
 
