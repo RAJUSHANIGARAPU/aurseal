@@ -1,0 +1,8 @@
+# The local target of `make test-local`: QuickPizza in a container on localhost:8306, so a
+# pull request never sends traffic to the public instance. Locust itself runs on the host.
+services:
+  quickpizza:
+    # Same version as docker-compose.yml, pinned by digest.
+    image: ghcr.io/grafana/quickpizza-local:0.15.31@sha256:29dbf276f9d7f82a20c250f8bfcf6e482491118c8a8a6db7cc6fe163e59a9b79
+    ports:
+      - "127.0.0.1:8306:3333"

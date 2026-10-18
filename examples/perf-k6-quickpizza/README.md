@@ -24,6 +24,10 @@ make load APP_TARGET_URL=http://localhost:3333 # 50 requests/s for 1 min, local 
 make stress APP_TARGET_URL=http://localhost:3333
 ```
 
+`make test-local` is what a pull request runs: the smoke profile, k6 in a container,
+against QuickPizza in a container next to it, then both are removed. The summaries land in
+`reports/local/` and name the target they ran on. Prerequisites: Docker and GNU make.
+
 `make load` and `make stress` refuse the public instance: the QuickPizza README offers it
 for "small-scale performance tests" only. `make test-offline` checks the SLO file, the
 target guard and the settings without any network.
