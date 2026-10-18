@@ -172,7 +172,10 @@ its dependencies.
 **Change safely.** Keep `tests/package/` collectable only when the package is installed (its
 conftest skips collection otherwise). Never put `src` on the pytest path: the tests must
 import the installed package. Package release tags are `testkeel-v*`, because plain `v*`
-fires `release.yml`.
+fires `release.yml`; `publish.yml` builds, checks and publishes only on `testkeel-v*`, with
+trusted publishing (`id-token: write` on the publish jobs alone, environment `pypi`), and
+its wheel check is the same `tools/wheel_check.py` that `package.yml` runs. Process:
+[Releasing](kit/releasing.md).
 
 ## Leak check
 

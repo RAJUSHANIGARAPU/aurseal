@@ -75,6 +75,7 @@ nav:
       - Examples: kit/examples.md
       - Leak gate: kit/leak-gate.md
       - Contributing: kit/contributing.md
+      - Releasing: kit/releasing.md
   - Framework:
       - Goals: vision.md
       - What runs where: whats-live.md

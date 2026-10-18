@@ -61,6 +61,12 @@ A new type needs an overlay under `src/testkeel/templates/<type>/`, an entry in
 the template tests, and a section on the [Templates](templates.md) page. Until all of
 them exist it stays `planned`, which `new-assignment` refuses.
 
+## Releases
+
+Version numbers, the deprecation window, the changelog and how a tag reaches PyPI:
+[Releasing](releasing.md). A pull request that changes behaviour adds a line to
+`CHANGELOG.md` under *Unreleased*.
+
 ## Commit messages and pull requests
 
 Short, lower-case, imperative subjects (`feat: add the junit importer`). Pull request
