@@ -198,22 +198,51 @@ pushed branch is already published, so the CI run is detection, not prevention.
 
 ## Examples lane
 
-**Rule.** The projects under `examples/` run live against public demo sites only in
-`examples-nightly.yml` (nightly and on dispatch). Their tests are not part of this
-repository's suite: the root `pytest.ini` `testpaths` leave `examples/` out, and each
-example carries its own pytest configuration in its `pyproject.toml`, so `pytest` from the
-root never collects them and the CI-selection gate never counts them. A failing example
-opens or comments on one `live-drift: <example>` issue; the run itself stays green.
-Without network, `tests/package/test_templates_render.py` checks each example's
-template-owned files (its `.scaffold-manifest`) against a fresh render wherever the package
-and Copier are installed.
+**Rule.** The projects under `examples/` run in two lanes, and only the local one runs on a
+pull request.
 
-**Prevents.** A third-party outage turning a pull request red; an example quietly
-drifting from the template it claims to come from.
+- **Local, per pull request.** `examples-pr.yml` runs when a pull request touches
+  `examples/` or `src/testkeel/templates/`: a matrix job per example runs its
+  `make test-local`, which starts a copy of the target in Docker, runs the suite against it
+  and removes it. No test traffic leaves the runner. Before the suite starts, `test-local`
+  refuses any `APP_*URL` or `TARGET_URL` in its environment whose host is not `localhost`,
+  `127.0.0.1` or a Compose service name, and the workflow makes the same check on what
+  `make local-env` reports. The browser targets also send a Content-Security-Policy that
+  keeps the page on its own origin, so an app's web fonts or error reporting are blocked,
+  not fetched. Images, the pinned upstream source and packages are still downloaded to
+  build the targets; that is setup, not the system under test. Reports go to
+  `reports/local/`, are named `example-<name>-local` and say "local" in the report.
+- **Live, nightly.** `examples-nightly.yml` (nightly and on dispatch) runs the same suites
+  against the public demo sites. A failing example opens or comments on one
+  `live-drift: <example>` issue; the run itself stays green.
 
-**Change safely.** A new example gets its own job in `examples-nightly.yml` and a
-`.scaffold-manifest`; never add `examples` to `testpaths`, which would put network tests
-into the offline job.
+Not every local target is the live one. Restful Booker runs from the image its author
+publishes; Countries, from its upstream source at a pinned commit; Sauce Demo, from
+Sauce Labs' `sample-app-web` at a pinned commit; QuickPizza, from the `quickpizza-local`
+image. The W3C demo's pages are not copied (its document licence allows unmodified copies
+and no derivatives, too narrow a grant to vendor a site on), so `a11y-w3c-bad` scans its
+own fixtures at the demo's paths and leaves out the tests that assert on the demo itself.
+The perf examples run only their smoke profile per pull request.
+
+`make test-local` lives in a `GNUmakefile` that hands every other target to `Makefile`:
+the Makefile is template-owned, and an edit to it would fail the template check below.
+
+The example suites are not part of this repository's own test suite: the root
+`pytest.ini` `testpaths` leave `examples/` out, and each example carries its own pytest
+configuration in its `pyproject.toml`, so `pytest` from the root never collects them and
+the CI-selection gate never counts them. Without network,
+`tests/package/test_templates_render.py` checks each example's template-owned files (its
+`.scaffold-manifest`) against a fresh render wherever the package and Copier are installed.
+
+**Prevents.** A third-party outage turning a pull request red; a change to an example
+reaching `main` without its tests having run once; an example quietly drifting from the
+template it claims to come from.
+
+**Change safely.** A new example gets a `GNUmakefile` with `test-local` and `local-env`, a
+`docker-compose.local.yml`, a row in the `examples-pr.yml` matrix, its own job in
+`examples-nightly.yml` and a `.scaffold-manifest`. Pin every image by digest and every
+upstream source by commit. Never point `test-local` at a public host, and never add
+`examples` to `testpaths`, which would put network tests into the offline job.
 
 ## Docs site
 
