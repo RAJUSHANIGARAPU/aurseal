@@ -1,0 +1,50 @@
+"""The simulated users: the traffic mix and the pacing the profiles rely on."""
+
+from __future__ import annotations
+
+from collections import Counter
+from dataclasses import dataclass, field
+
+import pytest
+
+from {{ package_name }}.users import Browse, SiteUser, Visit, expect_status
+
+pytestmark = pytest.mark.offline
+
+
+@dataclass
+class FakeResponse:
+    status_code: int
+    failures: list[object] = field(default_factory=list)
+
+    def failure(self, exc: object) -> None:
+        self.failures.append(exc)
+
+
+def test_the_traffic_mix_is_what_the_weights_say():
+    # Locust expands {task set: weight} into a list with one entry per unit of weight.
+    assert Counter(SiteUser.tasks) == {Browse: 1}
+
+
+def test_every_task_set_hands_control_back_to_the_user():
+    # A plain TaskSet keeps the user forever; the weights would only pick the first visit.
+    assert all(issubclass(task_set, Visit) for task_set in set(SiteUser.tasks))
+
+
+def test_users_pause_between_requests():
+    pauses = [SiteUser.wait_time(None) for _ in range(50)]  # type: ignore[arg-type]
+    assert min(pauses) >= 1
+    assert max(pauses) <= 3
+
+
+def test_an_unexpected_status_is_recorded_as_a_failure():
+    response = FakeResponse(status_code=503)
+    expect_status(response, 200)
+    assert len(response.failures) == 1
+    assert "503" in str(response.failures[0])
+
+
+def test_the_expected_status_is_not_a_failure():
+    response = FakeResponse(status_code=200)
+    expect_status(response, 200)
+    assert response.failures == []

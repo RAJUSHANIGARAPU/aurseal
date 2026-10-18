@@ -1,0 +1,36 @@
+  test:
+    needs: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          python-version: "{{ python_version }}"
+      - run: uv sync --locked
+      - name: Offline tests (SLO checker, user mix, load shape, target guard)
+        run: uv run pytest -m offline
+
+  smoke:
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHONPATH: src
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          python-version: "{{ python_version }}"
+      - run: uv sync --locked
+      - run: mkdir -p reports
+      - name: Smoke profile
+        run: uv run locust --config profiles/smoke.conf --host {{ target_url }}
+      - name: SLO check
+        run: uv run python -m {{ package_name }}.slo smoke
+      - uses: actions/upload-artifact@v7
+        if: {% raw %}${{ !cancelled() }}{% endraw %}
+        with:
+          name: reports
+          path: reports/
+          retention-days: 7

@@ -1,0 +1,74 @@
+name: CI
+
+# Smoke only: load and stress need a target you own (see the README), never a shared host.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+{%- raw %}
+  group: ci-${{ github.ref }}
+  # A newer push to a pull request supersedes the older run; runs on main always finish.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+{%- endraw %}
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          python-version: "{{ python_version }}"
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy
+
+{% include '_partials/' ~ type ~ '/ci-test-job.part' %}
+  report:
+    needs: smoke
+    # The report matters most when the smoke failed, so build it unless the run was cancelled.
+{%- raw %}
+    if: ${{ !cancelled() && needs.smoke.result != 'skipped' }}
+{%- endraw %}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: reports
+          path: reports
+      - name: Assemble the site
+        run: |
+          mkdir -p site
+          cp reports/smoke.html site/index.html
+          cp reports/smoke_stats.csv site/
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+  deploy:
+    needs: report
+{%- raw %}
+    if: ${{ !cancelled() && needs.report.result == 'success' && github.ref == 'refs/heads/main' }}
+{%- endraw %}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+{%- raw %}
+      url: ${{ steps.deployment.outputs.page_url }}
+{%- endraw %}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

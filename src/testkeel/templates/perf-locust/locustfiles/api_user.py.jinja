@@ -1,0 +1,9 @@
+"""Locust entry point for the smoke and load profiles: the users, no load shape.
+
+The user classes live in ``src/{{ package_name }}/users.py``, where the offline tests and
+mypy see them; Locust picks up every user class this module imports.
+"""
+
+from {{ package_name }}.users import SiteUser
+
+__all__ = ["SiteUser"]

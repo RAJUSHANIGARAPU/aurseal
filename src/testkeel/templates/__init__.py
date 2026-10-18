@@ -21,6 +21,7 @@ TYPES: tuple[str, ...] = (
     "a11y",
     "strategy",
     "perf-k6",
+    "perf-locust",
 )
 
 #: Answers a caller may pass. Everything else is computed or has a default.

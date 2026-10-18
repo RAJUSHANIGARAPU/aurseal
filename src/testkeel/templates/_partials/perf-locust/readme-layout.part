@@ -1,0 +1,11 @@
+locustfiles/    entry points: api_user.py (smoke, load), stress.py (with the load shape)
+profiles/       smoke.conf, load.conf, stress.conf: one Locust config per profile
+slo.json        the SLO budgets the post-run check enforces
+src/{{ package_name }}/
+  users.py      simulated users: task sets, weights, pauses
+  shapes.py     StepRamp, the stress profile's load shape
+  slo.py        reads Locust's CSV stats and fails on a breached budget
+  guard.py      refuses load against a non-local target (make load / stress)
+  settings.py   APP_* environment settings
+tests/
+  unit/         offline tests: SLO check, users, shape, guard, settings

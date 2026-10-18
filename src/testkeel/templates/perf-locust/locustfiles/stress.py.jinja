@@ -1,0 +1,10 @@
+"""Locust entry point for the stress profile: the same users, driven by ``StepRamp``.
+
+With a load shape in the locustfile, the shape decides the user count and ends the run;
+``users``, ``spawn-rate`` and ``run-time`` from the command line no longer apply.
+"""
+
+from {{ package_name }}.shapes import StepRamp
+from {{ package_name }}.users import SiteUser
+
+__all__ = ["SiteUser", "StepRamp"]
