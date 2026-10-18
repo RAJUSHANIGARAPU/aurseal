@@ -1,0 +1,13 @@
+# One item by id. The fragment keeps the selection in one place for every item query.
+query ItemById($id: ID!) {
+  item(id: $id) {
+    ...ItemFields
+  }
+}
+
+fragment ItemFields on Item {
+  id
+  name
+  price
+  tags
+}

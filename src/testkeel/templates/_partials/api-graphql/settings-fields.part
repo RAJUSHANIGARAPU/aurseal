@@ -1,0 +1,4 @@
+    api_base_url: str = Field(
+        default="{{ api_base_url }}",
+        description="GraphQL endpoint of the API under test (the URL queries are POSTed to)",
+    )

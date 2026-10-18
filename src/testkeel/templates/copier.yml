@@ -19,6 +19,7 @@ type:
   choices:
     - web-ui
     - api-rest
+    - api-graphql
     - strategy
 
 layer:
@@ -70,7 +71,7 @@ api_base_url:
   type: str
   help: Base URL of the API under test
   default: "https://api.example.test"
-  when: "{{ type == 'api-rest' }}"
+  when: "{{ type in ['api-rest', 'api-graphql'] }}"
   validator: >-
     {% if not (api_base_url | regex_search('^https?://[^\\s/]+')) %}an http(s) URL{% endif %}
 

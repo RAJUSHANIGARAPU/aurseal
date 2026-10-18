@@ -1,0 +1,4 @@
+    "gql[httpx]>=4.4",
+    "graphql-core>=3.3",
+    "httpx>=0.28",
+    "pydantic>=2.9",

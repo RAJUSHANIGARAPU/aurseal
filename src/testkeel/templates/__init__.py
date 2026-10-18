@@ -14,7 +14,7 @@ from typing import Any
 TEMPLATES_DIR = Path(__file__).resolve().parent
 
 #: Types with a template directory. Order is the order ``list-types`` shows.
-TYPES: tuple[str, ...] = ("web-ui", "api-rest", "strategy")
+TYPES: tuple[str, ...] = ("web-ui", "api-rest", "api-graphql", "strategy")
 
 #: Answers a caller may pass. Everything else is computed or has a default.
 DATA_KEYS: frozenset[str] = frozenset(

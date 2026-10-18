@@ -1,0 +1,68 @@
+"""The snapshot tooling: stable SDL, a readable diff, breaking changes named."""
+
+from __future__ import annotations
+
+import json
+
+import httpx
+import pytest
+from graphql import BreakingChangeType, GraphQLSchema, build_schema, graphql_sync
+
+from {{ package_name }} import contract
+from {{ package_name }}.client import GraphQLClient
+
+pytestmark = pytest.mark.offline
+
+OLD = build_schema("type Query { item(id: ID!): Item }  type Item { id: ID! name: String }")
+NEW = build_schema("type Query { item(id: ID!): Item }  type Item { id: ID! }")
+
+
+def serving(served: GraphQLSchema) -> GraphQLClient:
+    """A client whose endpoint executes every request against ``served``, in process."""
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content)
+        result = graphql_sync(served, payload["query"], variable_values=payload.get("variables"))
+        return httpx.Response(200, json={"data": result.data})
+
+    return GraphQLClient("https://api.example.test/graphql", transport=httpx.MockTransport(handle))
+
+
+def test_the_shipped_snapshot_parses():
+    assert contract.load_snapshot().query_type is not None
+
+
+def test_sdl_is_independent_of_declaration_order():
+    reordered = build_schema(
+        "type Item { name: String id: ID! } type Query { item(id: ID!): Item }"
+    )
+    assert contract.to_sdl(reordered) == contract.to_sdl(OLD)
+
+
+def test_a_removed_field_is_named_as_a_breaking_change_and_shows_in_the_diff():
+    found = contract.changes(OLD, NEW)
+    assert [change.type for change in found] == [BreakingChangeType.FIELD_REMOVED]
+    assert "Item.name" in found[0].description
+    assert "-  name: String" in contract.diff(OLD, NEW)
+
+
+def test_identical_schemas_have_no_diff():
+    assert contract.diff(OLD, OLD) == ""
+
+
+def test_introspection_round_trips_through_the_client():
+    assert contract.diff(OLD, contract.introspect(serving(OLD))) == ""
+
+
+def test_record_writes_the_source_header_and_the_schema(tmp_path):
+    path = tmp_path / "schema.graphql"
+    contract.record(serving(OLD), "https://api.example.test/graphql", path)
+
+    assert contract.snapshot_source(path) == "https://api.example.test/graphql"
+    assert contract.diff(OLD, contract.load_snapshot(path)) == ""
+
+
+def test_a_snapshot_without_the_header_has_no_source(tmp_path):
+    path = tmp_path / "schema.graphql"
+    path.write_text(contract.to_sdl(OLD), encoding="utf-8")
+    assert contract.snapshot_source(path) == ""

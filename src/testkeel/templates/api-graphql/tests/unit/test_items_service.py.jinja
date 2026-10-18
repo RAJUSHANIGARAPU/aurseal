@@ -1,0 +1,47 @@
+"""The service turns answers into models, and refuses answers that drift from them."""
+
+from __future__ import annotations
+
+import httpx
+import pytest
+from pydantic import ValidationError
+
+from {{ package_name }}.client import GraphQLClient
+from {{ package_name }}.models import Item
+from {{ package_name }}.services import ItemsService
+
+pytestmark = pytest.mark.offline
+
+VALID = {"id": "7", "name": "Kettle", "price": 24.5, "tags": ["kitchen"]}
+
+
+def service_answering(item: object) -> ItemsService:
+    def handle(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"data": {"item": item}})
+
+    return ItemsService(
+        GraphQLClient("https://api.example.test/graphql", transport=httpx.MockTransport(handle))
+    )
+
+
+def test_an_item_is_returned_as_a_model():
+    assert service_answering(VALID).by_id("7") == Item.model_validate(VALID)
+
+
+def test_an_unknown_id_answered_with_null_is_none_not_an_error():
+    assert service_answering(None).by_id("does-not-exist") is None
+
+
+@pytest.mark.parametrize(
+    "drift",
+    [
+        pytest.param({"price": "24.50"}, id="price-became-a-string"),
+        pytest.param({"id": 7}, id="id-became-a-number"),
+        pytest.param({"name": ""}, id="name-became-empty"),
+        pytest.param({"tags": None}, id="tags-became-null"),
+        pytest.param({"colour": "red"}, id="a-field-nobody-selected"),
+    ],
+)
+def test_an_answer_that_drifts_from_the_model_is_rejected(drift):
+    with pytest.raises(ValidationError):
+        service_answering({**VALID, **drift}).by_id("7")
