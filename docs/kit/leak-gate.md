@@ -1,0 +1,96 @@
+# Leak gate
+
+The leak gate keeps two kinds of text out of anything you publish: names you have listed
+as private (an employer, a client, an internal project) and personal data. It runs in
+three places:
+
+| Where | Command | What it scans |
+|---|---|---|
+| Every generated project, before it is written | `testkeel new-assignment` | the rendered tree, the project name and its slug |
+| A project you have edited since | `testkeel assignment check [PATH]` | the project tree |
+| This repository's CI | `python -m testkeel.leakgate scan` | the tree, pull request title and body, commit messages and added lines |
+
+## What it checks
+
+**Your denylist** (rules `deny.term`, `deny.qual`, `deny.re`). Text is normalised first
+(Unicode NFKC, invisible format characters removed, look-alike characters folded) and
+split into tokens at punctuation, case changes and letter/digit boundaries, so one entry
+catches the usual spellings of a name.
+
+**Built-in personal-data rules**, which need no list and so run everywhere:
+
+| Rule | Finds | Ignores |
+|---|---|---|
+| `pii.email` | an email address | reserved test domains (`example.com`, `*.test`, `*.example`, `*.invalid`, `*.localhost`) and public no-reply addresses |
+| `pii.iban` | an IBAN whose length fits its country and whose mod-97 check passes | strings that only look like one |
+| `pii.phone` | an international (`+`) number of 8 to 15 digits, or a 10-digit Dutch national number | versions, hashes, timestamps, ids, lock files |
+| `pii.home` | a home directory path that names a user, or the scanning machine's own home directory | placeholder user names |
+
+## What it prints
+
+A finding is a location and a rule id, for example `README.md:12 deny.term [e3]`
+(the entry on line 3 of the list).
+It never prints the matched text, and an error in the list names the entry by its line
+number. A log or CI summary therefore never republishes what the gate found.
+
+## Configuring the denylist
+
+The list never lives in a repository. The first source found wins:
+
+1. `--denylist <file>` (module entry point only);
+2. the environment variable `LEAK_DENYLIST`, holding the whole list (in CI: a secret);
+3. `~/.config/testkeel/denylist.txt`.
+
+One entry per line; a line starting with `#` is a comment:
+
+```text
+# synthetic examples only
+term:acme corp
+qual:acme_server.billing
+re:BUG-\d{4,}
+```
+
+| Prefix | Matches |
+|---|---|
+| `term:` | 1 to 3 tokens, in any spelling: `term:acme corp` hits `AcmeCorp`, `acme_corp` and `acme-corp.example`, but not `acmecorpus`. A single common word is rejected when the list loads; use `qual:` or a more distinctive name. |
+| `qual:` | an exact sequence of two or more tokens, for module names that are common words on their own. |
+| `re:` | a regular expression, searched in each normalised line. |
+
+A line without a prefix is a `term:`.
+
+To use it in GitHub Actions, store the list as a repository secret and pass it through
+the environment, never through an expression inside a script:
+
+```yaml
+- name: Leak check
+  env:
+    LEAK_DENYLIST: ${{ secrets.LEAK_DENYLIST }}
+  run: python -m testkeel.leakgate scan --tree .
+```
+
+## When no denylist is available
+
+- `new-assignment` and `assignment check` warn and still run the personal-data rules.
+  `assignment check --strict` fails instead (exit 2).
+- `python -m testkeel.leakgate scan` fails (exit 2) unless `--missing-list warn` is
+  given. With `--fork` (a pull request from a fork, which cannot read secrets) it reports
+  the denylist as not assessed (exit 3) when the built-in rules find nothing.
+
+Exit codes of the module entry point: 0 clean, 1 findings, 2 cannot run, 3 not assessed.
+`new-assignment` reports a failed gate as exit 4 and writes nothing; `assignment check`
+reports findings as exit 4.
+
+## False positives
+
+- A personal-data false positive goes in `leakgate-allow.toml` at the root of the scanned
+  tree, with a rule, a path glob and a reason:
+
+  ```toml
+  [[allow]]
+  rule = "pii.phone"
+  path = "tests/fixtures/**"
+  reason = "invented numbers in the form validation table"
+  ```
+
+- A denylist false positive is fixed in the list itself. Denylist rules cannot be
+  allowlisted in a committed file, because the entry would have to describe the hit.

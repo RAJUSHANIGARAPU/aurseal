@@ -60,3 +60,6 @@ evidence-in/
 # Local scratch notes and session handoff drafts
 docs/local-*.md
 *.handoff-draft.md
+
+# Documentation site build output (mkdocs build)
+/site/

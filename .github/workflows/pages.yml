@@ -1,0 +1,123 @@
+name: Docs
+
+# Builds the documentation site with `mkdocs build --strict` (a broken link in a page or in
+# the README fails it) and publishes it to GitHub Pages, with the latest live report of
+# each example under reports/<example>/. A pull request only builds; publishing happens
+# from main and after each nightly examples run. This workflow never calls a third-party
+# site: the reports come from the nightly run's artifacts.
+# Why: docs/ci-decisions.md#docs-site
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+      - "requirements-docs.txt"
+      - "README.md"
+      - "tools/docs_site/**"
+      - "examples/**"
+      - ".github/workflows/pages.yml"
+  workflow_run:
+    workflows: ["Examples (live)"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    name: Build the site
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: requirements-docs.txt
+
+      - name: Install MkDocs
+        run: pip install -r requirements-docs.txt
+
+      - name: Build (strict)
+        run: mkdocs build --strict --site-dir site
+
+      # The nightly run that triggered this one, or else the latest completed nightly run
+      # on main. Its artifacts live 7 days; an example without a report gets a page that
+      # says so rather than a dead link.
+      - name: Add the example reports
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TRIGGER_RUN_ID: ${{ github.event.workflow_run.id }}
+          TRIGGER_BRANCH: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          run_id=""
+          if [ "$TRIGGER_BRANCH" = "main" ]; then
+            run_id="$TRIGGER_RUN_ID"
+          fi
+          if [ -z "$run_id" ]; then
+            run_id=$(gh run list --workflow examples-nightly.yml --branch main --status completed \
+              --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+          fi
+          downloads="$RUNNER_TEMP/example-reports"
+          mkdir -p "$downloads"
+          if [ -n "$run_id" ] && gh run download "$run_id" --pattern 'example-*' --dir "$downloads"; then
+            echo "Example reports from run $run_id"
+          else
+            echo "::notice title=Example reports::no nightly report available; publishing placeholders"
+          fi
+          for example_dir in examples/*/; do
+            example=$(basename "$example_dir")
+            target="site/reports/$example"
+            mkdir -p "$target"
+            if [ -f "$downloads/example-$example/report.html" ]; then
+              cp -R "$downloads/example-$example/." "$target/"
+              cp "$target/report.html" "$target/index.html"
+            else
+              printf '%s\n' \
+                '<!doctype html><meta charset="utf-8"><title>No report yet</title>' \
+                "<h1>$example</h1>" \
+                '<p>No live report is available from the latest nightly examples run (reports are kept for 7 days).</p>' \
+                '<p><a href="../../kit/examples/">How the example reports are produced</a></p>' \
+                > "$target/index.html"
+            fi
+          done
+
+      - name: Upload the site
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+          retention-days: 1
+
+  deploy:
+    name: Publish to GitHub Pages
+    needs: build
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v5

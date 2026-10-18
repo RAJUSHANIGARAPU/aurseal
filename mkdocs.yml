@@ -1,0 +1,84 @@
+# The documentation site, published to GitHub Pages by .github/workflows/pages.yml.
+# Build locally: pip install -r requirements-docs.txt && mkdocs build --strict
+site_name: testkeel
+site_description: >-
+  Open-source test automation kit: scaffold test projects, check them for leaks,
+  report on results.
+site_url: https://rajushanigarapu.github.io/wiki_project/
+repo_url: https://github.com/RAJUSHANIGARAPU/wiki_project
+repo_name: wiki_project
+edit_uri: edit/main/docs/
+copyright: MIT licence
+
+docs_dir: docs
+strict: true
+
+theme:
+  name: material
+  features:
+    - content.code.copy
+    - navigation.indexes
+    - navigation.sections
+    - navigation.top
+    - search.highlight
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/weather-night
+        name: Dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/weather-sunny
+        name: Light mode
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.highlight
+  - pymdownx.superfences
+
+# Links that leave docs/ are rewritten to the repository host after checking the target
+# exists; README links are checked before the build (tools/docs_site/hooks.py).
+hooks:
+  - tools/docs_site/hooks.py
+
+validation:
+  omitted_files: warn
+  absolute_links: warn
+  unrecognized_links: info
+  anchors: warn
+
+# Working notes for contributors debugging the framework's own browser tests, not
+# documentation for users of the kit or the framework.
+exclude_docs: |
+  ai_learnings.md
+
+# One page per framework feature, reached from the features index rather than the nav;
+# the artefact samples are reached from artefacts.md.
+not_in_nav: |
+  features/*.md
+  artefact-samples/
+
+nav:
+  - Home: index.md
+  - Kit:
+      - kit/index.md
+      - Quickstart: kit/quickstart.md
+      - CLI reference: kit/cli.md
+      - Templates: kit/templates.md
+      - Examples: kit/examples.md
+      - Leak gate: kit/leak-gate.md
+      - Contributing: kit/contributing.md
+  - Framework:
+      - Goals: vision.md
+      - What runs where: whats-live.md
+      - When is a green run evidence: green-is-evidence.md
+      - CI decisions: ci-decisions.md
+      - Artefacts a run writes: artefacts.md
+      - Platform integration API: integration_api.md
+      - Features: features/README.md
