@@ -110,3 +110,23 @@ entries:
   - fingerprint: "bandit:B324:qaplatform/manual.py:37f7c77d81cc"
     reason: "sha1 only derives a revision id from a manual case's steps; fix: usedforsecurity=False"
     expires: 2027-01-16
+
+  # Second triage (code moved or rebuilt since the first): same reasons as the entries above.
+  - fingerprint: "bandit:B314:gate/evidence.py:ba201de75d93"
+    reason: "parses JUnit XML written by this repo's own test run; fix: defusedxml"
+    expires: 2027-01-18
+  - fingerprint: "bandit:B314:tools/ci_reader.py:ba963c8eba98"
+    reason: "parses JUnit XML from the configured CI's report artifact; fix: defusedxml"
+    expires: 2027-01-18
+  - fingerprint: "bandit:B310:tools/slash/coverage_gaps.py:3ba66faf9437"
+    reason: "user-given URL, scheme already restricted to http(s) before urlopen"
+    expires: 2027-01-18
+  - fingerprint: "bandit:B314:tools/slash/junit.py:b48ab22d3e14"
+    reason: "parses local JUnit XML from this repo's test runs; fix: defusedxml"
+    expires: 2027-01-18
+  - fingerprint: "bandit:B310:tools/slash/openapi_plan.py:8b28b2b43716"
+    reason: "user-given URL, scheme already restricted to http(s) before urlopen"
+    expires: 2027-01-18
+  - fingerprint: "bandit:B310:tools/slash/prd.py:8b28b2b43716"
+    reason: "user-given URL, scheme already restricted to http(s) before urlopen"
+    expires: 2027-01-18
