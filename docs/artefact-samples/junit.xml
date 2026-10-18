@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="2" tests="4" time="0.000" timestamp="2000-01-01T00:00:00Z" hostname="localhost"><testcase classname="scripts.artefact_samples.sample_suite" name="test_a_letter_renders_its_greeting" time="0.000"><properties><property name="requirements" value="REQ-1" /></properties></testcase><testcase classname="scripts.artefact_samples.sample_suite" name="test_a_failing_expectation" time="0.000"><failure message="AssertionError: the sample run needs one real failure&#10;assert ['Total: 10.00'] == ['Total: 12.00']&#10;  &#10;  At index 0 diff: 'Total: 10.00' != 'Total: 12.00'&#10;  Use -v to get more diff">def test_a_failing_expectation():
+        lines = render_lines("Total: {{total}}", {"total": "10.00"})
+&gt;       assert lines == ["Total: 12.00"], "the sample run needs one real failure"
+E       AssertionError: the sample run needs one real failure
+E       assert ['Total: 10.00'] == ['Total: 12.00']
+E         
+E         At index 0 diff: 'Total: 10.00' != 'Total: 12.00'
+E         Use -v to get more diff
+
+$REPO/scripts/artefact_samples/sample_suite.py:23: AssertionError</failure></testcase><testcase classname="scripts.artefact_samples.sample_suite" name="test_skipped_without_a_target" time="0.000"><skipped type="pytest.skip" message="no target configured for this sample">$REPO/scripts/artefact_samples/sample_suite.py:27: no target configured for this sample</skipped></testcase><testcase classname="scripts.artefact_samples.sample_suite" name="test_purpose_line_is_present" time="0.000"><properties><property name="known_defect" value="BUG-7" /></properties><skipped type="pytest.xfail" message="known defect BUG-7 is open: the sample planted defect: the purpose line is dropped. If this passed, BUG-7 looks fixed: verify, close it, and remove the marker" /></testcase></testsuite></testsuites>

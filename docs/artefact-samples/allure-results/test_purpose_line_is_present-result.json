@@ -1,0 +1,49 @@
+{
+  "fullName": "scripts.artefact_samples.sample_suite#test_purpose_line_is_present",
+  "historyId": "2602fce59ae89c3ceeb0cf1fd95145f1",
+  "labels": [
+    {
+      "name": "parentSuite",
+      "value": "scripts.artefact_samples"
+    },
+    {
+      "name": "suite",
+      "value": "sample_suite"
+    },
+    {
+      "name": "host",
+      "value": "$HOST"
+    },
+    {
+      "name": "thread",
+      "value": "$PID-MainThread"
+    },
+    {
+      "name": "framework",
+      "value": "pytest"
+    },
+    {
+      "name": "language",
+      "value": "cpython3"
+    },
+    {
+      "name": "package",
+      "value": "scripts.artefact_samples.sample_suite"
+    }
+  ],
+  "name": "test_purpose_line_is_present",
+  "start": 0,
+  "status": "skipped",
+  "statusDetails": {
+    "message": "XFAIL known defect BUG-7 is open: the sample planted defect: the purpose line is dropped. If this passed, BUG-7 looks fixed: verify, close it, and remove the marker\n\nAssertionError: BUG-7: purpose line missing\nassert 'Purpose' in 'Hello'",
+    "trace": "@pytest.mark.known_defect(\n        \"BUG-7\",\n        reason=\"the sample planted defect: the purpose line is dropped\",\n        raises=AssertionError,\n        match=r\"purpose line missing\",\n    )\n    def test_purpose_line_is_present():\n        # A plain local, so the assertion message carries no object repr (no memory address).\n        text = \" \".join(render_lines(\"Hello\", {}))\n>       assert \"Purpose\" in text, \"BUG-7: purpose line missing\"\nE       AssertionError: BUG-7: purpose line missing\nE       assert 'Purpose' in 'Hello'\n\n$REPO/scripts/artefact_samples/sample_suite.py:39: AssertionError"
+  },
+  "stop": 0,
+  "testCaseId": "2602fce59ae89c3ceeb0cf1fd95145f1",
+  "titlePath": [
+    "scripts",
+    "artefact_samples",
+    "sample_suite.py"
+  ],
+  "uuid": "00000000-0000-0000-0000-000000000009"
+}

@@ -1,0 +1,1 @@
+{"detail": "BUG-7: purpose line missing assert 'Purpose' in 'Hello'", "kind": "expected_red", "nodeid": "scripts/artefact_samples/sample_suite.py::test_purpose_line_is_present", "run_id": "sample-run", "subject": "BUG-7", "ticket": "BUG-7", "timestamp": "2000-01-01T00:00:00Z", "verdict": "reproduces"}

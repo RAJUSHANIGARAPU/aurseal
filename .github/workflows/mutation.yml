@@ -1,0 +1,34 @@
+name: Mutation score
+
+# Minutes per package, so nightly and on dispatch only. Its own workflow because one job
+# of up to 90 minutes would break the 60-minute run budget of tests.yml; the lint gives
+# this file its own budget (gate.workflow_lint.ShapeOptions.budget_overrides).
+on:
+  schedule:
+    - cron: "47 2 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  mutation:
+    name: Mutation score
+    if: github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install -r requirements.txt -r requirements-checks.txt
+      - name: Mutation score gate
+        run: python -m checks.mutation
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mutation-metrics
+          path: reports/metrics/
+          retention-days: 7

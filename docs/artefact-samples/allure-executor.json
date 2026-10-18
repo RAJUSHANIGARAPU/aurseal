@@ -1,0 +1,6 @@
+{
+  "name": "Local",
+  "type": "local",
+  "buildName": "local @ $HOST",
+  "reportName": "Test run - n/a"
+}

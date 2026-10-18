@@ -1,0 +1,60 @@
+name: Release verdict
+
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: "release id"
+        required: true
+      candidate:
+        description: "candidate id"
+        required: true
+      plan:
+        description: "plan file"
+        required: true
+        default: "plans/demo-regression.yaml"
+  push:
+    tags: ["v*"]
+
+# Never cancel a release verdict in progress: a cancelled run leaves no verdict.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  TEST_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+  # Inputs reach the scripts as environment variables, never interpolated into them.
+  PLAN: ${{ inputs.plan || 'plans/demo-regression.yaml' }}
+  RELEASE: ${{ inputs.release || github.ref_name }}
+  CANDIDATE: ${{ inputs.candidate || github.sha }}
+
+jobs:
+  # Runs a plan, then the strict verdict. The verdict step's exit code is the gate
+  # (1 NO_GO, 3 NO_VERDICT). tests.yml stays the CI-selection reference.
+  verdict:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - run: pip install -r requirements.txt
+      - name: Run the plan
+        run: pytest --plan "$PLAN" -n auto -m "not demo_ui"
+        env:
+          RUN_TRUST: report
+          RUN_TRUST_LANE: release
+      - name: Release verdict
+        if: always()
+        run: >
+          python -m traceability release decide
+          --release "$RELEASE" --candidate "$CANDIDATE"
+          --commit "$GITHUB_SHA" --reports reports/ --plan "$PLAN"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: release-verdict
+          path: reports/
+          retention-days: 7

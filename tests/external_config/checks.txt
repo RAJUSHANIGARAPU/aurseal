@@ -1,0 +1,5 @@
+# One line per binding test: what it checks against the external configuration.
+# tests/external_config/test_config_binding.py pins this list to its tests one to one.
+the external subscription workflow parses with the generators' workflow model
+the external workflow has the same states as the suite's own copy
+the external workflow has the same transitions as the suite's own copy

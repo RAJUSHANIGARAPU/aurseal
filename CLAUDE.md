@@ -28,6 +28,8 @@ api/                 # API layer — direct HTTP calls
 ui/                  # page objects, locators, flows, testdata
 core/                # base page, config reader, logger, core/ai modules
 verification/        # equivalence oracle, invariants, batch/idempotency probes, known_defect
+qaplatform/          # platform service, REST API (/api/v1), UI (/ui), tokens, audit, projects; python -m qaplatform
+generators/          # workflow YAML -> graph, spec, pytest cases; python -m generators.cli
 config/              # environments.json (qa, staging), settings.py
 reports/             # test artifacts and screenshots
 tests/               # offline framework tests
@@ -62,16 +64,17 @@ into the workflow in the same change — never widen the gate to tolerate the ga
 |---------|-------------|
 | `/analyze-trace` | Extracts actions and errors from a Playwright trace ZIP |
 | `/analyze-test-failure` | Reads pytest JUnit XML and diagnoses failures |
-| `/auto-run-fix` | Autonomous loop: run → analyze → fix → rerun until passing |
-| `/generate-test-from-trace` | Generates a complete pytest test from a trace ZIP |
-| `/generate-from-ts <file.ts>` | Converts a `playwright codegen` recording → Python Page Object + pytest test + locators + testdata; runs 3×, auto-fixes, reports push-ready |
-| `/generate-from-postman <file.json>` | Converts a Postman collection → pytest API tests via existing `api/agents/` pipeline; falls back to manual generation |
-| `/generate-from-swagger <url\|file>` | Reads OpenAPI spec → pytest API test classes (happy path + auth + errors); runs 3× |
-| `/generate-from-prd <path\|url\|text>` | Reads PRD/user story → extracts scenarios → spec file + pytest tests; runs 3× |
-| `/detect-coverage-gaps [spec\|url\|all]` | Compares OpenAPI/spec files vs existing tests; reports untested endpoints/scenarios; optionally invokes generate skills |
-| `/test-health-report` | Runs full suite, parses JUnit XML + healing events, outputs pass/fail/healed summary with deploy-gate recommendation |
-| `/create-pr [title] [branch]` | Pushes branch, opens GitHub PR via `gh` CLI with test health summary attached |
+| `/generate-from-workflow <workflow.yaml>` | Workflow YAML -> spec -> page object + pytest module (python -m generators.cli) |
 | `/graphify` | Builds or queries a knowledge graph of this codebase |
+| `/auto-run-fix [-k filter] [env]` | Runs a red selection until 3 consecutive greens, fixing selectors and waits only (manual) |
+| `/create-pr ["title"] [target]` | Pushes the branch and opens a PR with commits, files, test health and healing summary (manual) |
+| `/detect-coverage-gaps [all\|spec\|url]` | Specs, OpenAPI and Postman items without tests; dated report, generates only on a yes |
+| `/generate-from-postman <collection.json>` | Postman collection -> pytest API tests (pipeline, then a deterministic fallback) (manual) |
+| `/generate-from-swagger <spec> [feature]` | OpenAPI document -> per-tag API tests: success plus the 400/401/404 each operation can produce, marked `generated_batch(name=...)` (manual) |
+| `/generate-from-ts <recording.spec.ts> [flow]` | Codegen recording -> cleaned page object, test, locator and data files, fixed to 3 passes (manual) |
+| `/generate-from-prd <file\|url\|text> [flow]` | Requirements -> specs in `specs/` first, then UI/API tests run to 3 passes (manual) |
+| `/generate-test-from-trace [trace.zip] [name]` | Trace -> `ui/tests/test_<name>.py` (+ page object) via TestGenerator, compiled and run (manual) |
+| `/test-health-report [pytest args]` | Runs the suite and writes a timestamped health report with a Block / Warn / Pass gate |
 
 Skills live in `.claude/commands/`.
 
@@ -126,6 +129,11 @@ feature: <name>     # used as pytest marker
   without it they return `None` or a descriptive message. They have no CLI fallback.
 - `ClaudeLLMClient` (`api/llm/claude_client.py`, used by `autonomous_ui/`, `plugins/`,
   `orchestration/`, `core/agents/healer_agent.py`) uses the API key when set, else falls back to the `claude -p` CLI.
+- `AI_TRANSPORT=auto|api|cli|none` (default `auto`) forces a transport; `none` returns the named
+  failure `transport_disabled` with no network call or subprocess. `AI_CLI_PATH` points at a CLI not on PATH.
+- Locator heals are PROPOSED into `ui/locators/<name>.heals-pending.json` by default;
+  `HEAL_AUTOPERSIST=true` writes the registry directly. Every healing decision is logged to
+  `reports/healing/healing-events.jsonl` (`HEAL_EVENTS_FILE`).
 
 ## Autonomous Run-Fix Loop
 

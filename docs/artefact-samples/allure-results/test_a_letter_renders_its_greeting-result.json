@@ -1,0 +1,59 @@
+{
+  "attachments": [
+    {
+      "name": "stderr",
+      "source": "00000000-0000-0000-0000-000000000007-attachment.txt",
+      "type": "text/plain"
+    }
+  ],
+  "fullName": "scripts.artefact_samples.sample_suite#test_a_letter_renders_its_greeting",
+  "historyId": "eca1233ad70127a26044c8eacc0fc2c5",
+  "labels": [
+    {
+      "name": "parentSuite",
+      "value": "scripts.artefact_samples"
+    },
+    {
+      "name": "suite",
+      "value": "sample_suite"
+    },
+    {
+      "name": "host",
+      "value": "$HOST"
+    },
+    {
+      "name": "thread",
+      "value": "$PID-MainThread"
+    },
+    {
+      "name": "framework",
+      "value": "pytest"
+    },
+    {
+      "name": "language",
+      "value": "cpython3"
+    },
+    {
+      "name": "package",
+      "value": "scripts.artefact_samples.sample_suite"
+    }
+  ],
+  "links": [
+    {
+      "name": "REQ-1",
+      "type": "requirement",
+      "url": "REQ-1"
+    }
+  ],
+  "name": "test_a_letter_renders_its_greeting",
+  "start": 0,
+  "status": "passed",
+  "stop": 0,
+  "testCaseId": "eca1233ad70127a26044c8eacc0fc2c5",
+  "titlePath": [
+    "scripts",
+    "artefact_samples",
+    "sample_suite.py"
+  ],
+  "uuid": "00000000-0000-0000-0000-000000000008"
+}

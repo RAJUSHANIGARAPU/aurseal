@@ -2,18 +2,132 @@ name: Tests
 
 on:
   push:
-    branches: [main]
+    branches: [main, "bringup/**"]
   pull_request:
     branches: [main]
+  schedule:
+    # Off the hour: hosted CI queues heavily at :00.
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+    # Validated and mapped to the gate command by gate.run_inputs before any test starts.
+    # Why: docs/ci-decisions.md#manual-run-inputs
+    inputs:
+      env:
+        description: "Target environment (config/environments.json)"
+        type: choice
+        options: [qa, staging]
+        default: qa
+      preset:
+        description: "Test preset (all adds no marker)"
+        type: choice
+        options: [all, smoke, regression]
+        default: all
+      auth_mode:
+        description: "Auth mode (configured = the environment's own)"
+        type: choice
+        options: [configured, none, ui, password, token]
+        default: configured
+      token:
+        description: "Bearer token (auth_mode=token only; masked)"
+        type: string
+        default: ""
+      headless:
+        description: "Headless browser"
+        type: boolean
+        default: true
+      step_screenshots:
+        description: "Screenshot on every report step"
+        type: boolean
+        default: false
+      lanes:
+        description: "Comma-separated extra lanes (slow, on_demand, regression, browser-matrix, checks)"
+        type: string
+        default: ""
+      selection:
+        description: "Run only these node ids/globs (bring-up grammar); drops every exclusion"
+        type: string
+        default: ""
+      keep_all_evidence:
+        description: "Keep trace and video for passing tests too"
+        type: boolean
+        default: false
+      strict_oracles:
+        description: "Assertions proven offline but not yet watched on a live target"
+        type: boolean
+        default: false
+      require_config_binding:
+        description: "Fail when the external configuration does not bind"
+        type: boolean
+        default: false
+      seed_mode:
+        description: "Test-data source"
+        type: choice
+        options: [fresh, reuse, targets]
+        default: fresh
+      entity_allowlist:
+        description: "Comma-separated entity ids (seed_mode=targets only)"
+        type: string
+        default: ""
+      browser_matrix:
+        description: "Run the browser matrix"
+        type: boolean
+        default: false
+      run_token_lane:
+        description: "Run the render lane (needs auth_mode=token and a token)"
+        type: boolean
+        default: false
 
+# One run per ref. A newer pull-request run cancels the superseded one; a default-branch
+# run is never cancelled, because a cancelled run leaves no verdict.
+# Why: docs/ci-decisions.md#concurrency-and-time-budget
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # One id for every pytest invocation of this workflow attempt, so a rerun
+  # merges into its run's integrity verdict instead of replacing it.
+  TEST_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+  # Recorded on the run row by the results store (gate.schedules.trigger_from_env reads
+  # GITHUB_EVENT_NAME itself; this override is only needed for non-GitHub triggers).
+  # RUN_TRIGGER: api
+
+# Every job's `if:` carries the nightly switch: with the repository variable
+# NIGHTLY_ENABLED=false a scheduled run does nothing but the `nightly` line (and the
+# secret scan, which lives in secret-scan.yml and nothing may skip).
+# Why: docs/ci-decisions.md#nightly
 jobs:
+  # Scheduled runs only: one summary line saying what this nightly could not run, or that
+  # the nightly is switched off.
+  nightly:
+    name: Nightly note
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      prefix: ${{ steps.note.outputs.prefix }}
+      render_token: ${{ steps.note.outputs.render_token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Scheduled-run note
+        id: note
+        run: python -m gate.nightly summary
+        env:
+          NIGHTLY_ENABLED: ${{ vars.NIGHTLY_ENABLED }}
+          RENDER_TOKEN_PRESENT: ${{ secrets.RENDER_TOKEN != '' }}
+
   # The framework's own logic: contract testing, flakiness detection, memory,
   # web discovery, plugins, autonomous UI healing. 514 tests, no browser, no
   # network, ~25 seconds. None of it ran in CI until now — the marker-based
   # selection below picked 7 tests out of 523 and said nothing about the rest.
   # tests/test_ci_selection.py is what keeps that from happening again.
+  # Why: docs/ci-decisions.md#lanes and docs/ci-decisions.md#empty-selection
   offline:
     name: Offline suite
+    if: "!startsWith(github.ref, 'refs/heads/bringup/') && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')"
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -36,16 +150,153 @@ jobs:
       - name: Check Formatting
         run: ruff format --check .
 
+      - name: Requirement links
+        run: python -m traceability links --check
+        env:
+          REQUIREMENTS_STRICT: "true"
+
+      - name: Test plans
+        run: python -m traceability plan lint plans/
+
+      - name: Coverage gaps (ratchet)
+        run: >
+          python -m traceability gaps --openapi demo_sut/openapi.json --specs specs
+          --requirements --baseline traceability/gap-baseline.json
+
+      - name: Generated tests are drafts or approved
+        run: python -m traceability review lint
+
+      # The external configuration the binding tests check against (default: this
+      # repository's default branch, so it binds with zero setup). Not bound is a warning
+      # and an UNSTABLE ext-config lane verdict; with require_config_binding it fails.
+      # Why: docs/ci-decisions.md#external-config
+      - name: Check out the external configuration
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.EXT_CONFIG_REPO || github.repository }}
+          ref: ${{ vars.EXT_CONFIG_REF || github.event.repository.default_branch }}
+          path: ext-config
+          fetch-depth: 1
+          persist-credentials: false
+          token: ${{ secrets.EXT_CONFIG_TOKEN || github.token }}
+
+      - name: Bind the external configuration
+        run: >
+          python -m gate.external_config verify --path ext-config
+          --sub-path "$EXT_CONFIG_SUB_PATH" --sentinel "$EXT_CONFIG_SENTINEL"
+          --repo "$EXT_CONFIG_REPO" --ref "$EXT_CONFIG_REF"
+        env:
+          EXT_CONFIG_REPO: ${{ vars.EXT_CONFIG_REPO || github.repository }}
+          EXT_CONFIG_REF: ${{ vars.EXT_CONFIG_REF || github.event.repository.default_branch }}
+          EXT_CONFIG_SUB_PATH: ${{ vars.EXT_CONFIG_SUB_PATH || 'demo_sut/config' }}
+          EXT_CONFIG_SENTINEL: ${{ vars.EXT_CONFIG_SENTINEL || 'subscription.machine.yaml' }}
+          EXT_CONFIG_REQUIRED: ${{ inputs.require_config_binding && 'true' || 'false' }}
+
       - name: Run Offline Tests
-        run: pytest tests/ -n auto
+        run: pytest tests/ -n auto -m "not demo_ui and not draft and not render_check"
+        env:
+          RUN_TRUST: fail
+          RUN_TRUST_LANE: offline
+          REQUIREMENTS_STRICT: "true"
+          EXT_CONFIG_REQUIRED: ${{ inputs.require_config_binding && 'true' || 'false' }}
+          # No model helper may bill or hang CI; every test patches its transport anyway.
+          AI_TRANSPORT: none
+
+      # The checkout is a second copy of a repository tree; nothing after the tests may scan it.
+      - name: Remove the external configuration checkout
+        if: always()
+        run: rm -rf ext-config
+
+      - name: Run Slow Lane
+        if: github.event_name == 'schedule' || contains(inputs.lanes, 'slow')
+        run: pytest tests/ -n auto -m "slow and not demo_ui and not draft and not render_check"
+        env:
+          RUN_SLOW_TESTS: "true"
+
+      - name: Contract gate (demo service spec)
+        run: |
+          mkdir -p reports
+          python -c "import json; from demo_sut.openapi import build; json.dump(build(), open('reports/demo-openapi.generated.json', 'w'))"
+          python -m contract_testing.gate openapi demo_sut/openapi.json reports/demo-openapi.generated.json --consumer demo-clients --provider demo-service
+
+      - name: Run trust
+        if: always()
+        run: |
+          python -m gate.integrity --lane offline
+          python -m gate.integrity --lane ext-config --allow-missing
+
+      - name: Traceability matrix
+        if: always()
+        run: python -m traceability matrix --reports reports/ --out reports/traceability/
+
+      - name: Build the test case catalogue
+        if: always()
+        run: python -m results catalogue build --out reports/catalogue/
+
+      - name: Upload the catalogue
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: catalogue
+          path: reports/catalogue/
+          retention-days: 7
+
+      - name: Living docs check (docs <-> tests links)
+        run: python -m results livedocs --check --catalogue reports/catalogue/catalogue.json
+
+      - name: Export the results bundle
+        if: always()
+        run: python -m results export bundle --run-id "$TEST_RUN_ID" --out reports/results/
+
+      - name: Run compare
+        if: always()
+        run: python -m results compare "$TEST_RUN_ID" --format md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload results bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: results-offline
+          path: reports/results/
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Stage evidence
+        if: always()
+        run: python -m gate.evidence stage --job offline
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evidence-offline
+          path: evidence/
+          if-no-files-found: warn
+          retention-days: 7
 
   # Everything that drives a real browser against a live third-party site.
   # Kept separate from the job above so a remote DOM change reddens the build
   # for what it is, rather than looking like a defect in framework code.
   browser:
     name: Browser suite
+    if: "!startsWith(github.ref, 'refs/heads/bringup/') && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')"
+    # Unit lane first: a red framework suite stops the run before the live site is touched.
+    needs: offline
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Per-target login secrets live in a GitHub Environment of the same name.
+    environment: ${{ inputs.env || 'qa' }}
+    # Reads tracker states; filing would need issues: write, which is not granted.
+    permissions:
+      contents: read
+      issues: read
+    env:
+      # Why: docs/ci-decisions.md#run-trust
+      # Starts at `unstable` (a FAIL verdict annotates the run, exit status unchanged);
+      # move to `fail` once the browser lane has been green for a while.
+      RUN_TRUST: unstable
+      RUN_TRUST_LANE: browser
 
     steps:
       - name: Checkout Code
@@ -59,6 +310,41 @@ jobs:
 
       - name: Install Dependencies
         run: pip install -r requirements.txt
+
+      # Read from the event payload so the token never appears unmasked in a step header.
+      - name: Mask the supplied token
+        run: |
+          token=$(jq -r '.inputs.token // empty' "$GITHUB_EVENT_PATH")
+          if [ -n "$token" ]; then echo "::add-mask::$token"; fi
+
+      - name: Resolve the run inputs
+        id: inputs
+        run: python -m gate.run_inputs resolve
+        env:
+          INPUT_ENV: ${{ inputs.env }}
+          INPUT_PRESET: ${{ inputs.preset }}
+          INPUT_AUTH_MODE: ${{ inputs.auth_mode }}
+          INPUT_TOKEN: ${{ inputs.token }}
+          INPUT_HEADLESS: ${{ inputs.headless }}
+          INPUT_STEP_SCREENSHOTS: ${{ inputs.step_screenshots }}
+          INPUT_LANES: ${{ inputs.lanes }}
+          INPUT_SELECTION: ${{ inputs.selection }}
+          INPUT_KEEP_ALL_EVIDENCE: ${{ inputs.keep_all_evidence }}
+          INPUT_STRICT_ORACLES: ${{ inputs.strict_oracles }}
+          INPUT_REQUIRE_CONFIG_BINDING: ${{ inputs.require_config_binding }}
+          INPUT_SEED_MODE: ${{ inputs.seed_mode }}
+          INPUT_ENTITY_ALLOWLIST: ${{ inputs.entity_allowlist }}
+          INPUT_BROWSER_MATRIX: ${{ inputs.browser_matrix }}
+          INPUT_RUN_TOKEN_LANE: ${{ inputs.run_token_lane }}
+
+      # Why: docs/ci-decisions.md#credentials
+      - name: Login credentials for the target environment
+        run: python -m gate.credentials preflight --env "$TEST_ENV"
+        env:
+          LOGIN_USERNAME: ${{ vars.LOGIN_USERNAME }}
+          LOGIN_PASSWORD: ${{ secrets.LOGIN_PASSWORD }}
+          SHARED_LOGIN_USERNAME: ${{ vars.SHARED_LOGIN_USERNAME }}
+          SHARED_LOGIN_PASSWORD: ${{ secrets.SHARED_LOGIN_PASSWORD }}
 
       - name: Get Playwright version
         id: pw-version
@@ -82,17 +368,666 @@ jobs:
       # `api` and `contract` were the other two markers nobody selected: one
       # test each, both needing the live site, both silently unrun since they
       # were written.
+      - name: Defect states from the trackers
+        run: python -m traceability defects sync
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Point the verdict layer at the snapshot
+        run: echo "DEFECT_STATUS_FILE=$PWD/reports/traceability/defect-status.json" >> "$GITHUB_ENV"
+
+      # The default inputs produce exactly this command (pinned by tests/gate/test_run_inputs.py).
       - name: Run Smoke Tests
-        run: pytest -m "smoke or api or contract" -n auto
+        if: steps.inputs.outputs.custom != 'true'
+        run: pytest -m "(smoke or api or contract) and not unit and not on_demand and not slow and not draft and not render_check" -n auto --browser-channel=chrome --junitxml=reports/junit-browser.xml
+
+      - name: Run with the dispatch inputs
+        if: steps.inputs.outputs.custom == 'true'
+        run: python -m gate.run_inputs run
+
+      # The accessibility examples need axe; without it they skip instead of running.
+      - name: Install check dependencies
+        run: pip install -r requirements-checks.txt
+
+      # Browser examples against the in-repo demo system (started by the demo_sut fixture).
+      # The visual examples run in the visual job (pinned image, so fonts match the baselines).
+      - name: Run Demo UI Examples
+        run: pytest tests/demo_examples -m demo_ui -n auto --browser-channel=chrome --ignore=tests/demo_examples/visual
+        env:
+          CHECKS_REQUIRE_TOOLS: "true"
+          ENDPOINT_HITS: "true"
+
+      # Report only: a live third-party change must not read as a coverage regression.
+      - name: Coverage gaps (runtime, report only)
+        if: always()
+        run: >
+          python -m traceability gaps --openapi demo_sut/openapi.json --specs specs
+          --requirements --hits reports/traceability/endpoint-hits.jsonl --reports reports/
+          --baseline traceability/gap-baseline.json --report-only
 
       - name: Run Regression Tests
-        if: github.ref == 'refs/heads/main'
-        run: pytest -m regression -n auto
+        if: github.ref == 'refs/heads/main' || github.event_name == 'schedule' || contains(inputs.lanes, 'regression')
+        run: pytest -m "regression and not draft" -n auto --browser-channel=chrome
 
-      - name: Upload Reports
+      # Drafts only: nothing is filed unless the repository variable DEFECT_AUTOFILE is
+      # true on main (and the job is then given issues: write).
+      - name: Defect drafts
+        if: always()
+        run: python -m traceability defects draft --from-run reports/
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEFECT_AUTOFILE: ${{ vars.DEFECT_AUTOFILE || 'false' }}
+
+      - name: Run trust
+        if: always()
+        run: python -m gate.integrity --lane browser
+
+      - name: Traceability matrix
+        if: always()
+        run: python -m traceability matrix --reports reports/ --out reports/traceability/
+
+      - name: Export the results bundle
+        if: always()
+        run: python -m results export bundle --run-id "$TEST_RUN_ID" --out reports/results/
+
+      - name: Run compare
+        if: always()
+        run: python -m results compare "$TEST_RUN_ID" --format md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload results bundle
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-reports
-          path: reports/
+          name: results-browser
+          path: reports/results/
+          if-no-files-found: warn
           retention-days: 7
+
+      - name: Stage evidence
+        if: always()
+        run: python -m gate.evidence stage --job browser
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evidence-browser
+          path: evidence/
+          if-no-files-found: warn
+          retention-days: 7
+
+  # Engines that need optional dependencies (requirements-checks.txt), kept out of
+  # the offline job so its install stays the plain requirements.txt.
+  checks:
+    name: Checks with optional engines
+    if: "!startsWith(github.ref, 'refs/heads/bringup/') && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')"
+    needs: offline
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - name: Install dependencies (with the check engines)
+        run: pip install -r requirements.txt -r requirements-checks.txt
+      - name: DB checks (SQLAlchemy adapter)
+        run: pytest tests/checks/db -n auto
+      # Load runs nightly (or on dispatch with lanes=checks): minutes, never on every push.
+      - name: Install k6 (pinned, checksum-verified)
+        if: github.event_name == 'schedule' || contains(inputs.lanes, 'checks')
+        run: |
+          curl -sSLo /tmp/k6.tgz https://github.com/grafana/k6/releases/download/v2.3.0/k6-v2.3.0-linux-amd64.tar.gz
+          echo "39c3117b6af817592dcd0ce4242105c0a7af10948c2a425306f0be8f7a8a8ab1  /tmp/k6.tgz" | sha256sum -c -
+          tar -xzf /tmp/k6.tgz -C /tmp && sudo install /tmp/k6-v2.3.0-linux-amd64/k6 /usr/local/bin/k6
+      - name: Load checks against the demo service
+        if: github.event_name == 'schedule' || contains(inputs.lanes, 'checks')
+        env:
+          CHECKS_REQUIRE_TOOLS: "true"
+        run: pytest tests/demo_examples/load
+      - name: Stage evidence
+        if: always()
+        run: python -m gate.evidence stage --job checks
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evidence-checks
+          path: evidence/
+          if-no-files-found: warn
+          retention-days: 7
+
+  # Visual regression in the Playwright image the Linux baselines (visual_baselines/
+  # chromium-linux/) were taken in, so fonts match.
+  visual:
+    name: Visual regression
+    if: "!startsWith(github.ref, 'refs/heads/bringup/') && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')"
+    needs: offline
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Image tag == the playwright== pin in requirements.txt (gate.workflow_lint checks it).
+    container:
+      image: mcr.microsoft.com/playwright/python:v1.58.0-jammy
+      options: --ipc=host
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies (with the check engines)
+        run: pip install -r requirements.txt -r requirements-checks.txt
+      - name: Run Visual Examples
+        run: pytest tests/demo_examples/visual -m demo_ui --browser-channel=chromium
+        env:
+          CHECKS_REQUIRE_TOOLS: "true"
+      - name: Stage evidence
+        if: always()
+        run: python -m gate.evidence stage --job visual
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evidence-visual
+          path: evidence/
+          if-no-files-found: warn
+          retention-days: 7
+
+  # Run once by hand (workflow_dispatch), download, review and commit the baselines.
+  visual-baselines:
+    name: Take visual baselines
+    if: github.event_name == 'workflow_dispatch' && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container:
+      image: mcr.microsoft.com/playwright/python:v1.58.0-jammy
+      options: --ipc=host
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install -r requirements.txt -r requirements-checks.txt
+      - name: Take baselines
+        run: pytest tests/demo_examples/visual -m demo_ui --browser-channel=chromium
+        env:
+          VISUAL_UPDATE: "1"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: visual-baselines
+          path: visual_baselines/
+          retention-days: 7
+      - name: Stage evidence
+        if: always()
+        run: python -m gate.evidence stage --job visual-baselines
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evidence-visual-baselines
+          path: evidence/
+          if-no-files-found: warn
+          retention-days: 7
+
+  # SAST and the dependency audit. No pytest command line. The secret scan runs on every
+  # push of every branch in secret-scan.yml, where nothing can skip it.
+  security:
+    name: Security checks
+    if: "!startsWith(github.ref, 'refs/heads/bringup/') && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-checks.txt
+      - name: SAST and dependency audit
+        run: python -m checks.security --tools bandit,pip-audit
+
+  # Generated tests awaiting review run here, never in the gate. Not a required check.
+  drafts:
+    name: Generated tests awaiting review
+    if: "!startsWith(github.ref, 'refs/heads/bringup/') && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')"
+    needs: offline
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - run: pip install -r requirements.txt
+      # pytest exits 5 when it selects nothing; run only when a draft exists (an
+      # unparseable queue answer leaves count empty, so the run happens and says so).
+      - name: Drafts in the review queue
+        id: queue
+        run: echo "count=$(python -m traceability review queue | sed -n 's/^\([0-9]*\) test(s) awaiting review$/\1/p')" >> "$GITHUB_OUTPUT"
+      - name: Run drafts
+        if: steps.queue.outputs.count != '0'
+        run: pytest -m draft -n auto
+        env:
+          RUN_TRUST_LANE: drafts
+          RUN_TRUST: report
+      - name: Stage evidence
+        if: always()
+        run: python -m gate.evidence stage --job drafts
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evidence-drafts
+          path: evidence/
+          if-no-files-found: warn
+          retention-days: 7
+
+  # Tests that need the optional web stack (requirements-platform.txt): the API through
+  # the real framework, a recorded curl-style sequence, uvicorn on a loopback socket.
+  # The offline job does not install the extras, so there they are not collected.
+  platform:
+    name: Platform suite
+    if: "!startsWith(github.ref, 'refs/heads/bringup/') && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')"
+    needs: offline
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - name: Install dependencies (with the platform extras)
+        run: pip install -r requirements.txt -r requirements-platform.txt
+      - name: Install Chrome + system deps
+        run: playwright install chrome --with-deps
+      - name: Platform API and UI tests
+        run: pytest tests/qaplatform_http -n auto
+        env:
+          RUN_TRUST: fail
+          RUN_TRUST_LANE: platform
+      # The browser job lacks the extras, so these are collected only here.
+      - name: Platform browser examples
+        run: pytest tests/demo_examples/platform -m demo_ui --browser-channel=chrome
+        env:
+          RUN_TRUST: fail
+          RUN_TRUST_LANE: platform-ui
+      - name: Run trust
+        if: always()
+        run: |
+          python -m gate.integrity --lane platform
+          python -m gate.integrity --lane platform-ui
+      - name: Stage evidence
+        if: always()
+        run: python -m gate.evidence stage --job platform
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evidence-platform
+          path: evidence/
+          if-no-files-found: warn
+          retention-days: 7
+
+  # Smoke on every engine. Blocking: an engine-specific defect is declared with
+  # known_defect(browsers=(...)), never with continue-on-error.
+  browser-matrix:
+    name: Smoke on ${{ matrix.browser }}
+    if: (github.ref == 'refs/heads/main' || github.event_name == 'schedule' || inputs.browser_matrix || contains(inputs.lanes, 'browser-matrix')) && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')
+    needs: offline
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: ${{ inputs.env || 'qa' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+    env:
+      RUN_TRUST: unstable
+      RUN_TRUST_LANE: browser-${{ matrix.browser }}
+      BROWSER: ${{ matrix.browser }}
+      TEST_ENV: ${{ inputs.env || 'qa' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - run: pip install -r requirements.txt
+      - name: Login credentials for the target environment
+        run: python -m gate.credentials preflight --env "$TEST_ENV"
+        env:
+          LOGIN_USERNAME: ${{ vars.LOGIN_USERNAME }}
+          LOGIN_PASSWORD: ${{ secrets.LOGIN_PASSWORD }}
+          SHARED_LOGIN_USERNAME: ${{ vars.SHARED_LOGIN_USERNAME }}
+          SHARED_LOGIN_PASSWORD: ${{ secrets.SHARED_LOGIN_PASSWORD }}
+      - name: Get Playwright version
+        id: pw-version
+        run: echo "version=$(pip show playwright | grep Version | cut -d' ' -f2)" >> $GITHUB_OUTPUT
+      - uses: actions/cache@v4
+        id: pw-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ matrix.browser }}-${{ runner.os }}-${{ steps.pw-version.outputs.version }}
+      - if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: playwright install --with-deps ${{ matrix.browser }}
+      - if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: playwright install-deps ${{ matrix.browser }}
+      # Engine via env var: the CI-selection gate tokenises this literal command.
+      - name: Run Smoke Tests
+        run: pytest -m "smoke and not draft" -n auto --browser "$BROWSER" --junitxml="reports/junit-$BROWSER.xml"
+      - name: Run trust
+        if: always()
+        run: python -m gate.integrity --lane "browser-$BROWSER"
+      - name: Stage evidence
+        if: always()
+        run: python -m gate.evidence stage --job "browser-matrix--$BROWSER"
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evidence-browser-matrix--${{ matrix.browser }}
+          path: evidence/
+          if-no-files-found: warn
+          retention-days: 7
+
+  # The document-render checks authenticate only with a bearer token CI cannot obtain on
+  # its own. Opt in on dispatch (run_token_lane + auth_mode=token + token), or nightly when
+  # the RENDER_TOKEN secret is set. Asked for without a token, it refuses instead of
+  # skipping everything and going green. Results stay apart from the gate's.
+  # Why: docs/ci-decisions.md#token-lane and docs/ci-decisions.md#reruns
+  render:
+    name: Render checks (token lane)
+    needs: nightly
+    if: >-
+      always() && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false') &&
+      ((github.event_name == 'workflow_dispatch' && inputs.run_token_lane) ||
+      (github.event_name == 'schedule' && github.ref == 'refs/heads/main' &&
+      needs.nightly.outputs.render_token == 'true'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      RUN_TRUST: fail
+      RUN_TRUST_LANE: render
+      RENDER_REQUIRED: "true"
+      AUTH_MODE: ${{ github.event_name == 'schedule' && 'token' || inputs.auth_mode }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - run: pip install -r requirements.txt
+      - name: Mask the supplied token
+        run: |
+          token=$(jq -r '.inputs.token // empty' "$GITHUB_EVENT_PATH")
+          if [ -n "$token" ]; then echo "::add-mask::$token"; fi
+      - name: Refuse without a token
+        run: python -m gate.token_lane guard
+        env:
+          SUPPLIED_TOKEN: ${{ inputs.token || secrets.RENDER_TOKEN }}
+      # Pinned to gate.token_lane.build_command(); the token reaches pytest via the environment.
+      - name: Render checks
+        run: pytest tests/render_lane -m render_check -n 0 --alluredir=reports/allure-results-render --junitxml=reports/junit-render.xml
+        env:
+          SUPPLIED_TOKEN: ${{ inputs.token || secrets.RENDER_TOKEN }}
+      - name: Run trust
+        if: always()
+        run: python -m gate.integrity --lane render
+      - name: Stage evidence
+        if: always()
+        run: python -m gate.evidence stage --job render
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evidence-render
+          path: evidence/
+          if-no-files-found: warn
+          retention-days: 7
+
+  # Store history across runners: one commit per main push on the orphan
+  # results-history branch of this repository (created on first use).
+  results-history:
+    needs: [offline, browser]
+    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main' && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    concurrency: results-history
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: results-*
+          path: artifacts/
+      - name: Check out the results-history branch (created on first use)
+        run: |
+          if git ls-remote --exit-code --heads origin results-history; then
+            git fetch --depth=1 origin results-history
+            git worktree add .results-history FETCH_HEAD
+            git -C .results-history switch -c results-history
+          else
+            git worktree add --detach .results-history
+            git -C .results-history switch --orphan results-history
+          fi
+      - name: Add this run's bundles and rebuild the database
+        run: |
+          python -m results history add --dir .results-history \
+            --bundle $(find artifacts -name 'bundle-*.ndjson')
+          python -m results history rebuild --dir .results-history
+          python -m results compare "$TEST_RUN_ID" --format md >> "$GITHUB_STEP_SUMMARY"
+      - name: Commit and push the history
+        run: |
+          cd .results-history
+          git add README.md bundles
+          git -c user.name="results-history" -c user.email="results-history@users.noreply.github.com" \
+            commit -m "results: run $TEST_RUN_ID" || echo "nothing new"
+          git push origin results-history
+
+  # Static HTML dashboard as an Actions artefact (no Pages).
+  dashboard:
+    needs: [offline, browser]
+    if: always() && !startsWith(github.ref, 'refs/heads/bringup/') && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: results-*
+          path: artifacts/
+      - name: Rebuild the store (history branch when it exists, then this run)
+        run: |
+          if git ls-remote --exit-code --heads origin results-history; then
+            git fetch --depth=1 origin results-history
+            git worktree add .results-history FETCH_HEAD
+            python -m results history rebuild --dir .results-history
+          fi
+          for b in $(find artifacts -name 'bundle-*.ndjson'); do python -m results import bundle "$b"; done
+      - name: Render
+        run: python -m results dashboard --out reports/dashboard/
+      - name: Render living docs
+        run: python -m results livedocs --out reports/dashboard/living-docs/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dashboard
+          path: reports/dashboard/
+          retention-days: 7
+
+  # The last main run's artefacts, kept as the PR-feedback baseline.
+  baseline:
+    needs: [offline, browser]
+    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main' && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: baseline/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: main-baseline
+          path: baseline/
+          retention-days: 30
+
+  # One summary comment per pull request, updated in place (forks: step summary only).
+  pr-feedback:
+    needs: [offline, browser]
+    if: always() && github.event_name == 'pull_request' && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - run: pip install -r requirements.txt
+      - uses: actions/download-artifact@v4
+        with:
+          path: run-reports/
+      - name: Latest main baseline (absent is fine, the comment says so)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          run=$(gh run list --branch main --workflow tests.yml --status success --limit 1 --json databaseId -q '.[0].databaseId' || true)
+          if [ -n "$run" ]; then gh run download "$run" -n main-baseline -D baseline/ || true; fi
+      - name: Summary and comment
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python -m traceability pr-comment --reports run-reports/ --baseline baseline/ --post
+
+  # One watched run for a test that has never run: push to bringup/<test path>.
+  # Runs only that selection, with every marker exclusion dropped, no reruns, an
+  # abstention turned into a failure, and pytest's exit status (5 included) unmasked.
+  # Why: docs/ci-decisions.md#bring-up-branches
+  bringup:
+    name: Bring-up run
+    if: startsWith(github.ref, 'refs/heads/bringup/') && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: qa
+    env:
+      TEST_ENV: qa
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install Dependencies
+        run: pip install -r requirements.txt
+
+      - name: Login credentials for the target environment
+        run: python -m gate.credentials preflight --env "$TEST_ENV"
+        env:
+          LOGIN_USERNAME: ${{ vars.LOGIN_USERNAME }}
+          LOGIN_PASSWORD: ${{ secrets.LOGIN_PASSWORD }}
+          SHARED_LOGIN_USERNAME: ${{ vars.SHARED_LOGIN_USERNAME }}
+          SHARED_LOGIN_PASSWORD: ${{ secrets.SHARED_LOGIN_PASSWORD }}
+
+      - name: Install Chrome + system deps
+        run: playwright install chrome --with-deps
+
+      - name: Run the named test once
+        run: python -m gate.lanes bringup --ref "$GITHUB_REF_NAME"
+        env:
+          # Branded Chrome, as before the channel moved out of pytest.ini addopts.
+          PYTEST_ADDOPTS: --browser-channel=chrome
+
+      - name: Stage evidence
+        if: always()
+        run: python -m gate.evidence stage --job bringup
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evidence-bringup
+          path: evidence/
+          if-no-files-found: warn
+          retention-days: 7
+
+  # Every test job's evidence, merged: one HTML report, one summary (run-trust verdicts
+  # first, per-lane totals, failing tests, and the expected artefacts that never arrived).
+  # Why: docs/ci-decisions.md#evidence-publishing
+  publish:
+    name: Publish evidence
+    needs: [offline, browser, checks, visual, visual-baselines, drafts, platform, browser-matrix, render, bringup]
+    if: always() && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      description: ${{ steps.describe.outputs.description }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - run: pip install -r requirements.txt
+      - name: Download every evidence artefact (none is tolerated)
+        uses: actions/download-artifact@v4
+        with:
+          pattern: evidence-*
+          path: evidence-in/
+          merge-multiple: false
+      - name: Merge, render and summarise
+        run: python -m gate.evidence publish --in evidence-in --out reports/published --needs-json "$NEEDS_JSON"
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+      - name: Run description
+        id: describe
+        run: python -m gate.notify describe --reports evidence-in --env "$TARGET_ENV" --prefix "$PREFIX"
+        env:
+          TARGET_ENV: ${{ inputs.env || 'qa' }}
+          PREFIX: ${{ github.event_name == 'schedule' && 'nightly' || '' }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: published-report
+          path: reports/published/
+          if-no-files-found: warn
+          retention-days: 7
+
+  # One chat message when a default-branch or scheduled run is red, or green but not
+  # evidence. Without the NOTIFY_WEBHOOK_URL secret it logs "not configured" and passes.
+  # Why: docs/ci-decisions.md#notification
+  notify:
+    name: Notify
+    needs: [publish, offline, browser, checks, visual, drafts, platform, browser-matrix, render, bringup]
+    if: always() && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - run: pip install -r requirements.txt
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: evidence-*
+          path: evidence-in/
+      - name: Notify when the run failed or is not evidence
+        run: python -m gate.notify send --reports evidence-in --needs-json "$NEEDS_JSON" --description "$DESCRIPTION"
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+          DESCRIPTION: ${{ needs.publish.outputs.description }}
+          NOTIFY_WEBHOOK_URL: ${{ secrets.NOTIFY_WEBHOOK_URL }}
+          NOTIFY_ALL_BRANCHES: ${{ vars.NOTIFY_ALL_BRANCHES || 'false' }}

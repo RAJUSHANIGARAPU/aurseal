@@ -1,0 +1,19 @@
+# gitleaks configuration: the default rule set plus narrowly scoped exceptions.
+# Every exception names the exact invented value AND the test files that use it, so a real
+# secret of the same shape anywhere else, or a different value in these files, still fails.
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Invented secrets in redaction tests: they must look real to prove they are masked"
+condition = "AND"
+paths = [
+  '''^tests/tools/test_ci_reader\.py$''',
+  '''^tests/contract_testing/test_(capture_scope|redaction)\.py$''',
+]
+regexTarget = "secret"
+regexes = [
+  '''^tok-SECRET-123$''',
+  '''^live_sk_9f3c2a77b41e$''',
+]

@@ -1,8 +1,53 @@
-version: "3.8"
-
+# Local runner and report viewer (README section "Docker Execution").
+# No secrets in this file: every secret-like value comes from the host environment or an
+# ignored .env file next to it.
+#
+#   docker compose run --rm tests                      # offline suite + demo browser examples
+#   docker compose run --rm tests tests/gate -q        # any pytest arguments
+#   docker compose --profile report up report          # live report on http://localhost:5050
+#   DEMO_SUT_URL=http://demo:8765 docker compose --profile demo run --rm tests tests/demo_examples -m demo_ui
 services:
   tests:
     build: .
     volumes:
       - ./reports:/app/reports
+    environment:
+      TEST_ENV: ${TEST_ENV:-qa}
+      BROWSER: ${BROWSER:-chromium}
+      HEADLESS: "true"
+      # Empty when unset: the features that use a model degrade gracefully without it.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      # Point the demo examples at the `demo` service instead of the in-process fixture.
+      DEMO_SUT_URL: ${DEMO_SUT_URL:-}
+    command: ["tests/", "-n", "auto", "-m", "not draft and not render_check"]
+    depends_on:
+      demo:
+        condition: service_healthy
+        required: false
     tty: true
+
+  demo:
+    profiles: [demo]
+    build: .
+    entrypoint: ["python", "-m", "demo_sut", "--host", "0.0.0.0", "--port", "8765"]
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/api/health')"
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  report:
+    profiles: [report]
+    image: frankescobar/allure-docker-service:2.27.0
+    environment:
+      CHECK_RESULTS_EVERY_SECONDS: "5"
+      KEEP_HISTORY: "1"
+      KEEP_HISTORY_LATEST: ${REPORT_HISTORY:-20}
+    ports:
+      - "${REPORT_PORT:-5050}:5050"
+    volumes:
+      - ./reports/allure-results:/app/allure-results

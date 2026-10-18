@@ -1,0 +1,49 @@
+{
+  "fullName": "scripts.artefact_samples.sample_suite#test_skipped_without_a_target",
+  "historyId": "9b4e2d211536bc57d5e6745e167f7208",
+  "labels": [
+    {
+      "name": "parentSuite",
+      "value": "scripts.artefact_samples"
+    },
+    {
+      "name": "suite",
+      "value": "sample_suite"
+    },
+    {
+      "name": "host",
+      "value": "$HOST"
+    },
+    {
+      "name": "thread",
+      "value": "$PID-MainThread"
+    },
+    {
+      "name": "framework",
+      "value": "pytest"
+    },
+    {
+      "name": "language",
+      "value": "cpython3"
+    },
+    {
+      "name": "package",
+      "value": "scripts.artefact_samples.sample_suite"
+    }
+  ],
+  "name": "test_skipped_without_a_target",
+  "start": 0,
+  "status": "skipped",
+  "statusDetails": {
+    "message": "Skipped: no target configured for this sample",
+    "trace": "('$REPO/scripts/artefact_samples/sample_suite.py', 27, 'Skipped: no target configured for this sample')"
+  },
+  "stop": 0,
+  "testCaseId": "9b4e2d211536bc57d5e6745e167f7208",
+  "titlePath": [
+    "scripts",
+    "artefact_samples",
+    "sample_suite.py"
+  ],
+  "uuid": "00000000-0000-0000-0000-000000000010"
+}

@@ -18,6 +18,7 @@ from core.ci_selection import (
     SelectionReport,
     analyse,
     collect_node_ids,
+    match_covered,
     parse_node_ids,
     parse_pytest_invocations,
     strip_execution_only_flags,
@@ -318,3 +319,60 @@ class TestSelectionReport:
     def test_invocation_str_is_readable(self):
         inv = PytestInvocation(job="test", step="Run", args=("-m", "smoke"))
         assert str(inv) == "test / Run: pytest -m smoke"
+
+
+class TestShardingIsExecutionOnly:
+    """A sharded command must be audited as the unsharded selection it splits."""
+
+    @pytest.mark.parametrize(
+        "given,expected",
+        [
+            (["-m", "regression", "-p", "gate.pytest_shard", "--shard=2/3"], ["-m", "regression"]),
+            (["tests/", "-pgate.pytest_shard", "--shard", "1/2"], ["tests/"]),
+            (["tests/", "--shard-durations", "d.json", "--shard-dir=x"], ["tests/"]),
+        ],
+    )
+    def test_shard_flags_and_plugin_are_dropped(self, given, expected):
+        assert strip_execution_only_flags(given) == expected
+
+    def test_other_plugins_are_kept(self):
+        """A plugin can change collection; only known execution-only plugins are dropped."""
+        args = ["-p", "verification.pytest_plugin", "tests/"]
+        assert strip_execution_only_flags(args) == args
+
+    def test_a_sharded_command_covers_the_whole_unsharded_selection(self):
+        sharded = collect_node_ids(["-m", "smoke", "-p", "gate.pytest_shard", "--shard=1/2"], ROOT)
+        assert sharded == collect_node_ids(["-m", "smoke"], ROOT)
+        assert sharded, "the control proves nothing if smoke selects nothing"
+
+
+class TestBrowserMatrixIsExecutionOnly:
+    """A matrix leg on another engine covers the same tests as the default engine."""
+
+    @pytest.mark.parametrize(
+        "given",
+        [
+            ["-m", "smoke", "--browser", "firefox"],
+            ["-m", "smoke", "--browser=webkit", "--browser-channel=chrome"],
+        ],
+    )
+    def test_browser_flags_are_dropped(self, given):
+        assert strip_execution_only_flags(given) == ["-m", "smoke"]
+
+    def test_engine_variants_count_as_one_test(self):
+        everything = {"t.py::test_a[chromium]", "t.py::test_b[chromium]", "t.py::test_c"}
+        selected = {"t.py::test_a[firefox]", "t.py::test_c"}
+        assert match_covered(everything, selected) == {"t.py::test_a[chromium]", "t.py::test_c"}
+
+    def test_a_firefox_leg_covers_the_smoke_tests(self, tmp_path):
+        """Positive: the only smoke command runs on firefox and still covers smoke."""
+        leg = analyse(_workflow(tmp_path, "pytest -m smoke --browser firefox"), ROOT)
+        default = analyse(_workflow(tmp_path, "pytest -m smoke"), ROOT)
+        assert leg.covered, "smoke selected nothing; the control proves nothing"
+        assert leg.covered == default.covered
+
+    def test_a_typo_marker_on_a_browser_leg_still_reports_a_gap(self, tmp_path):
+        """Negative control: the browser flag must not make a bad selection look covered."""
+        report = analyse(_workflow(tmp_path, "pytest -m smokee --browser firefox"), ROOT)
+        assert report.covered == frozenset()
+        assert report.unrun == report.all_tests

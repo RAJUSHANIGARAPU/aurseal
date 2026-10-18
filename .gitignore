@@ -27,12 +27,36 @@ generated_tests/*.py
 eval\ *
 
 # Claude local session data — never commit these
-# .claude/commands/ is intentionally tracked (AI slash command skills)
+# .claude/commands/, rules/ and hooks/ are intentionally tracked (shared project config)
 .claude/*
 !.claude/commands/
 !.claude/commands/**
+!.claude/rules/
+!.claude/rules/**
+!.claude/hooks/
+!.claude/hooks/**
+# Shared project settings (attribution off); settings.local.json stays ignored
+!.claude/settings.json
 
 # Environment (never commit real secrets)
 .env
 .env.*
 !.env.example
+
+# Login/session cache of the auth layer when TEST_AUTH_CACHE_DIR points inside the repo
+# (default ~/.cache/test-auth, outside it)
+.cache/
+
+# Unreviewed locator heal proposals: reviewed into the registry, never committed as-is
+*.heals-pending.json
+
+# External configuration checkout made by CI (gate.external_config)
+ext-config/
+
+# Staged and downloaded CI evidence (gate.evidence)
+evidence/
+evidence-in/
+
+# Local scratch notes and session handoff drafts
+docs/local-*.md
+*.handoff-draft.md
