@@ -1,0 +1,18 @@
+# The local target of `make test-local`: QuickPizza and k6 both in containers, so a pull
+# request never sends traffic to the public instance. QuickPizza answers on
+# localhost:8305 (for the readiness check) and as http://quickpizza:3333 inside the network.
+services:
+  quickpizza:
+    # Same version as docker-compose.yml, pinned by digest.
+    image: ghcr.io/grafana/quickpizza-local:0.15.31@sha256:29dbf276f9d7f82a20c250f8bfcf6e482491118c8a8a6db7cc6fe163e59a9b79
+    ports:
+      - "127.0.0.1:8305:3333"
+
+  k6:
+    build: .
+    depends_on:
+      - quickpizza
+    environment:
+      TARGET_URL: ${TARGET_URL:?set by make test-local}
+    volumes:
+      - ./reports/local:/app/reports

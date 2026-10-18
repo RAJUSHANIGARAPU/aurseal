@@ -23,6 +23,10 @@ Prerequisites: [uv](https://docs.astral.sh/uv/), `make` and Docker. Or, with onl
 performance tests" only. `make test-offline` runs the SLO checker, user and load-shape
 tests with no network.
 
+`make test-local` is what a pull request runs: the smoke profile and its SLO check against
+QuickPizza in a container on `localhost:8306`, then the container is removed. The reports
+move to `reports/local/`.
+
 ## Results on a laptop
 
 One run of the load profile against `quickpizza-local:0.15.31` in Docker, Locust 2.46.7 on
