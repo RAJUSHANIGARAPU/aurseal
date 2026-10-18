@@ -1,0 +1,72 @@
+name: Examples (local)
+
+# Every example against a local copy of its target, on a pull request that touches the
+# examples or the templates they come from. No test traffic leaves the runner: each
+# example's `make test-local` starts its target in Docker, refuses a base URL that is not
+# localhost or a Compose service name, runs the suite and removes the target. The live
+# targets stay in examples-nightly.yml. Why: docs/ci-decisions.md#examples-lane
+on:
+  pull_request:
+    paths:
+      - "examples/**"
+      - "src/testkeel/templates/**"
+      - ".github/workflows/examples-pr.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  local:
+    name: ${{ matrix.example }} (local)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - example: web-ui-saucedemo
+            browser: true
+          - example: api-rest-restful-booker
+            browser: false
+          - example: graphql-countries
+            browser: false
+          - example: a11y-w3c-bad
+            browser: true
+          - example: perf-k6-quickpizza
+            browser: false
+          - example: perf-locust-quickpizza
+            browser: false
+    defaults:
+      run:
+        working-directory: examples/${{ matrix.example }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v10
+      - run: uv sync --locked
+      - name: Chromium and its system libraries
+        if: matrix.browser
+        run: uv run playwright install --with-deps chromium
+      # The same check test-local makes on its own environment, here on what it will set:
+      # one KEY=URL pair per line, every host localhost, 127.0.0.1 or a service name.
+      - name: Only local base URLs
+        run: |
+          make -s local-env | tr ' ' '\n' | sed '/^$/d' > "$RUNNER_TEMP/local-env.txt"
+          cat "$RUNNER_TEMP/local-env.txt"
+          test -s "$RUNNER_TEMP/local-env.txt"
+          if grep -vE '^[A-Z_]+=https?://(localhost|127\.0\.0\.1|[a-z][a-z0-9-]*)(:[0-9]+)?(/.*)?$' "$RUNNER_TEMP/local-env.txt"; then
+            echo "::error::a base URL in the local lane is not local"
+            exit 1
+          fi
+      - name: Suite against the local target
+        run: make test-local
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: example-${{ matrix.example }}-local
+          path: examples/${{ matrix.example }}/reports/local/
+          retention-days: 7
