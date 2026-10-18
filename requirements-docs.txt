@@ -1,0 +1,4 @@
+# The documentation site (mkdocs.yml). Pinned so a theme release cannot break the strict build.
+mkdocs==1.6.1
+mkdocs-material==9.7.7
+pymdown-extensions==12.2

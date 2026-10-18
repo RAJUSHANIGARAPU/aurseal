@@ -207,3 +207,24 @@ drifting from the template it claims to come from.
 **Change safely.** A new example gets its own job in `examples-nightly.yml` and a
 `.scaffold-manifest`; never add `examples` to `testpaths`, which would put network tests
 into the offline job.
+
+## Docs site
+
+**Rule.** `pages.yml` builds the site from `docs/` with `mkdocs build --strict` on every
+pull request that touches the docs, the README, the MkDocs configuration or the examples,
+and publishes it to GitHub Pages from `main` and after each nightly examples run. A
+build-time hook (`tools/docs_site/hooks.py`) rewrites links that leave `docs/` to the file
+on the repository host after checking the file exists, checks that a link into `reports/`
+names an example, and checks the README's links before the build. The example reports
+are the nightly run's artifacts, never a fresh call to a third-party site; an example
+without a report in the last 7 days gets a page that says so. `requirements-docs.txt`
+pins exact versions of MkDocs (1.x) and its theme.
+
+**Prevents.** A broken link or a renamed page reaching the published site; a pull request
+turning red because a public demo site is down; a theme or MkDocs release changing the
+build under an unrelated change.
+
+**Change safely.** A new page goes in the `nav` of `mkdocs.yml`, or under `not_in_nav`
+or `exclude_docs` with a reason. Build locally before pushing:
+`pip install -r requirements-docs.txt`, then `mkdocs build --strict`. The README check
+runs in the offline suite too (`tests/tools/test_docs_site_hooks.py`).
