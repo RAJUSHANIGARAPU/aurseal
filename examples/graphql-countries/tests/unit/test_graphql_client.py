@@ -1,0 +1,102 @@
+"""The client on httpx.MockTransport: what it sends, and every way an answer can go wrong."""
+
+from __future__ import annotations
+
+import json
+import logging
+from collections.abc import Callable
+
+import httpx
+import pytest
+from gql.transport.exceptions import TransportProtocolError, TransportServerError
+from graphql import GraphQLError
+
+from graphql_countries import contract
+from graphql_countries.client import GraphQLClient, GraphQLResponseError
+
+pytestmark = pytest.mark.offline
+
+URL = "https://api.example.test/graphql"
+Handler = Callable[[httpx.Request], httpx.Response]
+
+
+def answering(status: int = 200, **body: object) -> tuple[Handler, list[dict[str, object]]]:
+    """A handler that records each request body and answers with ``body`` as JSON."""
+    sent: list[dict[str, object]] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        sent.append(json.loads(request.content))
+        return httpx.Response(status, json=body)
+
+    return handle, sent
+
+
+def client_for(handler: Handler, **kwargs) -> GraphQLClient:
+    return GraphQLClient(URL, transport=httpx.MockTransport(handler), **kwargs)
+
+
+def test_the_query_and_variables_are_posted_as_json():
+    handler, sent = answering(data={"item": None})
+
+    client_for(handler).execute("query Q($id: ID!) { item(id: $id) { id } }", {"id": "7"})
+
+    assert len(sent) == 1
+    assert sent[0]["variables"] == {"id": "7"}
+    assert "item(id: $id)" in str(sent[0]["query"])
+
+
+def test_errors_in_a_200_answer_are_raised_with_their_messages():
+    handler, _ = answering(data=None, errors=[{"message": 'Cannot query field "nope"'}])
+
+    with pytest.raises(GraphQLResponseError) as raised:
+        client_for(handler).execute("{ nope }")
+
+    assert raised.value.messages == ['Cannot query field "nope"']
+
+
+def test_partial_data_survives_alongside_the_errors():
+    handler, _ = answering(
+        data={"item": {"id": "7"}, "other": None},
+        errors=[{"message": "other failed", "path": ["other"]}],
+    )
+
+    with pytest.raises(GraphQLResponseError) as raised:
+        client_for(handler).execute("{ item(id: 7) { id } other }")
+
+    assert raised.value.data == {"item": {"id": "7"}, "other": None}
+
+
+def test_an_http_error_without_a_graphql_body_is_a_transport_fault():
+    def handle(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(502, text="Bad Gateway")
+
+    with pytest.raises(TransportServerError) as raised:
+        client_for(handle).execute("{ __typename }")
+    assert raised.value.code == 502
+
+
+def test_a_200_answer_that_is_not_graphql_is_a_protocol_fault():
+    def handle(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text="<html>maintenance</html>")
+
+    with pytest.raises(TransportProtocolError):
+        client_for(handle).execute("{ __typename }")
+
+
+def test_with_a_schema_an_invalid_operation_never_leaves_the_process():
+    handler, sent = answering(data={})
+
+    with pytest.raises(GraphQLError, match="fieldThatDoesNotExist"):
+        client_for(handler, schema=contract.load_snapshot()).execute("{ fieldThatDoesNotExist }")
+    assert sent == []
+
+
+def test_credentials_never_reach_the_log(caplog):
+    handler, _ = answering(data={"__typename": "Query"})
+    client = client_for(handler, headers={"Authorization": "Bearer s3cret-token"})
+
+    with caplog.at_level(logging.INFO):
+        client.execute("{ __typename }")
+
+    assert "s3cret-token" not in caplog.text
+    assert "***" in caplog.text

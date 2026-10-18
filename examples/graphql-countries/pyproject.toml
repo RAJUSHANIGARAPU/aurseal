@@ -1,0 +1,74 @@
+[project]
+name = "graphql-countries"
+version = "0.1.0"
+description = "Test suite for Countries GraphQL"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic-settings>=2.6",
+    "pytest>=8.3",
+    "pytest-xdist>=3.6",
+    "pytest-rerunfailures>=15.0",
+    "pytest-html>=4.1",
+    "gql[httpx]>=4.4",
+    "graphql-core>=3.3",
+    "httpx>=0.28",
+    "pydantic>=2.9",
+]
+
+[dependency-groups]
+dev = [
+    "mypy>=1.13",
+    "pre-commit>=4.0",
+    "ruff>=0.8",
+]
+
+[tool.uv]
+# A test suite, not a distributable package: nothing to build or install.
+package = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "S", "PT", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+# assert is how pytest checks things
+"tests/**" = ["S101"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+mypy_path = "src"
+explicit_package_bases = true
+files = ["src", "tests"]
+
+[[tool.mypy.overrides]]
+# Strict on src/; tests may leave fixtures and parametrised arguments unannotated.
+module = "tests.*"
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+disallow_untyped_decorators = false
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+    "--html=reports/report.html",
+    "--self-contained-html",
+]
+xfail_strict = true
+log_cli = false
+log_level = "INFO"
+markers = [
+    "offline: runs without network access to the system under test",
+    "smoke: a short, live check that the system under test is up and behaving",
+    "regression: the full live suite",
+]

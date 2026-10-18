@@ -73,9 +73,35 @@ jobs:
           path: examples/api-rest-restful-booker/reports/
           retention-days: 7
 
+  graphql-countries:
+    name: graphql-countries (live)
+    if: github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    outputs:
+      outcome: ${{ steps.live.outcome }}
+    defaults:
+      run:
+        working-directory: examples/graphql-countries
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v10
+      - run: uv sync --locked
+      - name: Live suite
+        id: live
+        continue-on-error: true
+        run: uv run pytest -n auto -o log_cli=true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: example-graphql-countries
+          path: examples/graphql-countries/reports/
+          retention-days: 7
+
   drift-issues:
     name: One issue per failing example
-    needs: [web-ui-saucedemo, api-rest-restful-booker]
+    needs: [web-ui-saucedemo, api-rest-restful-booker, graphql-countries]
     if: always() && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -90,6 +116,7 @@ jobs:
           OUTCOMES: >-
             web-ui-saucedemo=${{ needs.web-ui-saucedemo.outputs.outcome }}
             api-rest-restful-booker=${{ needs.api-rest-restful-booker.outputs.outcome }}
+            graphql-countries=${{ needs.graphql-countries.outputs.outcome }}
         run: |
           for pair in $OUTCOMES; do
             example="${pair%%=*}"

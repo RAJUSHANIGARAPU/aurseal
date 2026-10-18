@@ -1,0 +1,36 @@
+# Files below are exactly what the template renders for the answers in this header.
+# CI re-renders the template and fails if any of them differ; every other file in
+# this directory is written by hand for this example.
+# type: api-graphql
+# project_name: Countries GraphQL
+# project_slug: graphql-countries
+# api_base_url: https://countries.trevorblades.com
+# company:
+# task_summary: Country lookups and schema drift checks on the public Countries GraphQL API.
+.dockerignore
+.editorconfig
+.env.example
+.github/workflows/ci.yml
+.gitignore
+.pre-commit-config.yaml
+.python-version
+Dockerfile
+Makefile
+docker-compose.yml
+pyproject.toml
+src/graphql_countries/__init__.py
+src/graphql_countries/client/__init__.py
+src/graphql_countries/client/graphql_client.py
+src/graphql_countries/contract.py
+src/graphql_countries/log.py
+src/graphql_countries/operations/__init__.py
+src/graphql_countries/settings.py
+tests/__init__.py
+tests/api/__init__.py
+tests/api/test_endpoint.py
+tests/conftest.py
+tests/unit/__init__.py
+tests/unit/test_graphql_client.py
+tests/unit/test_operations.py
+tests/unit/test_schema_snapshot.py
+tests/unit/test_settings.py
