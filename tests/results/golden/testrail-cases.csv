@@ -1,0 +1,5 @@
+Title,Section,Priority,Type,Preconditions,Steps,Expected Result,References
+Pay,,P1,Automated,,,,REQ-12
+Refund,,,Automated,,,,
+Skip me,,,Automated,,,,
+Unmapped,,,Automated,,,,

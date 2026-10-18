@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "metric_load_run.schema.json",
+  "title": "metric_load_run",
+  "description": "One load run against one target: what was applied, what was measured, which thresholds held.",
+  "type": "object",
+  "required": ["id", "run_id", "created_at", "target", "tool", "thresholds_json", "breached_json"],
+  "properties": {
+    "id": {"type": "string", "minLength": 1},
+    "run_id": {"type": "string", "minLength": 1},
+    "nodeid": {"type": ["string", "null"]},
+    "created_at": {"type": "string"},
+    "target": {"type": "string", "minLength": 1},
+    "vus_max": {"type": ["integer", "null"], "minimum": 0},
+    "duration_s": {"type": ["number", "null"], "minimum": 0},
+    "requests": {"type": ["integer", "null"], "minimum": 0},
+    "rps": {"type": ["number", "null"], "minimum": 0},
+    "p50_ms": {"type": ["number", "null"], "minimum": 0},
+    "p95_ms": {"type": ["number", "null"], "minimum": 0},
+    "p99_ms": {"type": ["number", "null"], "minimum": 0},
+    "error_rate": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+    "thresholds_json": {"type": "string"},
+    "breached_json": {"type": "string"},
+    "tool": {"type": "string", "minLength": 1},
+    "tool_version": {"type": ["string", "null"]}
+  },
+  "additionalProperties": false
+}

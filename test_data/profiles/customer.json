@@ -1,0 +1,10 @@
+{
+  "entity": "customer",
+  "endpoint": "/api/customers",
+  "fields": [
+    {"name": "type", "kind": "choice", "required": true, "choices": ["INDIVIDUAL", "COMPANY"]},
+    {"name": "display_name", "kind": "string", "required": true, "min_len": 1, "max_len": 64},
+    {"name": "email", "kind": "email"},
+    {"name": "phone", "kind": "string", "pattern": "\\+?[0-9 ]{3,20}"}
+  ]
+}

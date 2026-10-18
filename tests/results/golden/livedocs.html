@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Billing</title><style>
+:root{--bg:#fbfbfa;--fg:#1d1d1b;--muted:#6b6b66;--line:#e2e1dc;--card:#ffffff;
+--pass:#2f7d4f;--fail:#b3261e;--skip:#8a8a84;--warn:#a15c00;--accent:#2b5c9e}
+@media (prefers-color-scheme:dark){:root{--bg:#161615;--fg:#ecebe7;--muted:#a3a29c;
+--line:#33332f;--card:#1f1f1d;--pass:#5fbf86;--fail:#ef7a72;--skip:#8f8e88;--warn:#e0a24f;
+--accent:#7fa8e0}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);
+font:14px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}
+main{max-width:1100px;margin:0 auto;padding:16px}
+nav{display:flex;flex-wrap:wrap;gap:12px;padding:10px 16px;border-bottom:1px solid var(--line)}
+nav a{color:var(--accent);text-decoration:none}h1{font-size:22px;margin:8px 0 4px}
+h2{font-size:16px;margin:24px 0 8px}.muted{color:var(--muted)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px}
+.card .big{font-size:20px;font-weight:600}
+.table-wrap{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:600}code{font-size:12px;word-break:break-all}
+.pill{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;
+border:1px solid currentColor}
+.passed,.PASS{color:var(--pass)}.failed,.error,.FAIL{color:var(--fail)}
+.skipped,.not_run,.xfailed,.UNJUDGED,.unmeasured-text{color:var(--skip)}
+.chart,.timeline{width:100%;max-width:100%;height:auto}.timeline{max-height:40px}
+.grid{stroke:var(--line)}.axis{fill:var(--muted);font-size:10px}
+.series{stroke:var(--accent);stroke-width:2}.point{fill:var(--accent)}
+.unmeasured{fill:none;stroke:var(--skip);stroke-width:1.5}
+.o-passed{fill:var(--pass)}.o-failed,.o-error{fill:var(--fail)}
+.o-skipped,.o-not_run,.o-xfailed{fill:var(--skip)}
+.boundary{stroke:var(--warn);stroke-dasharray:3 2}
+input[type=search]{width:100%;max-width:420px;padding:6px 8px;border:1px solid var(--line);
+border-radius:6px;background:var(--card);color:var(--fg)}
+.proven{color:var(--pass)}.stale{color:var(--warn)}.unproven{color:var(--skip)}</style></head><body><nav><a href="index.html">Living docs</a></nav><main><p><span class="pill unproven">unproven</span></p><h1>Billing</h1>
+<p>Invoices are created monthly.</p>
+<p><strong>Status: UNPROVEN</strong> — List invoices: skipped</p>
+<h2>Cases</h2>
+<div class="table-wrap"><table><thead><tr><th>Case</th><th>Owner</th><th>Latest outcome</th><th>Last run</th><th>Run date</th><th>Revision</th><th>Evidence</th></tr></thead><tbody><tr><td>List invoices</td><td>—</td><td>skipped</td><td>r1</td><td>2026-01-05</td><td>—</td><td>—</td></tr><tr><td>Pay an invoice</td><td>team-pay</td><td>passed</td><td>r1</td><td>2026-01-05</td><td>—</td><td>trace: traces/pay.zip</td></tr></tbody></table></div>
+<h2>Requirement REQ-12</h2>
+<div class="table-wrap"><table><thead><tr><th>Case</th><th>Owner</th><th>Latest outcome</th><th>Last run</th><th>Run date</th><th>Revision</th><th>Evidence</th></tr></thead><tbody><tr><td>Pay an invoice</td><td>team-pay</td><td>passed</td><td>r1</td><td>2026-01-05</td><td>—</td><td>trace: traces/pay.zip</td></tr></tbody></table></div>
+<ul><li>Paid invoices are final.</li><li>Refunds use <a href="refunds.html">the refund page</a>.</li></ul></main></body></html>

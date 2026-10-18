@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "metric_mutation_survivor.schema.json",
+  "title": "metric_mutation_survivor",
+  "description": "A mutant no test killed (top N per package per run, for triage).",
+  "type": "object",
+  "required": ["id", "run_id", "created_at", "package", "mutant_id"],
+  "properties": {
+    "id": {"type": "string", "minLength": 1},
+    "run_id": {"type": "string", "minLength": 1},
+    "nodeid": {"type": ["string", "null"]},
+    "created_at": {"type": "string"},
+    "package": {"type": "string", "minLength": 1},
+    "mutant_id": {"type": "string", "minLength": 1},
+    "location": {"type": ["string", "null"]},
+    "operator": {"type": ["string", "null"]}
+  },
+  "additionalProperties": false
+}

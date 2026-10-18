@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<testsuites name="pytest tests"><testsuite name="pytest" errors="1" failures="1" skipped="2" tests="5" time="1.234" timestamp="2026-01-05T10:00:00.000000+00:00" hostname="runner">
+<testcase classname="tests.test_billing.TestInvoice" name="test_pay[card]" time="0.120"><properties><property name="requirement" value="REQ-12"/></properties></testcase>
+<testcase classname="tests.test_billing.TestInvoice" name="test_refund" time="0.300"><failure message="AssertionError: assert 0 == 5">def test_refund():
+&gt;       assert refund() == 5
+E       AssertionError: assert 0 == 5</failure><system-out>[[ATTACHMENT|reports/shots/refund.png]]</system-out></testcase>
+<testcase classname="tests.test_search" name="test_empty" time="0.010"><skipped type="pytest.skip" message="no index">tests/test_search.py:4: no index</skipped></testcase>
+<testcase classname="tests.test_search" name="test_known" time="0.020"><skipped type="pytest.xfail" message="BUG-142"/></testcase>
+<testcase classname="tests.test_search" name="test_setup_breaks" time="0.001"><error message="failed on setup with &quot;RuntimeError: db down&quot;">RuntimeError: db down</error></testcase>
+</testsuite></testsuites>

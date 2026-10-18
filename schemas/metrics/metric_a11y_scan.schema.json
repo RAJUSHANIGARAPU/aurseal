@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "metric_a11y_scan.schema.json",
+  "title": "metric_a11y_scan",
+  "description": "One accessibility scan of one route; a zero-violation scan still leaves evidence that rules ran.",
+  "type": "object",
+  "required": ["id", "run_id", "created_at", "route", "rules_run", "violations"],
+  "properties": {
+    "id": {"type": "string", "minLength": 1},
+    "run_id": {"type": "string", "minLength": 1},
+    "nodeid": {"type": ["string", "null"]},
+    "created_at": {"type": "string"},
+    "route": {"type": "string", "minLength": 1},
+    "rules_run": {"type": "integer", "minimum": 1},
+    "violations": {"type": "integer", "minimum": 0},
+    "axe_version": {"type": ["string", "null"]}
+  },
+  "additionalProperties": false
+}

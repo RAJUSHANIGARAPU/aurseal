@@ -1,0 +1,9 @@
+{
+  "entity": "reseller_terms",
+  "endpoint": "/api/reseller-terms",
+  "fields": [
+    {"name": "name", "kind": "string", "required": true, "min_len": 1},
+    {"name": "share_percent", "kind": "number", "required": true, "min": 0, "max": 20},
+    {"name": "flat_fee", "kind": "number", "min": 0}
+  ]
+}

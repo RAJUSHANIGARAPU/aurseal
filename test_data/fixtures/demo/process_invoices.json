@@ -1,0 +1,11 @@
+{
+  "name": "process-due-invoices",
+  "steps": [
+    {
+      "name": "book scheduled invoices due by the date",
+      "method": "POST",
+      "path": "subscriptions/${subscription_id}/invoices/process?until=${until}",
+      "capture": {"booked": "booked"}
+    }
+  ]
+}
