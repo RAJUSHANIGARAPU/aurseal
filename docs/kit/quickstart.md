@@ -18,8 +18,9 @@ testkeel version
 testkeel list-types
 ```
 
-Generated projects use [uv](https://docs.astral.sh/uv/) and `make`; the `web-ui` type
-also downloads a Chromium build on first run.
+Generated projects use [uv](https://docs.astral.sh/uv/) and `make`; the browser types
+(`web-ui`, `a11y`, `fullstack`) also download a Chromium build on first run, `perf-k6`
+needs the `k6` binary, and the live tier of `mobile` needs the Android SDK and Appium.
 
 ## Generate a project
 
