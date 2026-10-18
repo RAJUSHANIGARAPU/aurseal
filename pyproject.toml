@@ -48,6 +48,13 @@ html = "testkeel.reporting.html:HtmlReporter"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/testkeel"]
+# Template files are package data, dotfiles (.gitignore.jinja, .pymarkdown.json) included.
+artifacts = [
+    "src/testkeel/templates/**/*.jinja",
+    "src/testkeel/templates/**/*.part",
+    "src/testkeel/templates/**/.*",
+    "src/testkeel/templates/**/copier.yml",
+]
 
 [tool.hatch.build.targets.sdist]
 only-include = ["src/testkeel", "LICENSE", "README.md", "pyproject.toml"]
