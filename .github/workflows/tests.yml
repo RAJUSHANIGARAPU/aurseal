@@ -678,6 +678,11 @@ jobs:
       fail-fast: false
       matrix:
         browser: [chromium, firefox, webkit]
+        # The live site answers the bundled headless Chromium with "Access Denied";
+        # the Chromium leg runs branded Chrome, like the Browser suite.
+        include:
+          - browser: chromium
+            install: chrome
     env:
       RUN_TRUST: unstable
       RUN_TRUST_LANE: browser-${{ matrix.browser }}
@@ -704,14 +709,18 @@ jobs:
         id: pw-cache
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ matrix.browser }}-${{ runner.os }}-${{ steps.pw-version.outputs.version }}
+          key: playwright-${{ matrix.install || matrix.browser }}-${{ runner.os }}-${{ steps.pw-version.outputs.version }}
       - if: steps.pw-cache.outputs.cache-hit != 'true'
-        run: playwright install --with-deps ${{ matrix.browser }}
+        run: playwright install --with-deps ${{ matrix.install || matrix.browser }}
       - if: steps.pw-cache.outputs.cache-hit == 'true'
-        run: playwright install-deps ${{ matrix.browser }}
+        run: playwright install-deps ${{ matrix.install || matrix.browser }}
       # Engine via env var: the CI-selection gate tokenises this literal command.
       - name: Run Smoke Tests
+        if: matrix.browser != 'chromium'
         run: pytest -m "smoke and not draft" -n auto --browser "$BROWSER" --junitxml="reports/junit-$BROWSER.xml"
+      - name: Run Smoke Tests (Chrome)
+        if: matrix.browser == 'chromium'
+        run: pytest -m "smoke and not draft" -n auto --browser "$BROWSER" --browser-channel=chrome --junitxml="reports/junit-$BROWSER.xml"
       - name: Run trust
         if: always()
         run: python -m gate.integrity --lane "browser-$BROWSER"
