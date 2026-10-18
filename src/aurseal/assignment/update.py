@@ -26,10 +26,12 @@ import subprocess
 import tarfile
 import tempfile
 import traceback
+import warnings
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from aurseal import PREVIOUS_NAME
 from aurseal.assignment.scaffold import (
     ANSWERS_FILE,
     OK,
@@ -44,6 +46,19 @@ from aurseal.assignment.scaffold import (
 CONFLICT = 3
 #: Where the templates live inside the template source repository.
 TEMPLATES_PATH = "src/aurseal/templates"
+
+
+def templates_path(tag: str) -> str:
+    """Where ``tag`` keeps the templates: releases made under the package's previous name
+    (``<PREVIOUS_NAME>-v*``) have them under that name. A deprecated fallback for one release."""
+    if tag.startswith(f"{PREVIOUS_NAME}-v"):
+        warnings.warn(
+            f"{tag} is a release under the previous package name; update to a aurseal-v* tag",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return f"src/{PREVIOUS_NAME}/templates"
+    return TEMPLATES_PATH
 
 
 class UpdateError(Exception):
@@ -92,7 +107,8 @@ def _check_project(project: Path) -> None:
 
 
 def _fetch_templates(source: str, tags: list[str], work: Path) -> dict[str, Path]:
-    """Each tag's ``src/aurseal/templates`` from ``source``, extracted under ``work``."""
+    """Each tag's templates directory (:func:`templates_path`) from ``source``, extracted
+    under ``work``."""
     repo = work / "source.git"
     if _git("init", "-q", "--bare", str(repo)).returncode != 0:
         raise UpdateError(UNEXPECTED, "git init failed in the cache directory")
@@ -106,16 +122,17 @@ def _fetch_templates(source: str, tags: list[str], work: Path) -> dict[str, Path
             raise UpdateError(
                 PREREQUISITE, f"cannot fetch tag {tag} from {source}: {_tail(fetched.stderr)}"
             )
-        archive = _git("--git-dir", str(repo), "archive", "--format=tar", tag, TEMPLATES_PATH)
+        path = templates_path(tag)
+        archive = _git("--git-dir", str(repo), "archive", "--format=tar", tag, path)
         if archive.returncode != 0:
-            raise UpdateError(USAGE, f"tag {tag} of {source} has no {TEMPLATES_PATH}/")
+            raise UpdateError(USAGE, f"tag {tag} of {source} has no {path}/")
         target = work / tag
         with tarfile.open(fileobj=io.BytesIO(archive.stdout)) as tar:
             if hasattr(tarfile, "data_filter"):  # Python 3.11.4 and later
                 tar.extractall(target, filter="data")
             else:  # pragma: no cover
                 tar.extractall(target)
-        found[tag] = target / TEMPLATES_PATH
+        found[tag] = target / path
     return found
 
 
