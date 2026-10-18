@@ -188,3 +188,22 @@ the check itself republishing what it found.
 reason; a denylist false positive is fixed in the private list. Run the same scan locally
 with `python -m testkeel.leakgate scan --tree .` before pushing: on a public repository a
 pushed branch is already published, so the CI run is detection, not prevention.
+
+## Examples lane
+
+**Rule.** The projects under `examples/` run live against public demo sites only in
+`examples-nightly.yml` (nightly and on dispatch). Their tests are not part of this
+repository's suite: the root `pytest.ini` `testpaths` leave `examples/` out, and each
+example carries its own pytest configuration in its `pyproject.toml`, so `pytest` from the
+root never collects them and the CI-selection gate never counts them. A failing example
+opens or comments on one `live-drift: <example>` issue; the run itself stays green.
+Without network, `tests/package/test_templates_render.py` checks each example's
+template-owned files (its `.scaffold-manifest`) against a fresh render wherever the package
+and Copier are installed.
+
+**Prevents.** A third-party outage turning a pull request red; an example quietly
+drifting from the template it claims to come from.
+
+**Change safely.** A new example gets its own job in `examples-nightly.yml` and a
+`.scaffold-manifest`; never add `examples` to `testpaths`, which would put network tests
+into the offline job.

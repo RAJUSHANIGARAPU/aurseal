@@ -79,4 +79,6 @@ Data directories (no code): `defects/`, `schemas/`, `security/`, `specs/`, `plan
 | `generated_batch` | metadata | `/generate-from-swagger` batch selection |
 
 Workflows outside `tests.yml`: the secret scan (every push, `secret-scan.yml`), the mutation
-score gate (nightly, `mutation.yml`), the release verdict (tags, `release.yml`).
+score gate (nightly, `mutation.yml`), the release verdict (tags, `release.yml`), the live
+run of the `examples/` projects (nightly, `examples-nightly.yml`; opens an issue instead of
+failing, see [ci-decisions](ci-decisions.md#examples-lane)).

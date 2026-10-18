@@ -1,0 +1,8 @@
+services:
+  tests:
+    build: .
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - ./reports:/app/reports

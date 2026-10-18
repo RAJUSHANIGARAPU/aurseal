@@ -1,0 +1,31 @@
+# Files below are exactly what the template renders for the answers in this header.
+# CI re-renders the template and fails if any of them differ; every other file in
+# this directory is written by hand for this example.
+# type: web-ui
+# project_name: Sauce Demo
+# project_slug: web-ui-saucedemo
+# target_url: https://www.saucedemo.com
+# company:
+# task_summary: Sign-in, cart and checkout on the public Sauce Demo shop.
+.dockerignore
+.editorconfig
+.env.example
+.github/workflows/ci.yml
+.gitignore
+.pre-commit-config.yaml
+.python-version
+Dockerfile
+Makefile
+docker-compose.yml
+pyproject.toml
+src/web_ui_saucedemo/__init__.py
+src/web_ui_saucedemo/components/__init__.py
+src/web_ui_saucedemo/data/__init__.py
+src/web_ui_saucedemo/log.py
+src/web_ui_saucedemo/pages/__init__.py
+src/web_ui_saucedemo/pages/base_page.py
+src/web_ui_saucedemo/settings.py
+tests/__init__.py
+tests/ui/__init__.py
+tests/unit/__init__.py
+tests/unit/test_settings.py

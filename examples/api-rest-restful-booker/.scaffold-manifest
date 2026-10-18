@@ -1,0 +1,31 @@
+# Files below are exactly what the template renders for the answers in this header.
+# CI re-renders the template and fails if any of them differ; every other file in
+# this directory is written by hand for this example.
+# type: api-rest
+# project_name: Restful Booker
+# project_slug: api-rest-restful-booker
+# api_base_url: https://restful-booker.herokuapp.com
+# company:
+# task_summary: Authentication and booking CRUD on the public Restful Booker API.
+.dockerignore
+.editorconfig
+.github/workflows/ci.yml
+.gitignore
+.pre-commit-config.yaml
+.python-version
+Dockerfile
+Makefile
+docker-compose.yml
+pyproject.toml
+src/api_rest_restful_booker/__init__.py
+src/api_rest_restful_booker/client/__init__.py
+src/api_rest_restful_booker/client/http.py
+src/api_rest_restful_booker/contract.py
+src/api_rest_restful_booker/log.py
+tests/__init__.py
+tests/api/__init__.py
+tests/api/test_health.py
+tests/conftest.py
+tests/unit/__init__.py
+tests/unit/test_http_client.py
+tests/unit/test_settings.py

@@ -1,0 +1,107 @@
+name: Examples (live)
+
+# The examples under examples/ test public demo sites and APIs. A third-party outage is
+# not a defect in this repository, so they never run on a pull request and a failure
+# never turns a build red: each failing example opens, or comments on, one issue.
+# Why: docs/ci-decisions.md#examples-lane
+on:
+  schedule:
+    - cron: "23 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  web-ui-saucedemo:
+    name: web-ui-saucedemo (live)
+    if: github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    continue-on-error: true
+    # Browsers come from the image, pinned to the example's playwright== version.
+    container:
+      image: mcr.microsoft.com/playwright/python:v1.58.0-noble
+      options: --ipc=host
+    outputs:
+      outcome: ${{ steps.live.outcome }}
+    defaults:
+      run:
+        working-directory: examples/web-ui-saucedemo
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v10
+      - run: uv sync --locked
+      - name: Live suite
+        id: live
+        continue-on-error: true
+        run: uv run pytest -n auto -o log_cli=true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: example-web-ui-saucedemo
+          path: examples/web-ui-saucedemo/reports/
+          retention-days: 7
+
+  api-rest-restful-booker:
+    name: api-rest-restful-booker (live)
+    if: github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    outputs:
+      outcome: ${{ steps.live.outcome }}
+    defaults:
+      run:
+        working-directory: examples/api-rest-restful-booker
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v10
+      - run: uv sync --locked
+      - name: Live suite
+        id: live
+        continue-on-error: true
+        run: uv run pytest -n auto -o log_cli=true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: example-api-rest-restful-booker
+          path: examples/api-rest-restful-booker/reports/
+          retention-days: 7
+
+  drift-issues:
+    name: One issue per failing example
+    needs: [web-ui-saucedemo, api-rest-restful-booker]
+    if: always() && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Open or update the issues
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          OUTCOMES: >-
+            web-ui-saucedemo=${{ needs.web-ui-saucedemo.outputs.outcome }}
+            api-rest-restful-booker=${{ needs.api-rest-restful-booker.outputs.outcome }}
+        run: |
+          for pair in $OUTCOMES; do
+            example="${pair%%=*}"
+            outcome="${pair#*=}"
+            [ "$outcome" = "success" ] && continue
+            title="live-drift: $example"
+            body="The live run of examples/$example ended with '${outcome:-setup failed}': $RUN_URL"
+            number=$(gh issue list --state open --search "in:title \"$title\"" \
+              --json number,title --jq ".[] | select(.title == \"$title\") | .number" | head -n 1)
+            if [ -n "$number" ]; then
+              gh issue comment "$number" --body "$body"
+            else
+              gh issue create --title "$title" --body "$body"
+            fi
+          done

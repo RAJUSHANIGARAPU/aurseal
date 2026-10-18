@@ -250,3 +250,39 @@ def test_api_rest_offline_tests_pass_without_network(rendered, name):
     )  # fmt: skip
     assert result.returncode == 0, result.stdout[-3000:] + result.stderr[-2000:]
     assert re.search(r"\b\d{2,} passed\b", result.stdout), result.stdout[-1000:]
+
+
+# ------------------------------------------------------------------ the examples
+
+EXAMPLES = sorted(
+    Path(__file__).resolve().parents[2].joinpath("examples").glob("*/.scaffold-manifest")
+)
+
+
+def _manifest(path: Path) -> tuple[str, dict[str, str], list[str]]:
+    """``(type, answers, files)`` from a ``.scaffold-manifest``."""
+    answers: dict[str, str] = {}
+    files: list[str] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        match = re.fullmatch(r"# ([a-z_]+):(?: (.*))?", line)
+        if match:
+            answers[match.group(1)] = match.group(2) or ""
+        elif line and not line.startswith("#"):
+            files.append(line)
+    return answers.pop("type"), answers, files
+
+
+@pytest.mark.parametrize("manifest", EXAMPLES, ids=lambda path: path.parent.name)
+def test_example_skeleton_is_what_the_template_renders_today(manifest, tmp_path):
+    type_, answers, files = _manifest(manifest)
+    assert files, "an empty manifest checks nothing"
+    fresh = templates.render(type_, tmp_path / "fresh", answers)
+    drifted = [
+        name
+        for name in files
+        if (fresh / name).read_bytes() != (manifest.parent / name).read_bytes()
+    ]
+    assert drifted == [], (
+        f"{manifest.parent.name}: these files no longer match the template; re-render the "
+        "example or move the file out of .scaffold-manifest if it is now hand-written"
+    )
