@@ -49,8 +49,16 @@ DATA_KEYS: frozenset[str] = frozenset(
 )
 
 
-def render(type_: str, destination: Path, data: Mapping[str, Any]) -> Path:
+def render(
+    type_: str,
+    destination: Path,
+    data: Mapping[str, Any],
+    templates_dir: Path = TEMPLATES_DIR,
+) -> Path:
     """Render ``type_`` into ``destination`` (base, then overlay) and return it.
+
+    ``templates_dir`` is another copy of this directory, e.g. the templates of an earlier
+    release that ``assignment update`` renders to find what changed since.
 
     Raises ``ValueError`` for an unknown type or an unknown answer, so a typo in a
     caller fails here instead of silently falling back to a default.
@@ -67,7 +75,7 @@ def render(type_: str, destination: Path, data: Mapping[str, Any]) -> Path:
     passes = [("base", type_)] + [("overlay", name) for name in COMPOSED.get(type_, (type_,))]
     for layer, overlay in passes:
         run_copy(
-            str(TEMPLATES_DIR),
+            str(templates_dir),
             str(destination),
             data={**answers, "layer": layer, "overlay": overlay},
             defaults=True,
