@@ -20,7 +20,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "testkeel"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Scaffold, check and report on test automation projects"
 readme = "README.md"
 license = "MIT"
@@ -56,6 +56,9 @@ testkeel = "testkeel.pytest_plugin"
 
 [project.entry-points."testkeel.reporters"]
 html = "testkeel.reporting.html:HtmlReporter"
+
+[tool.hatch.version]
+path = "src/testkeel/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/testkeel"]

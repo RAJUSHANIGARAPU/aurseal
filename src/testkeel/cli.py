@@ -34,6 +34,27 @@ assignment_app = typer.Typer(no_args_is_help=True, help="Work with an existing p
 app.add_typer(assignment_app, name="assignment")
 
 
+def _print_version(value: bool) -> None:
+    if value:
+        typer.echo(__version__)
+        raise typer.Exit()
+
+
+@app.callback()
+def main(
+    _version: Annotated[
+        bool,
+        typer.Option(
+            "--version",
+            callback=_print_version,
+            is_eager=True,
+            help="Print the installed version and exit.",
+        ),
+    ] = False,
+) -> None:
+    """Scaffold, check and report on test automation projects."""
+
+
 @app.command("version")
 def show_version() -> None:
     """Print the installed version."""

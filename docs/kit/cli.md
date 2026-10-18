@@ -16,7 +16,8 @@ Usage: testkeel [OPTIONS] COMMAND [ARGS]...
 | `testkeel assignment check` | Run the leak gate over an existing project. |
 | `testkeel assignment update` | Merge template changes from a newer release into an `--updatable` project. |
 
-Every command accepts `--help`.
+Every command accepts `--help`. `testkeel --version` prints the version and exits, the same
+as `testkeel version`.
 
 ## `testkeel version`
 
