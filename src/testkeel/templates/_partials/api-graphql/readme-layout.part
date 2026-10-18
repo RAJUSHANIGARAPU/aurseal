@@ -1,0 +1,11 @@
+schema.graphql  schema snapshot: what the operations are validated against offline
+src/{{ package_name }}/
+  client/       gql over httpx: timeouts, redacted logging, errors[] raised as one type
+  operations/   one .graphql file per operation, and the loader that validates them
+  services/     one class per resource; runs an operation, returns models
+  models/       pydantic response models
+  contract.py   introspection, snapshot diff, `--record` to refresh schema.graphql
+  settings.py   APP_* environment settings
+tests/
+  api/          live tests against the endpoint
+  unit/         offline tests on httpx.MockTransport and the snapshot

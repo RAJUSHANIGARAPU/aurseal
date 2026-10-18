@@ -44,6 +44,11 @@ CASES = {
         "api-rest",
         {"report": "both", "ci": "none", "python_version": "3.11", "credit": True},
     ),
+    "api-graphql": ("api-graphql", {}),
+    "api-graphql-allure-no-docker-py313": (
+        "api-graphql",
+        {"report": "allure", "docker": False, "python_version": "3.13"},
+    ),
     "strategy": ("strategy", {}),
     "strategy-no-ci": ("strategy", {"ci": "none"}),
 }
@@ -231,6 +236,8 @@ def test_rendered_code_compiles(rendered, name):
 def test_rendered_code_type_checks(rendered, name):
     if CASES[name][0] == "api-rest" and not _has_jsonschema_stubs():
         pytest.skip("types-jsonschema is not installed")
+    if CASES[name][0] == "api-graphql" and not _importable("gql", "graphql"):
+        pytest.skip("gql is not installed")
     result = _run([sys.executable, "-m", "mypy"], rendered[name])
     assert result.returncode == 0, result.stdout + result.stderr
 
@@ -250,6 +257,28 @@ def test_api_rest_offline_tests_pass_without_network(rendered, name):
     )  # fmt: skip
     assert result.returncode == 0, result.stdout[-3000:] + result.stderr[-2000:]
     assert re.search(r"\b\d{2,} passed\b", result.stdout), result.stdout[-1000:]
+
+
+@pytest.mark.skipif(
+    not _importable("gql", "graphql", "httpx", "pydantic_settings"),
+    reason="the api-graphql project's dependencies are not installed",
+)
+@pytest.mark.parametrize("name", [n for n in CODE_CASES if CASES[n][0] == "api-graphql"])
+def test_api_graphql_offline_tests_pass_without_network(rendered, name):
+    result = _run(
+        [sys.executable, "-m", "pytest", "-m", "offline", "-p", "no:cacheprovider",
+         "-o", "addopts=-ra --strict-markers"],
+        rendered[name],
+    )  # fmt: skip
+    assert result.returncode == 0, result.stdout[-3000:] + result.stderr[-2000:]
+    assert re.search(r"\b\d{2,} passed\b", result.stdout), result.stdout[-1000:]
+
+
+def test_api_graphql_operations_and_snapshot_ship_together(rendered):
+    project = rendered["api-graphql"]
+    assert (project / "schema.graphql").is_file()
+    queries = list((project / "src" / "acme_shop" / "operations").glob("*.graphql"))
+    assert queries, "the template must ship at least one operation file"
 
 
 # ------------------------------------------------------------------ the examples

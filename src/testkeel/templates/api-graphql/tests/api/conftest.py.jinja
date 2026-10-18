@@ -1,0 +1,14 @@
+"""Live fixtures: one client per session, pointed at the endpoint under test."""
+
+from __future__ import annotations
+
+import pytest
+
+from {{ package_name }}.client import GraphQLClient
+from {{ package_name }}.settings import Settings
+
+
+@pytest.fixture(scope="session")
+def api(settings: Settings) -> GraphQLClient:
+    """No local schema: these tests send invalid operations on purpose."""
+    return GraphQLClient(settings.api_base_url, timeout_s=settings.timeout_s)

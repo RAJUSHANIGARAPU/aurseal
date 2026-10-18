@@ -1,0 +1,13 @@
+# An example schema, not recorded from any endpoint: replace it with --record (see README).
+
+type Item {
+  id: ID!
+  name: String!
+  price: Float!
+  tags: [String!]!
+}
+
+type Query {
+  item(id: ID!): Item
+  items(first: Int = 10): [Item!]!
+}

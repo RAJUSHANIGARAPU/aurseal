@@ -1,0 +1,37 @@
+"""Live checks that hold for any healthy GraphQL endpoint, plus the schema drift check."""
+
+from __future__ import annotations
+
+import pytest
+
+from {{ package_name }} import contract
+from {{ package_name }}.client import GraphQLClient, GraphQLResponseError
+from {{ package_name }}.settings import Settings
+
+pytestmark = pytest.mark.regression
+
+
+@pytest.mark.smoke
+def test_endpoint_answers_a_typename_query(api: GraphQLClient):
+    assert api.execute("{ __typename }")["__typename"]
+
+
+def test_unknown_field_is_reported_in_errors_not_a_crash(api: GraphQLClient):
+    with pytest.raises(GraphQLResponseError) as raised:
+        api.execute("{ fieldThatDoesNotExist }")
+    assert any("fieldThatDoesNotExist" in message for message in raised.value.messages)
+
+
+def test_live_schema_matches_the_snapshot(api: GraphQLClient, settings: Settings):
+    source = contract.snapshot_source()
+    if source != settings.api_base_url:
+        pytest.skip(
+            f"schema.graphql was recorded from {source or 'nowhere'}, not "
+            f"{settings.api_base_url}: record it with `PYTHONPATH=src uv run python -m "
+            "{{ package_name }}.contract --record`"
+        )
+    snapshot, live = contract.load_snapshot(), contract.introspect(api)
+    found = contract.changes(snapshot, live)
+    drift = contract.diff(snapshot, live)
+    summary = "\n".join(f"- {change.type.name}: {change.description}" for change in found)
+    assert not drift, f"the live schema drifted from the snapshot\n{summary}\n\n{drift}"
