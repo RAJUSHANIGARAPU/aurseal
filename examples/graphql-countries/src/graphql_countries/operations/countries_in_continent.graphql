@@ -1,0 +1,10 @@
+# Codes and names only: a list query stays cheap, with no nested states or languages.
+query CountriesInContinent($continent: String!) {
+  countries(filter: { continent: { eq: $continent } }) {
+    code
+    name
+    continent {
+      code
+    }
+  }
+}

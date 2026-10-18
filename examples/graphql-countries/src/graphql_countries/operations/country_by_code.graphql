@@ -1,0 +1,21 @@
+# One country by its ISO 3166 code. Unknown codes answer `country: null`, not an error.
+query CountryByCode($code: ID!) {
+  country(code: $code) {
+    ...CountryFields
+  }
+}
+
+fragment CountryFields on Country {
+  code
+  name
+  capital
+  currency
+  continent {
+    code
+    name
+  }
+  languages {
+    code
+    name
+  }
+}

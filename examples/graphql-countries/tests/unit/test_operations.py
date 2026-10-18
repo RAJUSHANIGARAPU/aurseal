@@ -1,0 +1,35 @@
+"""Every operation file against the schema snapshot: no network, no server needed."""
+
+from __future__ import annotations
+
+import pytest
+from graphql import parse, validate
+
+from graphql_countries import contract, operations
+
+pytestmark = pytest.mark.offline
+
+SNAPSHOT = contract.load_snapshot()
+
+
+def test_there_is_at_least_one_operation():
+    assert operations.names(), "no .graphql files in operations/"
+
+
+@pytest.mark.parametrize("name", operations.names())
+def test_operation_validates_against_the_schema_snapshot(name):
+    errors = operations.validate(SNAPSHOT, name)
+    assert errors == [], "\n".join(error.message for error in errors)
+
+
+@pytest.mark.parametrize("name", operations.names())
+def test_each_file_holds_exactly_one_named_operation(name):
+    found = operations.operation_names(name)
+    assert len(found) == 1, found
+    assert found[0], "the operation needs a name: it shows up in server logs and traces"
+
+
+def test_the_validation_is_not_vacuous():
+    """Control: the same check rejects a field the schema does not have."""
+    errors = validate(SNAPSHOT, parse("{ __typename fieldThatDoesNotExist }"))
+    assert any("fieldThatDoesNotExist" in error.message for error in errors)
