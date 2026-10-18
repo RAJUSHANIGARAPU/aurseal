@@ -247,12 +247,16 @@ def browser_type_launch_args(browser_type_launch_args, browser_name):
     # Chromium switches: WebKit refuses to start on an unknown option.
     if browser_name != "chromium":
         return browser_type_launch_args
+    from core.chrome_launch import with_chrome_args
+
     return {
         **browser_type_launch_args,
-        "args": [
-            "--disable-blink-features=AutomationControlled",
-            "--no-sandbox",
-        ],
+        "args": with_chrome_args(
+            [
+                "--disable-blink-features=AutomationControlled",
+                "--no-sandbox",
+            ]
+        ),
     }
 
 
