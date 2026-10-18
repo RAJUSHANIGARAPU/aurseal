@@ -1,0 +1,66 @@
+.DEFAULT_GOAL := help
+.PHONY: help install lint fmt typecheck test-offline test smoke load stress report check clean docker-load
+
+# The target of every profile; override per run: `make load APP_TARGET_URL=http://localhost:3333`.
+APP_TARGET_URL ?= https://quickpizza.grafana.com
+PYTEST := uv run pytest
+# The locustfiles import the package from src/; the project itself is not installed.
+RUN := PYTHONPATH=src uv run
+GUARD := $(RUN) python -m perf_locust_quickpizza.guard
+SLO := $(RUN) python -m perf_locust_quickpizza.slo
+LOCUST := $(RUN) locust --host $(APP_TARGET_URL)
+
+help: ## list the targets
+	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-14s %s\n", $$1, $$2}'
+
+install: ## create .venv from uv.lock
+	uv sync
+
+lint: ## ruff lint + format check
+	uv run ruff check .
+	uv run ruff format --check .
+
+fmt: ## apply ruff fixes and formatting
+	uv run ruff check --fix .
+	uv run ruff format .
+
+typecheck: ## mypy, strict on src/
+	uv run mypy
+
+test-offline: ## SLO checker, user mix, load shape, target guard: no network
+	$(PYTEST) -m offline
+
+test: test-offline smoke ## offline checks, then the smoke profile
+
+smoke: ## 5 users for 30 s against APP_TARGET_URL, then the SLO check
+	@mkdir -p reports
+	$(LOCUST) --config profiles/smoke.conf
+	$(SLO) smoke
+
+load: ## 50 users for 2 min; refuses a non-local target unless ALLOW_REMOTE_LOAD=1
+	$(GUARD) load "$(APP_TARGET_URL)"
+	@mkdir -p reports
+	$(LOCUST) --config profiles/load.conf
+	$(SLO) load
+
+stress: ## step ramp until the error budget is spent; same guard as load
+	$(GUARD) stress "$(APP_TARGET_URL)"
+	@mkdir -p reports
+	$(LOCUST) --config profiles/stress.conf
+	$(SLO) stress
+
+report: ## list the reports written so far
+	@ls reports/*.html 2>/dev/null || echo "no report yet: run make smoke"
+
+check: lint typecheck test-offline ## everything CI checks before the smoke run
+
+# `docker compose wait` follows the master alone: the workers exit first, and their exit
+# must not cut the master short before it has written the reports and run the SLO check.
+docker-load: ## one master and WORKERS workers in containers (PROFILE=smoke|load|stress)
+	@mkdir -p reports
+	docker compose up --build --detach --scale worker=$${WORKERS:-2}
+	docker compose wait master; status=$$?; docker compose logs master; \
+		docker compose down; exit $$status
+
+clean: ## remove reports and caches
+	rm -rf reports .pytest_cache .mypy_cache .ruff_cache
