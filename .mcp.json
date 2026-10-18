@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "ci-build-reader": {
+      "command": "python3",
+      "args": ["tools/ci_reader.py"],
+      "env": {
+        "CI_READER_REPO": "${CI_READER_REPO:-RAJUSHANIGARAPU/wiki_project}",
+        "GITHUB_TOKEN": "${GITHUB_TOKEN:-}"
+      }
+    }
+  }
+}

@@ -1,0 +1,112 @@
+# Security exemptions. Every entry needs a fingerprint (from `python -m checks.security`
+# output), a reason, and an expiry date. An expired entry fails the security check, so an
+# exemption has to be re-justified or the code fixed; it cannot become permanent by neglect.
+#
+# First triage of the existing code (bandit 1.9.4, medium severity and confidence). These are
+# real findings in code that predates the security gate; each is exempted for three months with
+# the reason it is tolerable now and the fix that removes it.
+entries:
+  - fingerprint: "bandit:B324:autonomous_ui/locator_store.py:74c8f44b9a77"
+    reason: "sha1 only names a lock file; fix: hashlib.sha1(..., usedforsecurity=False)"
+    expires: 2027-01-16
+  - fingerprint: "bandit:B324:test_data/allocator.py:8db97c20d08d"
+    reason: "sha1 only shortens an identifier; fix: usedforsecurity=False"
+    expires: 2027-01-16
+  - fingerprint: "bandit:B314:oracles/bank_statement.py:e68cd8c1e8ab"
+    reason: "parses a statement produced by the system under test in a test run; fix: defusedxml"
+    expires: 2027-01-16
+  - fingerprint: "bandit:B314:tools/ci_reader/server.py:cfaad85e967e"
+    reason: "parses XML returned by the configured CI server; fix: defusedxml"
+    expires: 2027-01-16
+  - fingerprint: "bandit:B310:demo_sut/client.py:f0b3bdae23cc"
+    reason: "test client for the local demo service; URL is built from the demo's own base URL"
+    expires: 2027-01-16
+  - fingerprint: "bandit:B310:web_discovery/crawler/robots.py:b43a2eee7f3c"
+    reason: "robots.txt URL is derived from the crawl's configured start URL; fix: reject non-http(s) schemes before urlopen"
+    expires: 2027-01-16
+  - fingerprint: "bandit:B608:demo_sut/store.py:be6ceefcdbe6"
+    reason: "table name comes from the demo's fixed table list, never from a request"
+    expires: 2027-01-16
+  - fingerprint: "bandit:B608:demo_sut/store.py:60975e5a4d26"
+    reason: "table and column names come from the demo's fixed schema; values are bound"
+    expires: 2027-01-16
+  - fingerprint: "bandit:B608:demo_sut/store.py:4915ab288f5f"
+    reason: "table and column names come from the demo's fixed schema; values are bound"
+    expires: 2027-01-16
+  - fingerprint: "bandit:B608:demo_sut/store.py:9d87dd071d6a"
+    reason: "table name comes from the demo's fixed table list; the key is bound"
+    expires: 2027-01-16
+  - fingerprint: "bandit:B608:demo_sut/store.py:9db2676be59f"
+    reason: "table name comes from the demo's fixed table list; the id is bound"
+    expires: 2027-01-16
+  - fingerprint: "bandit:B608:memory/store.py:fe6ebdafbf22"
+    reason: "only a module constant (the LIKE escape character) is interpolated; values are bound"
+    expires: 2027-01-16
+  # Code that landed alongside the security gate (results store, scheduling, sharding,
+  # merge, synthetic data, message oracles). Same rule: reason now, fix named, three months.
+  - fingerprint: "bandit:B310:gate/ci_provider.py:b3fac6a37638"
+    reason: "dispatch request to the configured CI API URL (https by default); fix: reject non-https api_url"
+    expires: 2027-01-16
+  - fingerprint: "bandit:B314:gate/merge.py:ba201de75d93"
+    reason: "parses JUnit XML written by this suite's own shard jobs; fix: results.io.junit's guarded reader"
+    expires: 2027-01-16
+  - fingerprint: "bandit:B324:gate/shard.py:96053cc5c403"
+    reason: "sha1 only orders node ids into shards; fix: usedforsecurity=False"
+    expires: 2027-01-16
+  - fingerprint: "bandit:B314:oracles/message_rules.py:d4a0a270bb71"
+    reason: "well-formedness check of a message produced by the system under test in a test run; fix: defusedxml"
+    expires: 2027-01-16
+  - fingerprint: "bandit:B324:results/catalogue.py:13751bab0b5b"
+    reason: "sha1 only derives a stable case id from its key; fix: usedforsecurity=False"
+    expires: 2027-01-16
+  - fingerprint: "bandit:B314:results/io/junit.py:be92d298c4cd"
+    reason: "stdlib fallback after DOCTYPE/ENTITY are rejected; defusedxml is used when installed; fix: require defusedxml"
+    expires: 2027-01-16
+  - fingerprint: "bandit:B324:results/io/junit.py:32f128fe4b2d"
+    reason: "sha1 only fingerprints a failure for grouping; fix: usedforsecurity=False"
+    expires: 2027-01-16
+  - fingerprint: "bandit:B324:results/io/junit.py:5844368de754"
+    reason: "sha1 only derives a run id from the imported file; fix: usedforsecurity=False"
+    expires: 2027-01-16
+  - fingerprint: "bandit:B324:results/pytest_plugin.py:344d0e9b0d3b"
+    reason: "sha1 only fingerprints a failure for grouping; fix: usedforsecurity=False"
+    expires: 2027-01-16
+  - fingerprint: "bandit:B324:results/revision.py:a317e898fd7b"
+    reason: "sha1 is git's blob id formula (must match git hash-object); fix: usedforsecurity=False"
+    expires: 2027-01-16
+  - fingerprint: "bandit:B608:results/store.py:bfba6f99f58f"
+    reason: "column names come from the RunRecord dataclass, values are bound parameters; fix: a static column list"
+    expires: 2027-01-16
+  - fingerprint: "bandit:B613:test_data/synthetic/generator.py:d7534e65b830"
+    reason: "a right-to-left override is the deliberate content of a boundary test string; fix: write it as an escape"
+    expires: 2027-01-16
+  - fingerprint: "bandit:B314:plugins/tier3/fault_injection.plugin.py:e2bba15d22d7"
+    reason: "parses the JUnit XML its own pytest subprocess just wrote; fix: results.io.junit's guarded reader"
+    expires: 2027-01-16
+  - fingerprint: "bandit:B610:traceability/pytest_plugin.py:75398eb84062"
+    reason: "false positive: a local callable named extra, not Django QuerySet.extra; fix: rename the hook list"
+    expires: 2027-01-16
+  - fingerprint: "bandit:B608:traceability/evidence.py:f8b01e4a89b1"
+    reason: "only a run of '?' placeholders is formatted in; the run ids are bound parameters; fix: a temp table or json_each"
+    expires: 2027-01-16
+  - fingerprint: "bandit:B608:traceability/evidence.py:9ac69d0ab850"
+    reason: "only a run of '?' placeholders is formatted in; the run ids are bound parameters; fix: a temp table or json_each"
+    expires: 2027-01-16
+  - fingerprint: "bandit:B608:traceability/store.py:a47253d90e4c"
+    reason: "only a run of '?' placeholders is formatted in; the requirement ids are bound parameters; fix: a temp table or json_each"
+    expires: 2027-01-16
+  - fingerprint: "bandit:B324:qaplatform/service.py:fa57cb70da29"
+    reason: "sha1 only fingerprints a failure for grouping; fix: usedforsecurity=False"
+    expires: 2027-01-16
+  - fingerprint: "bandit:B608:qaplatform/store.py:1172819c6adf"
+    reason: "column names are checked against a fixed allow-set before formatting; values are bound; fix: one static statement per field"
+    expires: 2027-01-16
+  - fingerprint: "bandit:B608:qaplatform/store.py:482a82bd92ef"
+    reason: "the clause is one of two literals chosen in code; the value is bound; fix: two static statements"
+    expires: 2027-01-16
+  - fingerprint: "bandit:B608:qaplatform/store.py:65a371ca7a1f"
+    reason: "column names are checked against a fixed allow-set before formatting; values are bound; fix: one static statement per field"
+    expires: 2027-01-16
+  - fingerprint: "bandit:B324:qaplatform/manual.py:37f7c77d81cc"
+    reason: "sha1 only derives a revision id from a manual case's steps; fix: usedforsecurity=False"
+    expires: 2027-01-16

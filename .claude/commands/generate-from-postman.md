@@ -1,12 +1,9 @@
 ---
-description: "Use to turn a Postman collection JSON into pytest API tests: runs the api/agents orchestrator (falls back to manual generation), runs the tests, fixes them, and commits the generated files."
+description: "Turn an exported Postman collection (v2.x JSON) into runnable pytest API tests: the API generation pipeline first, a deterministic fallback when it fails. Manual only."
 disable-model-invocation: true
 ---
 
 # generate-from-postman
-
-Convert a Postman collection export (.json) into pytest API tests using the framework's
-existing `api/agents/` pipeline (IngestionAgent → GenerationAgent → ExecutionAgent → SelfHealingAgent).
 
 ## Usage
 
@@ -14,113 +11,74 @@ existing `api/agents/` pipeline (IngestionAgent → GenerationAgent → Executio
 /generate-from-postman <path/to/collection.json>
 ```
 
----
+## Steps
 
-## Phase 1 — Use the existing pipeline
+1. **Pipeline first.** Read the entry points (`main.py`, `api/agents/orchestrator.py`) and
+   run the orchestrator on the collection with the configured LLM client, writing into
+   `generated_tests/`:
 
-wiki_project has a full Postman ingestion pipeline already. Read it first:
+   ```bash
+   python main.py --collection "$COLLECTION" --output-dir generated_tests
+   ```
 
-```bash
-cat api/agents/ingestion.py | head -60
-cat api/agents/generation.py | head -60
-cat api/agents/orchestrator.py | head -60
-```
+   Print whether it succeeded, the pass/fail counts and the report path.
 
-Invoke the orchestrator directly:
+2. **Fallback** when the pipeline fails or writes nothing:
 
-```bash
-source venv/bin/activate 2>/dev/null || true
-python3 - <<'EOF'
-from api.agents.orchestrator import Orchestrator
-from api.llm.claude_client import ClaudeLLMClient
+   ```bash
+   python -m tools.slash.postman_plan summary "$COLLECTION"
+   python -m tools.slash.postman_plan write "$COLLECTION" --out generated_tests
+   ```
 
-llm = ClaudeLLMClient()
-orch = Orchestrator(collection_path="$COLLECTION_JSON", llm=llm, output_dir="generated_tests")
-result = orch.run()
-print("Success:", result.success)
-print("Passed/failed:", result.final_pass_count, result.final_fail_count)
-print("Report:", result.report_path)
-EOF
-```
+   - `summary` prints the collection name, the number of top-level items and the first
+     requests (name, method, URL);
+   - `write` creates one test module per top-level folder with one test function per
+     request, in the style of `api/tests/`, under the `api` marker. Calls go through a client
+     class: an existing `api/clients/<folder>_client.py` is reused when it has every method,
+     otherwise a client is generated next to the tests;
+   - collection variables become lookups in the environment configuration
+     (`config.get_str(...)`);
+   - the collection's test scripts become assertions with the same meaning: status code,
+     JSON content type, field equality, array length, header presence. Anything else is
+     left as a review note, never guessed.
 
-If the orchestrator fails or produces no output, fall through to Phase 2 (manual generation).
+   Credentials are never copied: an `auth` block or a secret-looking header, query
+   parameter, body field or variable becomes a configuration lookup. Check with
+   `git diff --no-index /dev/null generated_tests` that no token or password literal is left.
 
----
+3. **Reachability.** Stop and report the API as down when this fails:
 
-## Phase 2 — Manual generation (fallback)
+   ```bash
+   python -m tools.slash.reach --timeout 10
+   ```
 
-If the pipeline fails, parse the collection directly:
+4. **Run and fix** until 3 consecutive passes, at most 5 fix rounds:
 
-```bash
-python3 -c "
-import json
-with open('$COLLECTION_JSON') as f:
-    c = json.load(f)
-print('Collection:', c['info']['name'])
-items = c.get('item', [])
-print('Top-level items:', len(items))
-for i in items[:5]:
-    print(' -', i.get('name','?'), i.get('request',{}).get('method',''), i.get('request',{}).get('url',{}).get('raw','') if isinstance(i.get('request',{}).get('url'), dict) else i.get('request',{}).get('url',''))
-"
-```
+   ```bash
+   python -m tools.slash.stability --state reports/postman-loop.json reset
+   pytest generated_tests -m api --junitxml=reports/junit-postman.xml
+   python -m tools.slash.stability --state reports/postman-loop.json record --junit reports/junit-postman.xml
+   ```
 
-Generate pytest files following the pattern in `api/tests/test_search_api.py`:
-- One file per folder/group → `api/tests/test_<folder>_api.py`
-- One test function per request
-- Use `api/clients/` classes for HTTP calls (create a new client class if the endpoint isn't covered)
-- Map Postman `{{variable}}` → `config.get_base_url()` or environment config
+   Diagnose by symptom:
 
-**Postman assertion → Python assertion mapping:**
+   | Symptom | Likely cause |
+   |---|---|
+   | 401 | auth missing (configuration key not set) |
+   | 404 | wrong path or base path |
+   | connection error | wrong base URL, or the service is down |
+   | `KeyError` on a JSON field | schema drift: the response changed shape |
+   | 201 where 200 was expected (or back) | the collection's status check is stale |
 
-| Postman | Python / pytest |
-|---------|----------------|
-| `pm.response.to.have.status(200)` | `assert response.status_code == 200` |
-| `pm.response.to.be.json` | `assert "application/json" in response.headers.get("content-type","")` |
-| `pm.expect(data.field).to.equal(x)` | `assert response.json()["field"] == x` |
-| `pm.expect(arr).to.have.length(n)` | `assert len(response.json()) == n` |
-| `pm.response.to.have.header("X")` | `assert "X" in response.headers` |
+5. **Commit** only after 3 consecutive passes: the generated tests, any moved tests and the
+   clients, with a message naming the collection they came from. If the loop gives up,
+   nothing is committed.
 
----
+## Rules
 
-## Phase 3 — Run → auto-fix loop (3 passes, max 5 fix iterations)
+Generated code lands in `generated_tests/` first for review. API tests keep the `api`
+marker.
 
-```bash
-BASE_URL=$(python3 -c "import json; print(json.load(open('config/environments.json'))['qa']['base_url'])" 2>/dev/null)
-curl -s -o /dev/null -w "%{http_code}" "$BASE_URL" --max-time 10
-```
+## Output
 
-If not reachable: stop, report the API is down.
-
-```bash
-pytest --env=qa -m api generated_tests/ api/tests/ -q --tb=short 2>&1 | tail -60
-```
-
-**Fix decision tree:**
-
-| Symptom | Fix |
-|---------|-----|
-| `401 Unauthorized` | Auth not configured — add token to config or request headers |
-| `404 Not Found` | URL path wrong — re-check the Postman URL |
-| `ConnectionError` | Base URL wrong or service not running |
-| `KeyError` on JSON field | Response schema changed — update assertion to use `.get("field")` |
-| `AssertionError` on status | Check if API returns 200 vs 201 for POST |
-
----
-
-## Phase 4 — Commit and report
-
-```bash
-git add generated_tests/ api/tests/ api/clients/
-git commit -m "feat(api-tests): generated from Postman collection $(basename $COLLECTION_JSON), passed 3×"
-```
-
-Report generated files and push command.
-
----
-
-## Notes
-
-- Generated tests land in `generated_tests/` first — review before moving to `api/tests/`
-- Postman `{{env_variables}}` map to `config/environments.json` keys
-- Strip any hardcoded tokens/passwords from generated code
-- Run with `-m api` marker to keep API and UI test runs separate
+The generated files, the run result and the push command.

@@ -1,0 +1,24 @@
+# Regression plan for the in-repo demo service. Edited by pull request; the git blob of
+# this file is the plan revision recorded with every evaluation.
+id: demo-regression
+title: Demo service regression
+release: "demo"
+environments: [local]
+scope:
+  include:
+    - nodeids: ["tests/demo_examples/"]
+  exclude:
+    - marker: demo_ui
+sections:
+  - name: subscriptions
+    owner: "@maintainers"
+    requirements: [REQ-2, REQ-3]
+  - name: billing
+    owner: "@maintainers"
+    requirements: [REQ-4]
+exit_criteria:
+  run_integrity: PASS
+  min_pass_rate: 1.0
+  no_failures_in_requirements: all
+  detectors_reached_verdict: true
+  no_draft_evidence: true
