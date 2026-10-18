@@ -40,6 +40,7 @@ def fixture_render(type_, destination, data):
 TERM = "zorblax"
 runner = CliRunner()
 REAL_LOCK = scaffold.lock
+REAL_RENDER = scaffold.render
 LOCKED: list[Path] = []
 
 
@@ -438,3 +439,33 @@ def test_without_ruff_the_self_check_compiles_only(tmp_path, monkeypatch):
     assert scaffold.self_check(staging) == [
         "self-check: ruff is not available; lint skipped (compile only)"
     ]
+
+
+# ------------------------------------------------------------------ --updatable
+
+
+def test_projects_are_not_updatable_by_default(env, tmp_path):
+    result = _new(env, "--type", "api-rest", "--name", "Booking")
+    assert result.exit_code == 0, result.output
+    assert not (tmp_path / "booking" / ".copier-answers.yml").exists()
+
+
+def test_updatable_records_the_public_source_at_the_release_tag(env, tmp_path, monkeypatch):
+    yaml = pytest.importorskip("yaml")
+    from testkeel import __version__
+    from testkeel.leakgate.project import PUBLIC_SOURCE
+
+    monkeypatch.setattr(scaffold, "render", REAL_RENDER)  # the packaged templates
+    result = _new(env, "--type", "api-rest", "--name", "Booking API", "--updatable", "--no-lock")
+    assert result.exit_code == 0, result.output
+    text = (tmp_path / "booking-api" / ".copier-answers.yml").read_text("utf-8")
+    answers = yaml.safe_load(text)
+    assert (
+        answers["_src_path"] == PUBLIC_SOURCE == "https://github.com/RAJUSHANIGARAPU/wiki_project"
+    )
+    assert answers["_commit"] == f"testkeel-v{__version__}"
+    assert answers["type"] == "api-rest"
+    assert answers["project_slug"] == "booking-api"
+    assert answers["updatable"] is True and answers["docker"] is True
+    assert answers["api_base_url"] == "https://restful-booker.herokuapp.com"
+    assert str(Path.home()) not in text and "site-packages" not in text

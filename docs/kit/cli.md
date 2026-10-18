@@ -58,6 +58,7 @@ fullstack    planned   web-ui and api-rest combined (needs browser)
 | `--git` / `--no-git` | flag | `--git` | `git init`, no commit. |
 | `--credit` / `--no-credit` | flag | `--no-credit` | One README footer line naming testkeel. |
 | `--lock` / `--no-lock` | flag | `--lock` | Run `uv lock` against PyPI only. |
+| `--updatable` / `--no-updatable` | flag | `--no-updatable` | Keep `.copier-answers.yml`, naming the public repository and the release tag as the template source. |
 | `--output-dir` | path | `./<slug>` | Where to write. |
 | `--dry-run` / `--no-dry-run` | flag | `--no-dry-run` | List what would be written. |
 | `--force` / `--no-force` | flag | `--no-force` | Write into a non-empty dir. |
@@ -77,6 +78,14 @@ What it does, in order, all inside a staging directory under `~/.cache/testkeel/
    `user.name` or `user.email` and makes no commit. It prints the identity git will use
    for your first commit, or, when that identity matches your denylist, only a warning
    (never the identity or the entry), so you can set another one for this repository.
+
+By default a project carries no `.copier-answers.yml`: Copier would record where the
+templates were installed, a path on your machine. `--updatable` keeps the file and
+records `https://github.com/RAJUSHANIGARAPU/wiki_project` at the tag
+`testkeel-v<version>` instead, so the project says where it came from. `copier update`
+cannot use that source yet: the templates live under `src/testkeel/templates/` and are
+rendered in two passes (common skeleton, then the type), which `copier update` does not
+follow.
 
 Exit codes:
 

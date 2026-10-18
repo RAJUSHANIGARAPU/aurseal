@@ -70,6 +70,9 @@ def new_assignment(
     git: Annotated[bool, typer.Option("--git/--no-git", help="git init, no commit.")] = True,
     credit: Annotated[bool, typer.Option(help="One README footer line naming testkeel.")] = False,
     lock: Annotated[bool, typer.Option("--lock/--no-lock", help="Run uv lock (PyPI only).")] = True,
+    updatable: Annotated[
+        bool, typer.Option(help="Keep .copier-answers.yml, naming the public repo and tag.")
+    ] = False,
     output_dir: Annotated[Path | None, typer.Option(help="Default: ./<slug>.")] = None,
     dry_run: Annotated[bool, typer.Option(help="List what would be written.")] = False,
     force: Annotated[bool, typer.Option(help="Write into a non-empty dir.")] = False,
@@ -99,6 +102,7 @@ def new_assignment(
             git=git,
             credit=credit,
             lock=lock,
+            updatable=updatable,
             output_dir=output_dir,
             dry_run=dry_run,
             force=force,
