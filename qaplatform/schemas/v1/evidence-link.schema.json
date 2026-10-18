@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.test/schemas/v1/evidence-link.schema.json",
+  "title": "Evidence link",
+  "description": "A link to an artifact kept elsewhere; the platform stores links, never files.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "uri"
+  ],
+  "properties": {
+    "kind": {
+      "enum": [
+        "trace",
+        "video",
+        "screenshot",
+        "failure_bundle",
+        "har",
+        "log",
+        "allure",
+        "report",
+        "other"
+      ]
+    },
+    "uri": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "test_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "description": "omit for run-level evidence"
+    },
+    "attempt": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "size_bytes": {
+      "type": "integer",
+      "minimum": 0
+    }
+  }
+}

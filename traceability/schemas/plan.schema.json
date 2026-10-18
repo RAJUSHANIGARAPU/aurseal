@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.test/schemas/traceability/plan.schema.json",
+  "title": "Test plan",
+  "type": "object",
+  "required": ["id", "scope", "exit_criteria"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$"},
+    "title": {"type": "string"},
+    "release": {"type": ["string", "null"]},
+    "environments": {"type": "array", "items": {"type": "string"}},
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "include": {"type": "array", "items": {"$ref": "#/$defs/selector"}},
+        "exclude": {"type": "array", "items": {"$ref": "#/$defs/selector"}}
+      }
+    },
+    "sections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "additionalProperties": false,
+        "properties": {
+          "name": {"type": "string"},
+          "owner": {"type": "string"},
+          "requirements": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "exit_criteria": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": false,
+      "properties": {
+        "run_integrity": {"enum": ["PASS"]},
+        "min_pass_rate": {"type": "number", "minimum": 0, "maximum": 1},
+        "no_failures_in_requirements": {"$ref": "#/$defs/ids_or_all"},
+        "requirements_proved": {"$ref": "#/$defs/ids_or_all"},
+        "max_open_defects": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {"type": "integer", "minimum": 0}
+        },
+        "detectors_reached_verdict": {"type": "boolean"},
+        "no_draft_evidence": {"type": "boolean"}
+      }
+    }
+  },
+  "$defs": {
+    "ids_or_all": {
+      "oneOf": [
+        {"const": "all"},
+        {"type": "array", "minItems": 1, "items": {"type": "string"}}
+      ]
+    },
+    "selector": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 1,
+      "additionalProperties": false,
+      "properties": {
+        "marker": {"type": "string", "minLength": 1},
+        "requirements": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "requirement_labels": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "nodeids": {"type": "array", "minItems": 1, "items": {"type": "string"}}
+      }
+    }
+  }
+}

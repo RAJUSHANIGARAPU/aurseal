@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Manual run {{ run.run_id }}{% endblock %}
+{% block content %}
+<h1>Manual run <code>{{ run.run_id }}</code> · {{ run.name }}</h1>
+<div class="verdict {{ headline.tone }}" data-testid="integrity">
+  Run trust: <strong>{{ headline.label }}</strong> <span class="muted">({{ headline.what }})</span>
+</div>
+<div class="scroll"><table>
+  <thead><tr><th>Case</th><th>Status</th><th>Steps recorded</th><th>Revision</th></tr></thead>
+  <tbody>
+  {% for e in executions %}
+  <tr><td><a data-testid="execution-link" href="/ui/{{ project }}/manual/{{ run.run_id }}/{{ e.id }}">{{ e.title }}</a><br><code class="muted">{{ e.case_key }}</code></td>
+      <td><span class="tag" data-testid="execution-status">{{ e.status }}</span></td>
+      <td>{{ e.steps|length - e.missing_steps|length }} / {{ e.steps|length }}</td>
+      <td><code>{{ e.revision_id }}</code></td></tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{% if can_record %}
+<form method="post" action="/ui/{{ project }}/manual/{{ run.run_id }}/finish">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <p class="muted">Finishing judges the run. Unfinished executions count as missing results, so
+    the run will not read as PASS.</p>
+  <button type="submit" data-testid="finish-run">Finish the run</button>
+</form>
+{% endif %}
+{% endblock %}

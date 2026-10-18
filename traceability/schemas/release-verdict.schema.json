@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.test/schemas/traceability/release-verdict.schema.json",
+  "title": "Release verdict",
+  "type": "object",
+  "required": ["schema_version", "candidate", "verdict", "computed_at", "inputs_hash",
+               "policy_revision", "evidence_runs", "reasons", "waivers"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "candidate": {
+      "type": "object",
+      "required": ["release_id", "candidate_id"],
+      "properties": {
+        "release_id": {"type": "string"},
+        "candidate_id": {"type": "string"}
+      }
+    },
+    "verdict": {"enum": ["GO", "GO_WITH_WAIVERS", "NO_GO", "NO_VERDICT"]},
+    "computed_at": {"type": "string"},
+    "inputs_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "policy_revision": {"type": "string"},
+    "evidence_runs": {"type": "array", "items": {"type": "string"}},
+    "reasons": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["kind", "severity", "criterion", "exhibit", "message"],
+        "properties": {
+          "severity": {"enum": ["block", "no_verdict", "attention", "info", "waived"]}
+        }
+      }
+    },
+    "waivers": {"type": "array"}
+  }
+}

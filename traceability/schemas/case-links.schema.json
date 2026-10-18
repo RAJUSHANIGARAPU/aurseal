@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.test/schemas/traceability/case-links.schema.json",
+  "title": "Run-level case links (written once per run by the controller)",
+  "type": "object",
+  "required": ["schema_version", "run_id", "generated_at", "links", "invalid"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "run_id": {"type": "string"},
+    "generated_at": {"type": "string"},
+    "links": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["nodeid", "requirements", "origin"],
+        "properties": {
+          "nodeid": {"type": "string"},
+          "case_id": {"type": ["string", "null"]},
+          "requirements": {"type": "array", "items": {"type": "string"}},
+          "origin": {"enum": ["marker", "coverage_verdict", "external"]}
+        }
+      }
+    },
+    "invalid": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["nodeid", "id", "problem"],
+        "properties": {
+          "nodeid": {"type": "string"},
+          "id": {"type": "string"},
+          "problem": {"enum": ["format", "prefix", "unknown", "retired"]}
+        }
+      }
+    },
+    "mismatches": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["nodeid", "marker", "verdict"],
+        "properties": {
+          "nodeid": {"type": "string"},
+          "marker": {"type": "array", "items": {"type": "string"}},
+          "verdict": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "tests": {
+      "type": "object",
+      "description": "per node id: case_id and trace attributes (readers ignore unknown keys)",
+      "additionalProperties": {"type": "object"}
+    }
+  }
+}

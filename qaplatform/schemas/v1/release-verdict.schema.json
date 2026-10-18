@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.test/schemas/v1/release-verdict.schema.json",
+  "title": "Release verdict",
+  "type": "object",
+  "required": [
+    "project",
+    "release",
+    "decision",
+    "reasons"
+  ],
+  "properties": {
+    "project": {
+      "type": "string"
+    },
+    "release": {
+      "type": "string"
+    },
+    "decision": {
+      "enum": [
+        "go",
+        "no_go",
+        "not_assessed"
+      ]
+    },
+    "reasons": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "rule",
+          "result"
+        ],
+        "properties": {
+          "rule": {
+            "type": "string"
+          },
+          "result": {
+            "enum": [
+              "met",
+              "breached",
+              "absent"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "evidence": {
+      "type": "object"
+    },
+    "evaluated_at": {
+      "type": "string"
+    }
+  }
+}

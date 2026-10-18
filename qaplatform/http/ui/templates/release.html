@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Release {{ release }}{% endblock %}
+{% block content %}
+<h1>Release {{ release }}</h1>
+{% if verdict %}
+<div class="verdict {{ 'good' if verdict.decision == 'go' else 'bad' }}">Decision: <strong>{{ verdict.decision }}</strong></div>
+<ul>{% for r in verdict.reasons %}<li>{{ r.rule }}: {{ r.result }}{% if r.detail %} ({{ r.detail }}){% endif %}</li>{% endfor %}</ul>
+{% else %}
+<div class="verdict warn">No decision: {{ reason }}</div>
+<p class="muted">Absence of a decision is not a go.</p>
+{% endif %}
+{% endblock %}

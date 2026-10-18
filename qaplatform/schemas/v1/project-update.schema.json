@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.test/schemas/v1/project-update.schema.json",
+  "title": "Project update",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "name": {
+      "type": "string",
+      "maxLength": 200
+    },
+    "archived": {
+      "type": "boolean"
+    },
+    "settings": {
+      "type": "object",
+      "maxProperties": 50
+    }
+  }
+}

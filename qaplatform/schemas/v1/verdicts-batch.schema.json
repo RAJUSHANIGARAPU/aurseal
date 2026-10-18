@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.test/schemas/v1/verdicts-batch.schema.json",
+  "title": "Verdicts batch",
+  "type": "array",
+  "maxItems": 1000,
+  "items": {
+    "$ref": "verdict-row.schema.json"
+  }
+}

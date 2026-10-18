@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.test/schemas/v1/results-batch.schema.json",
+  "title": "Results batch",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "results"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "results": {
+      "type": "array",
+      "maxItems": 1000,
+      "items": {
+        "$ref": "test-result.schema.json"
+      }
+    }
+  }
+}

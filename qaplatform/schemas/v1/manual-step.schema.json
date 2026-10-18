@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.test/schemas/v1/manual-step.schema.json",
+  "title": "Manual step result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "status"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "status": {
+      "enum": [
+        "pass",
+        "fail",
+        "blocked",
+        "na"
+      ]
+    },
+    "actual": {
+      "type": "string",
+      "maxLength": 4000
+    },
+    "evidence_uri": {
+      "type": "string",
+      "maxLength": 2000
+    }
+  }
+}

@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Runs · {{ project }}{% endblock %}
+{% block content %}
+<h1>Runs</h1>
+<form method="get">
+  <label for="status">Status</label>
+  <select id="status" name="status">
+    {% for s in ["", "open", "finished", "interrupted"] %}
+    <option value="{{ s }}" {% if s == status %}selected{% endif %}>{{ s or "any" }}</option>
+    {% endfor %}
+  </select>
+  <button type="submit">Filter</button>
+</form>
+<div class="scroll"><table>
+  <thead><tr><th>Run</th><th>Name</th><th>Source</th><th>Release</th><th>Results</th>
+      <th>Integrity</th><th>Started</th></tr></thead>
+  <tbody>
+  {% for r in runs %}
+  <tr>
+    <td><a href="/ui/{{ project }}/runs/{{ r.run_id }}"><code>{{ r.run_id }}</code></a>
+        {% if r.external_id %}<br><span class="muted">{{ r.external_id }}</span>{% endif %}</td>
+    <td>{{ r.name or "" }}</td><td>{{ r.source }}</td><td>{{ r.release or "" }}</td>
+    <td>{{ r.result_count }}</td>
+    <td><span class="tag {{ r.tone }}">{{ r.integrity_label }}</span></td>
+    <td>{{ r.started_at or "" }}</td>
+  </tr>
+  {% else %}
+  <tr><td colspan="7" class="muted">No runs yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{% if next_cursor %}<p><a href="?cursor={{ next_cursor }}&status={{ q(status) }}">Older runs</a></p>{% endif %}
+{% endblock %}

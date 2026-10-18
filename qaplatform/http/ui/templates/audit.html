@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Audit log{% endblock %}
+{% block content %}
+<h1>Audit log</h1>
+<div class="verdict {{ 'good' if chain.ok else 'bad' }}">
+  Hash chain: <strong>{{ "intact" if chain.ok else "BROKEN at row " ~ chain.first_bad_seq }}</strong>
+  <span class="muted">({{ chain.rows_checked }} rows checked; head <code>{{ chain.head }}</code>)</span>
+  {% if not chain.ok %}<br>{{ chain.reason }}{% endif %}
+</div>
+<form method="get">
+  <label for="action">Action</label> <input id="action" name="action" value="{{ action }}">
+  <label for="actor">Actor</label> <input id="actor" name="actor" value="{{ actor }}">
+  <button type="submit">Filter</button>
+</form>
+<div class="scroll"><table>
+  <thead><tr><th>#</th><th>When</th><th>Actor</th><th>Action</th><th>Target</th><th>Change</th></tr></thead>
+  <tbody>
+  {% for e in entries %}
+  <tr><td>{{ e.seq }}</td><td>{{ e.ts }}</td><td>{{ e.actor_user_id }}</td><td>{{ e.action }}</td>
+      <td>{{ e.target_type }} <code>{{ e.target_id }}</code></td>
+      <td><code>{{ e.diff|tojson }}</code></td></tr>
+  {% else %}
+  <tr><td colspan="6" class="muted">No entries.</td></tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{% if next_cursor %}<p><a href="?cursor={{ next_cursor }}&action={{ q(action) }}&actor={{ q(actor) }}">Next page</a></p>{% endif %}
+{% endblock %}

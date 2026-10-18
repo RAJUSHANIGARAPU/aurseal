@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.test/schemas/traceability/matrix.schema.json",
+  "title": "Requirements traceability matrix",
+  "type": "object",
+  "required": ["schema_version", "scope", "generated_at", "run_ids", "headline", "counts", "rows"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "scope": {"type": "object"},
+    "generated_at": {"type": "string"},
+    "run_ids": {"type": "array", "items": {"type": "string"}},
+    "headline": {"type": "string"},
+    "counts": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}},
+    "rows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["requirement_id", "title", "status", "stale", "cases"],
+        "properties": {
+          "requirement_id": {"type": "string"},
+          "title": {"type": "string"},
+          "priority": {"type": ["string", "null"]},
+          "status": {"enum": ["UNCOVERED", "NOT_RUN", "UNVERIFIED", "FAILING", "KNOWN_DEFECT",
+                              "DRAFT_ONLY", "PASSING", "PROVED"]},
+          "stale": {"type": ["boolean", "null"]},
+          "cases": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["nodeid", "outcome", "state"],
+              "properties": {
+                "nodeid": {"type": "string"},
+                "case_id": {"type": ["string", "null"]},
+                "outcome": {"type": "string"},
+                "run_id": {"type": ["string", "null"]},
+                "run_integrity": {"type": ["string", "null"]},
+                "state": {"enum": ["not_run", "unverified", "failing", "known_defect", "passed"]},
+                "coverage_verdict": {"type": ["string", "null"]},
+                "detector_verdict": {"type": ["string", "null"]},
+                "defects": {"type": "array", "items": {"type": "string"}},
+                "draft": {"type": "boolean"},
+                "stale": {"type": ["boolean", "null"]}
+              }
+            }
+          }
+        }
+      }
+    },
+    "unregistered": {"type": "array"}
+  }
+}

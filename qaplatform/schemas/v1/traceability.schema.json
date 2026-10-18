@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.test/schemas/v1/traceability.schema.json",
+  "title": "Traceability",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "project",
+    "rows"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "project": {
+      "type": "string"
+    },
+    "release": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "generated_at": {
+      "type": "string"
+    },
+    "rows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "requirement",
+          "status",
+          "tests"
+        ],
+        "properties": {
+          "requirement": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "proved",
+              "recorded_only",
+              "failing",
+              "held_empty",
+              "no_tests"
+            ]
+          },
+          "tests": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "test_id"
+              ],
+              "properties": {
+                "test_id": {
+                  "type": "string"
+                },
+                "latest_outcome": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "latest_verdict": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "run_id": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "source": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "at": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
+          "open_tickets": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.test/schemas/traceability/requirements.schema.json",
+  "title": "Requirements registry (repository YAML)",
+  "type": "object",
+  "required": ["requirements"],
+  "additionalProperties": false,
+  "properties": {
+    "requirements": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/requirement"}
+    }
+  },
+  "$defs": {
+    "requirement": {
+      "type": "object",
+      "required": ["id", "title"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"type": "string", "pattern": "^[A-Z][A-Z0-9]*-[0-9]+$"},
+        "title": {"type": "string", "minLength": 1},
+        "status": {"enum": ["active", "retired"]},
+        "priority": {"enum": ["must", "should", "could", null]},
+        "labels": {"type": "array", "items": {"type": "string"}},
+        "release": {"type": ["string", "null"]},
+        "parent_id": {"type": ["string", "null"]},
+        "source": {"type": "string"},
+        "source_ref": {"type": ["string", "null"]},
+        "url": {"type": ["string", "null"]}
+      }
+    }
+  }
+}

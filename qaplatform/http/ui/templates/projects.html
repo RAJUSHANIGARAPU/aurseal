@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Projects{% endblock %}
+{% block content %}
+<h1>Projects</h1>
+<div class="scroll"><table>
+  <thead><tr><th>Project</th><th>Name</th><th>Your role</th><th>State</th></tr></thead>
+  <tbody>
+  {% for p in projects %}
+  <tr><td><a href="/ui/{{ p.key }}/runs">{{ p.key }}</a></td><td>{{ p.name }}</td>
+      <td>{{ p.role or "" }}</td><td>{% if p.archived %}<span class="warn">archived (read-only)</span>{% else %}active{% endif %}</td></tr>
+  {% else %}
+  <tr><td colspan="4" class="muted">No project is visible to this token.</td></tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{% endblock %}
