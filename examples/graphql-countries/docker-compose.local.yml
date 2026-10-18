@@ -1,0 +1,8 @@
+# The local target of `make test-local`: the Countries GraphQL API on localhost:8303,
+# built from a pinned upstream commit (local/countries/Dockerfile), so a pull request never
+# depends on the public endpoint.
+services:
+  countries:
+    build: local/countries
+    ports:
+      - "127.0.0.1:8303:4000"

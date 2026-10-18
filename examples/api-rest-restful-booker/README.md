@@ -19,6 +19,11 @@ Prerequisites: [uv](https://docs.astral.sh/uv/) and `make`. Or, with only Docker
 with no network. The live tests run against <https://restful-booker.herokuapp.com> every
 night, never on a pull request: a third-party outage is not a defect in this code.
 
+`make test-local` runs the whole suite against the API's own Docker image on
+`localhost:8302` ([docker-compose.local.yml](docker-compose.local.yml)), then removes the
+container; this is what a pull request runs. Its report, `reports/local/report.html`, says
+it ran locally. Prerequisites: Docker, uv and GNU make.
+
 ## Decisions and trade-offs
 
 | Decision | Alternatives considered | Why | Cost accepted |
@@ -68,10 +73,8 @@ night, never on a pull request: a third-party outage is not a defect in this cod
 
 ## What I would do next
 
-1. Run the suite against the API's own Docker image on every pull request, so test changes
-   are checked without the public host.
-2. Cover the date filters, with bookings created on known dates.
-3. A contract test generated from an OpenAPI description, if the API published one.
+1. Cover the date filters, with bookings created on known dates.
+2. A contract test generated from an OpenAPI description, if the API published one.
 
 ## Project layout
 
