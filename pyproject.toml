@@ -67,3 +67,6 @@ strict = true
 mypy_path = "src"
 explicit_package_bases = true
 plugins = ["pydantic.mypy"]
+# Assignment templates are Copier sources, not importable modules; generated projects
+# run their own mypy.
+exclude = ["^src/testkeel/templates/"]
