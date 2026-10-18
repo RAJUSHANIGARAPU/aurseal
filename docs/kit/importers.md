@@ -1,15 +1,15 @@
 # Importers
 
-An importer reads one report file into the result model (`testkeel.model.v1`): one
+An importer reads one report file into the result model (`aurseal.model.v1`): one
 record per test, configuration and parameter variant, with retries kept as attempts of
-that record. `testkeel report` picks the importer by sniffing the start of each file;
+that record. `aurseal report` picks the importer by sniffing the start of each file;
 `--format NAME` skips the sniffing.
 
 | Name | Reads | Produce it with |
 |---|---|---|
 | `junit` | JUnit XML (pytest, Maven Surefire and compatible reporters) | `pytest --junitxml=junit.xml`, Surefire's default reports |
 | `playwright` | Playwright's JSON reporter | `reporter: [["json", { outputFile: "results.json" }]]` |
-| `testkeel` | The canonical upload document (`RunUpload` JSON) | the [pytest plugin](#pytest-plugin) |
+| `aurseal` | The canonical upload document (`RunUpload` JSON) | the [pytest plugin](#pytest-plugin) |
 | `cypress` | mochawesome JSON (one spec or a `mochawesome-merge` report); the Cypress Module API results | `--reporter mochawesome --reporter-options json=true`; `JSON.stringify(await cypress.run())` |
 | `newman` | Newman's `json` reporter (the run summary) | `newman run collection.json --reporters json --reporter-json-export newman.json` |
 | `k6` | k6's end-of-test summary: `handleSummary` data or `--summary-export` | `handleSummary(data) { return { "k6-summary.json": JSON.stringify(data) }; }` |
@@ -57,7 +57,7 @@ project of their own.
 Each record carries a `perf.k6` result type payload (schema `perf.k6/1`): the metric's
 type and values (p95, p99, rates, counts), the threshold, its outcome and the value it
 judged. The result type is a plugin like any other (entry point group
-`testkeel.result_types`), so its JSON Schema is available to anything that discovers it.
+`aurseal.result_types`), so its JSON Schema is available to anything that discovers it.
 
 `--summary-export` writes thresholds as booleans that are true when the threshold
 failed; the importer reads them that way. k6's newer machine-readable summary
@@ -66,12 +66,12 @@ message saying so.
 
 ## pytest plugin
 
-Installing `testkeel` installs a pytest plugin. It does nothing until you ask for the
+Installing `aurseal` installs a pytest plugin. It does nothing until you ask for the
 file:
 
 ```bash
-pytest --testkeel-out=reports/testkeel.json
-testkeel report reports/testkeel.json
+pytest --aurseal-out=reports/aurseal.json
+aurseal report reports/aurseal.json
 ```
 
 What it records, compared with `--junitxml`:
@@ -87,7 +87,7 @@ What it records, compared with `--junitxml`:
 - **Setup and teardown errors** are `broken`, call failures `failed`.
 
 Under pytest-xdist the controller writes the file; workers write nothing. Turn the plugin
-off entirely with `-p no:testkeel`.
+off entirely with `-p no:aurseal`.
 
 ## Writing an importer
 
@@ -96,7 +96,7 @@ file starting with `head` is its format) and `parse(stream) -> Iterator[TestReco
 Register it in your package's `pyproject.toml`:
 
 ```toml
-[project.entry-points."testkeel.importers"]
+[project.entry-points."aurseal.importers"]
 myformat = "my_package.importer:MyImporter"
 ```
 

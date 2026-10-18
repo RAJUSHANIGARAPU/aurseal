@@ -18,8 +18,8 @@ from aurseal.cli import app  # noqa: E402
 CLI_DOC = Path(__file__).resolve().parents[1] / "docs" / "kit" / "cli.md"
 
 
-def _commands(group, prefix: str = "testkeel") -> dict[str, set[str]]:
-    """``{"testkeel new-assignment": {"--type", ...}}`` for every leaf command."""
+def _commands(group, prefix: str = "aurseal") -> dict[str, set[str]]:
+    """``{"aurseal new-assignment": {"--type", ...}}`` for every leaf command."""
     found: dict[str, set[str]] = {}
     for name, command in group.commands.items():
         path = f"{prefix} {name}"
@@ -37,7 +37,7 @@ def _commands(group, prefix: str = "testkeel") -> dict[str, set[str]]:
 
 def _documented() -> dict[str, set[str]]:
     sections = re.split(
-        r"^## `(testkeel[^`]*)`\s*$", CLI_DOC.read_text(encoding="utf-8"), flags=re.M
+        r"^## `(aurseal[^`]*)`\s*$", CLI_DOC.read_text(encoding="utf-8"), flags=re.M
     )
     documented = {}
     for heading, body in zip(sections[1::2], sections[2::2], strict=True):
@@ -61,5 +61,5 @@ def test_the_cli_reference_documents_every_command_and_option():
 def test_neither_side_is_vacuous():
     actual = _commands(typer_main.get_command(app))
     documented = _documented()
-    assert {"--type", "--dry-run", "--no-dry-run"} <= actual["testkeel new-assignment"]
-    assert {"--output", "-o"} <= documented["testkeel report"]
+    assert {"--type", "--dry-run", "--no-dry-run"} <= actual["aurseal new-assignment"]
+    assert {"--output", "-o"} <= documented["aurseal report"]

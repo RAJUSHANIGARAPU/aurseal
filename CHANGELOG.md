@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to the `testkeel` package are recorded here. The format follows
+All notable changes to the `aurseal` package are recorded here. The format follows
 [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/) and the package follows
 [Semantic Versioning](https://semver.org/); what the version number promises is in
 [docs/kit/releasing.md](docs/kit/releasing.md).
@@ -9,14 +9,29 @@ All notable changes to the `testkeel` package are recorded here. The format foll
 
 ### Added
 
-- `testkeel --version` prints the installed version and exits.
-- Releases are published to PyPI with trusted publishing when a `testkeel-v<version>`
+- `aurseal --version` prints the installed version and exits.
+- Releases are published to PyPI with trusted publishing when a `aurseal-v<version>`
   tag is pushed; a manual run of the publish workflow rehearses on TestPyPI.
 
 ### Changed
 
-- The version is written once, in `src/testkeel/__init__.py`; `pyproject.toml` reads it
+- Renamed testkeel → aurseal. The package, the import path and the console script are
+  now `aurseal` (`pip install aurseal`, `import aurseal`, `aurseal new-assignment`), and
+  the repository moved to <https://github.com/RAJUSHANIGARAPU/aurseal> (the old URL
+  redirects). Entry-point groups are `aurseal.importers`, `aurseal.result_types` and
+  `aurseal.reporters`: a plugin registered under a `testkeel.*` group is no longer found.
+  The pytest plugin is `-p aurseal` with the option `--aurseal-out`. Release tags are
+  `aurseal-v<version>` (`testkeel-v0.1.0` stays as it is). Configuration lives in
+  `~/.config/aurseal/`.
+- The version is written once, in `src/aurseal/__init__.py`; `pyproject.toml` reads it
   from there.
+
+### Deprecated
+
+- `~/.config/testkeel/denylist.txt` and `~/.config/testkeel/allow-hosts.txt` are still
+  read when the `aurseal` file is absent, and `assignment update` still reads the templates
+  of a `testkeel-v*` tag and accepts a project whose answers record the old repository URL.
+  These fallbacks are removed in the release after the next one.
 
 ## [0.1.0] - 2026-10-18
 
@@ -33,5 +48,5 @@ All notable changes to the `testkeel` package are recorded here. The format foll
   `testkeel.importers`, `testkeel.result_types` and `testkeel.reporters`.
 - The leak gate, `python -m testkeel.leakgate`.
 
-[Unreleased]: https://github.com/RAJUSHANIGARAPU/wiki_project/compare/testkeel-v0.1.0...HEAD
-[0.1.0]: https://github.com/RAJUSHANIGARAPU/wiki_project/releases/tag/testkeel-v0.1.0
+[Unreleased]: https://github.com/RAJUSHANIGARAPU/aurseal/compare/testkeel-v0.1.0...HEAD
+[0.1.0]: https://github.com/RAJUSHANIGARAPU/aurseal/releases/tag/testkeel-v0.1.0

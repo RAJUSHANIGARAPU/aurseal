@@ -3,19 +3,19 @@
 ## Install
 
 The package is not on PyPI yet; install it from the repository. Either tool keeps it in
-its own environment and puts `testkeel` on your `PATH`:
+its own environment and puts `aurseal` on your `PATH`:
 
 ```bash
-uv tool install git+https://github.com/RAJUSHANIGARAPU/wiki_project
+uv tool install git+https://github.com/RAJUSHANIGARAPU/aurseal
 # or
-pipx install git+https://github.com/RAJUSHANIGARAPU/wiki_project
+pipx install git+https://github.com/RAJUSHANIGARAPU/aurseal
 ```
 
 Check the install:
 
 ```bash
-testkeel version
-testkeel list-types
+aurseal version
+aurseal list-types
 ```
 
 Generated projects use [uv](https://docs.astral.sh/uv/) and `make`; the browser types
@@ -25,7 +25,7 @@ needs the `k6` binary, and the live tier of `mobile` needs the Android SDK and A
 ## Generate a project
 
 ```bash
-testkeel new-assignment --type web-ui --name acme-checkout
+aurseal new-assignment --type web-ui --name acme-checkout
 ```
 
 This renders the project into a staging directory, runs the leak gate over it, and only
@@ -47,8 +47,8 @@ to confirm or rewrite before you hand the work in.
 ## Other types
 
 ```bash
-testkeel new-assignment --type api-rest --name acme-orders-api --api-base-url https://api.example.test
-testkeel new-assignment --type strategy --name acme-test-strategy
+aurseal new-assignment --type api-rest --name acme-orders-api --api-base-url https://api.example.test
+aurseal new-assignment --type strategy --name acme-test-strategy
 ```
 
 `--dry-run` lists what would be written without writing anything. See the
@@ -57,7 +57,7 @@ testkeel new-assignment --type strategy --name acme-test-strategy
 ## Check a project before you submit it
 
 ```bash
-testkeel assignment check acme-checkout
+aurseal assignment check acme-checkout
 ```
 
 Exit code 0 means clean; 4 means findings, printed as a location and a rule id. See

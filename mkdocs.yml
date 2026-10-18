@@ -1,12 +1,12 @@
 # The documentation site, published to GitHub Pages by .github/workflows/pages.yml.
 # Build locally: pip install -r requirements-docs.txt && mkdocs build --strict
-site_name: testkeel
+site_name: aurseal
 site_description: >-
   Open-source test automation kit: scaffold test projects, check them for leaks,
   report on results.
-site_url: https://rajushanigarapu.github.io/wiki_project/
-repo_url: https://github.com/RAJUSHANIGARAPU/wiki_project
-repo_name: wiki_project
+site_url: https://rajushanigarapu.github.io/aurseal/
+repo_url: https://github.com/RAJUSHANIGARAPU/aurseal
+repo_name: RAJUSHANIGARAPU/aurseal
 edit_uri: edit/main/docs/
 copyright: MIT licence
 

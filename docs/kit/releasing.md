@@ -1,6 +1,6 @@
 # Releasing
 
-How a `testkeel` version is numbered, what it promises, and how it reaches PyPI.
+How a `aurseal` version is numbered, what it promises, and how it reaches PyPI.
 
 ## What is public contract
 
@@ -10,15 +10,15 @@ may change in any release.
 
 | Surface | Where | Promise |
 |---|---|---|
-| Result model | `testkeel.model.v1` (`RunUpload`, `TestRecord`, `Status`, ...) and `schema_version` inside every document | A field removal or a change of meaning is a new module (`v2`) and a major release, never an edit to `v1` |
-| Test identity | `testkeel.model.identity` (`explicit_id`, `fingerprint`) | A change to a fingerprint is a major release: it would re-identify, and so duplicate, every stored test |
-| Importer registry | `testkeel.importers.registry` (`importers`, `sniff`, `detect`, `parse`, `parse_file`) | New importers arrive in minor releases; a fix to a parser's output is a patch release with a changelog entry |
-| Plugin interface | `testkeel.plugin_api.v1` and the entry-point groups `testkeel.importers`, `testkeel.result_types`, `testkeel.reporters` | One major version supported and the previous one deprecated, never removed without a major release |
+| Result model | `aurseal.model.v1` (`RunUpload`, `TestRecord`, `Status`, ...) and `schema_version` inside every document | A field removal or a change of meaning is a new module (`v2`) and a major release, never an edit to `v1` |
+| Test identity | `aurseal.model.identity` (`explicit_id`, `fingerprint`) | A change to a fingerprint is a major release: it would re-identify, and so duplicate, every stored test |
+| Importer registry | `aurseal.importers.registry` (`importers`, `sniff`, `detect`, `parse`, `parse_file`) | New importers arrive in minor releases; a fix to a parser's output is a patch release with a changelog entry |
+| Plugin interface | `aurseal.plugin_api.v1` and the entry-point groups `aurseal.importers`, `aurseal.result_types`, `aurseal.reporters` | One major version supported and the previous one deprecated, never removed without a major release |
 | CLI | Command names, option names and exit codes in the [CLI reference](cli.md) | Removing or renaming any of them, or changing an exit code's meaning, is a major release; new commands and options are minor |
 
 ## Version numbers
 
-`testkeel` follows [Semantic Versioning 2.0.0](https://semver.org/) for the surfaces
+`aurseal` follows [Semantic Versioning 2.0.0](https://semver.org/) for the surfaces
 above:
 
 - **MAJOR** for an incompatible change to any of them.
@@ -46,31 +46,31 @@ date.
 
 ## Cutting a release
 
-The version is written in one place, `src/testkeel/__init__.py`; `pyproject.toml` reads it
-from there and `testkeel --version` prints it.
+The version is written in one place, `src/aurseal/__init__.py`; `pyproject.toml` reads it
+from there and `aurseal --version` prints it.
 
-1. On a branch, set `__version__` in `src/testkeel/__init__.py` and move the changelog's
+1. On a branch, set `__version__` in `src/aurseal/__init__.py` and move the changelog's
    *Unreleased* entries under the new version. Merge the pull request.
 2. Tag the merge commit on `main` and push the tag:
 
     ```bash
-    git tag -a testkeel-v0.2.0 -m "testkeel 0.2.0"
-    git push origin testkeel-v0.2.0
+    git tag -a aurseal-v0.2.0 -m "aurseal 0.2.0"
+    git push origin aurseal-v0.2.0
     ```
 
 3. The push starts `.github/workflows/publish.yml`. Its build job fails, and nothing is
    published, when:
     - the tagged commit is not on the default branch;
-    - the tag is not exactly `testkeel-v` + `__version__`;
+    - the tag is not exactly `aurseal-v` + `__version__`;
     - `twine check --strict` rejects the sdist or wheel metadata;
-    - the wheel holds anything outside `testkeel/` (`python -m tools.wheel_check`);
+    - the wheel holds anything outside `aurseal/` (`python -m tools.wheel_check`);
     - the wheel, installed alone in a clean environment, cannot run
-      `testkeel --version` and `testkeel list-types`.
+      `aurseal --version` and `aurseal list-types`.
 4. The `pypi` job then publishes the build through the `pypi` environment with trusted
    publishing: GitHub issues a short-lived token to that job only, and no PyPI token is
    stored in the repository.
 
-Release tags are always `testkeel-v<version>`. Plain `v*` tags belong to the release
+Release tags are always `aurseal-v<version>`. Plain `v*` tags belong to the release
 verdict workflow (`release.yml`) and never publish the package;
 `tests/package/test_publish_workflow.py` checks both directions against every workflow
 in the repository. A workflow runs from the tagged commit, so a tag on a commit that
@@ -80,7 +80,7 @@ predates `publish.yml` publishes nothing.
 
 Run the *Publish* workflow by hand (Actions → Publish → Run workflow). The same build job
 runs, skipping the two tag checks, and the `testpypi` job uploads to
-[TestPyPI](https://test.pypi.org/project/testkeel/). A manual run never publishes to PyPI.
+[TestPyPI](https://test.pypi.org/project/aurseal/). A manual run never publishes to PyPI.
 TestPyPI refuses a version it already has, so a second rehearsal needs a new version,
 for example a `.devN` suffix on the branch.
 
@@ -94,13 +94,13 @@ it.
 
     | Field | Value |
     |---|---|
-    | PyPI project name | `testkeel` |
+    | PyPI project name | `aurseal` |
     | Owner | `RAJUSHANIGARAPU` |
-    | Repository name | `wiki_project` |
+    | Repository name | `aurseal` |
     | Workflow name | `publish.yml` |
     | Environment name | `pypi` |
 
-    A pending publisher does not reserve the name: whoever uploads `testkeel` first owns
+    A pending publisher does not reserve the name: whoever uploads `aurseal` first owns
     it. The first successful run of the `pypi` job creates the project.
 
 2. On test.pypi.org (a separate account), at
@@ -108,6 +108,6 @@ it.
    environment name `testpypi`.
 3. In the GitHub repository, *Settings → Environments*, create `pypi` and `testpypi`.
    On `pypi`, add yourself as a required reviewer and restrict deployment to tags
-   matching `testkeel-v*`, so a publish waits for an explicit approval.
+   matching `aurseal-v*`, so a publish waits for an explicit approval.
 4. If the repository is renamed, update the trusted publisher on PyPI and TestPyPI to
    the new repository name before the next release, or the upload is refused.

@@ -1,23 +1,23 @@
-# testkeel
+# aurseal: from Latin aurum, gold, and seal: the gold seal a release earns only after it has been assayed
 
 Open-source test automation kit: scaffold interview-grade test projects in under a minute,
 plus importers, reports and a single-team results platform.
 
-[![Tests](https://github.com/RAJUSHANIGARAPU/wiki_project/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/RAJUSHANIGARAPU/wiki_project/actions/workflows/tests.yml)
-[![Leak check](https://github.com/RAJUSHANIGARAPU/wiki_project/actions/workflows/leak-check.yml/badge.svg?branch=main)](https://github.com/RAJUSHANIGARAPU/wiki_project/actions/workflows/leak-check.yml)
-[![Docs](https://github.com/RAJUSHANIGARAPU/wiki_project/actions/workflows/pages.yml/badge.svg?branch=main)](https://rajushanigarapu.github.io/wiki_project/)
+[![Tests](https://github.com/RAJUSHANIGARAPU/aurseal/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/RAJUSHANIGARAPU/aurseal/actions/workflows/tests.yml)
+[![Leak check](https://github.com/RAJUSHANIGARAPU/aurseal/actions/workflows/leak-check.yml/badge.svg?branch=main)](https://github.com/RAJUSHANIGARAPU/aurseal/actions/workflows/leak-check.yml)
+[![Docs](https://github.com/RAJUSHANIGARAPU/aurseal/actions/workflows/pages.yml/badge.svg?branch=main)](https://rajushanigarapu.github.io/aurseal/)
 
 ## Quickstart
 
 ```bash
-uv tool install git+https://github.com/RAJUSHANIGARAPU/wiki_project   # or: pipx install git+...
-testkeel new-assignment --type web-ui --name acme-checkout
+uv tool install git+https://github.com/RAJUSHANIGARAPU/aurseal   # or: pipx install git+...
+aurseal new-assignment --type web-ui --name acme-checkout
 cd acme-checkout && make test
 ```
 
 The project is rendered into a staging directory, checked by the leak gate, and only then
-written. `testkeel list-types` shows what is available; the
-[quickstart](https://rajushanigarapu.github.io/wiki_project/kit/quickstart/) covers the
+written. `aurseal list-types` shows what is available; the
+[quickstart](https://rajushanigarapu.github.io/aurseal/kit/quickstart/) covers the
 other types and options.
 
 ## See it working
@@ -27,23 +27,23 @@ target (the load examples put load only on a local copy):
 
 | Example | Template | Live report | Source |
 |---|---|---|---|
-| Sauce Demo shop: sign-in, cart, checkout | `web-ui` | [report](https://rajushanigarapu.github.io/wiki_project/reports/web-ui-saucedemo/) | [examples/web-ui-saucedemo](examples/web-ui-saucedemo/README.md) |
-| Restful Booker API: auth, booking CRUD | `api-rest` | [report](https://rajushanigarapu.github.io/wiki_project/reports/api-rest-restful-booker/) | [examples/api-rest-restful-booker](examples/api-rest-restful-booker/README.md) |
-| Countries GraphQL API: lookups, schema drift | `api-graphql` | [report](https://rajushanigarapu.github.io/wiki_project/reports/graphql-countries/) | [examples/graphql-countries](examples/graphql-countries/README.md) |
-| W3C Before and After demo: WCAG 2.1 AA scans | `a11y` | [report](https://rajushanigarapu.github.io/wiki_project/reports/a11y-w3c-bad/) | [examples/a11y-w3c-bad](examples/a11y-w3c-bad/README.md) |
+| Sauce Demo shop: sign-in, cart, checkout | `web-ui` | [report](https://rajushanigarapu.github.io/aurseal/reports/web-ui-saucedemo/) | [examples/web-ui-saucedemo](examples/web-ui-saucedemo/README.md) |
+| Restful Booker API: auth, booking CRUD | `api-rest` | [report](https://rajushanigarapu.github.io/aurseal/reports/api-rest-restful-booker/) | [examples/api-rest-restful-booker](examples/api-rest-restful-booker/README.md) |
+| Countries GraphQL API: lookups, schema drift | `api-graphql` | [report](https://rajushanigarapu.github.io/aurseal/reports/graphql-countries/) | [examples/graphql-countries](examples/graphql-countries/README.md) |
+| W3C Before and After demo: WCAG 2.1 AA scans | `a11y` | [report](https://rajushanigarapu.github.io/aurseal/reports/a11y-w3c-bad/) | [examples/a11y-w3c-bad](examples/a11y-w3c-bad/README.md) |
 | QuickPizza: smoke, load and stress with SLOs | `perf-k6` | build artifact | [examples/perf-k6-quickpizza](examples/perf-k6-quickpizza/README.md) |
 | QuickPizza: the same traffic in Locust | `perf-locust` | build artifact | [examples/perf-locust-quickpizza](examples/perf-locust-quickpizza/README.md) |
 
-Documentation: [rajushanigarapu.github.io/wiki_project](https://rajushanigarapu.github.io/wiki_project/).
+Documentation: [rajushanigarapu.github.io/aurseal](https://rajushanigarapu.github.io/aurseal/).
 
 ## What's inside
 
 | Part | What it does | Docs |
 |---|---|---|
-| `testkeel new-assignment` | Renders a project: page objects, an API client, load profiles or screen objects, offline tests that pass on the first run, test plan, ruff + strict mypy, Makefile, Dockerfile, CI with a published report | [CLI reference](https://rajushanigarapu.github.io/wiki_project/kit/cli/) |
-| Templates | Nine types: `web-ui` (Playwright), `api-rest` (httpx + pydantic), `api-graphql` (gql), `a11y` (axe-core), `perf-k6`, `perf-locust`, `mobile` (Appium), `fullstack` (UI + API), `strategy` (documents) | [Templates](https://rajushanigarapu.github.io/wiki_project/kit/templates/) |
-| Leak gate | Keeps listed private names and personal data out of generated projects and out of this repository; prints locations, never the matched text | [Leak gate](https://rajushanigarapu.github.io/wiki_project/kit/leak-gate/) |
-| Importers and report | JUnit XML and Playwright JSON into one result model with stable test identities; `testkeel report` renders a self-contained HTML summary | [CLI reference](https://rajushanigarapu.github.io/wiki_project/kit/cli/) |
+| `aurseal new-assignment` | Renders a project: page objects, an API client, load profiles or screen objects, offline tests that pass on the first run, test plan, ruff + strict mypy, Makefile, Dockerfile, CI with a published report | [CLI reference](https://rajushanigarapu.github.io/aurseal/kit/cli/) |
+| Templates | Nine types: `web-ui` (Playwright), `api-rest` (httpx + pydantic), `api-graphql` (gql), `a11y` (axe-core), `perf-k6`, `perf-locust`, `mobile` (Appium), `fullstack` (UI + API), `strategy` (documents) | [Templates](https://rajushanigarapu.github.io/aurseal/kit/templates/) |
+| Leak gate | Keeps listed private names and personal data out of generated projects and out of this repository; prints locations, never the matched text | [Leak gate](https://rajushanigarapu.github.io/aurseal/kit/leak-gate/) |
+| Importers and report | JUnit XML and Playwright JSON into one result model with stable test identities; `aurseal report` renders a self-contained HTML summary | [CLI reference](https://rajushanigarapu.github.io/aurseal/kit/cli/) |
 | Results platform | A versioned REST API over a results store, for one team's runs, verdicts and evidence (`qaplatform/`) | [Integration API](docs/integration_api.md) |
 | The framework | The pytest + Playwright framework the kit grew out of: lanes, run-trust gate, evidence, traceability | [Framework reference](#framework-reference) |
 
@@ -51,7 +51,7 @@ Documentation: [rajushanigarapu.github.io/wiki_project](https://rajushanigarapu.
 
 # Framework reference
 
-**wiki_project — Universal Test Automation Framework**
+**aurseal — Universal Test Automation Framework**
 
 A plug-and-play, AI-powered test automation framework for any web application. Clone it, point it at a URL, run. No org-specific assumptions, no proprietary dependencies.
 
@@ -193,7 +193,7 @@ Supporting engines: DynamicDataEngine, ValidationEngine, ContextMemory, AgentLog
 ## 4. Project Structure
 
 ```
-wiki_project/
+aurseal/
 ├── api/
 │   ├── agents/          — ingestion, generation, execution, analysis, healing, orchestrator
 │   ├── clients/         — low-level HTTP clients
@@ -256,7 +256,7 @@ wiki_project/
 
 ```bash
 git clone <repository-url>
-cd wiki_project
+cd aurseal
 pip install -r requirements.txt
 playwright install --with-deps
 ```
