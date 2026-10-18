@@ -1,0 +1,5 @@
+# Release waivers: each turns one blocking or no-verdict reason into a waived one.
+# criterion: what the verdict names (requirement:REQ-4, detector:BUG-142, defect:GH-57,
+# plan:min_pass_rate, integrity); expires: YYYY-MM-DD, after which it is ignored.
+# Added and removed by pull request only.
+waivers: []

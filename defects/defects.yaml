@@ -1,0 +1,4 @@
+# Defects tracked in the repository itself (ids BUG-n). Detectors and known_defect markers
+# name these ids; `python -m traceability defects sync` reads their state from here and
+# from the GitHub tracker (GH-n). Change a state in a pull request when a fix lands.
+defects: []

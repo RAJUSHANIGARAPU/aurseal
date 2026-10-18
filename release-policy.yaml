@@ -1,0 +1,22 @@
+# Release verdict policy (traceability/release.py). Strict by default: absence of
+# evidence is not success. Change it in a reviewed pull request; the file's hash is
+# recorded with every verdict.
+version: 1
+default_priority: must          # a requirement without a priority is treated as must-have
+requirements:
+  must:
+    block: [FAILING, KNOWN_DEFECT]
+    no_verdict: [UNCOVERED, NOT_RUN, UNVERIFIED, DRAFT_ONLY, PASSING]
+  should:
+    block: [FAILING]
+    no_verdict: [UNCOVERED, NOT_RUN, UNVERIFIED, DRAFT_ONLY]
+  could:
+    block: []
+    no_verdict: []
+detectors:
+  block: [signature_mismatch, closed_regressed]
+  no_verdict: [held_empty]
+  attention: [cleared]
+defects:
+  blocking_severities: [critical, high]
+  blocking_labels: [blocker]

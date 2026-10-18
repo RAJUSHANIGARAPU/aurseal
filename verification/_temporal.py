@@ -45,3 +45,11 @@ def as_temporal(value: Any) -> date | None:
         return datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError:
         return None
+
+
+def add_years_clamped(value: date, years: int) -> date:
+    """Add calendar years; 29 February clamps to 28 February in a non-leap year."""
+    try:
+        return value.replace(year=value.year + years)
+    except ValueError:
+        return value.replace(year=value.year + years, day=28)
