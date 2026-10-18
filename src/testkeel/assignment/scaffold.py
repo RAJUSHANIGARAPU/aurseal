@@ -266,14 +266,40 @@ def _move(staging: Path, output: Path) -> None:
     shutil.rmtree(staging)
 
 
-def _git_init(output: Path, lines: list[str]) -> None:
-    subprocess.run(["git", "init", "-q", "-b", "main", str(output)], check=True)
-    who = subprocess.run(
-        ["git", "-C", str(output), "var", "GIT_AUTHOR_IDENT"], capture_output=True, text=True
+def _git_read(output: Path, env: Mapping[str, str], *args: str) -> str | None:
+    result = subprocess.run(
+        ["git", "-C", str(output), *args], capture_output=True, text=True, env=dict(env)
     )
-    if who.returncode == 0:
-        ident = who.stdout.rsplit(">", 1)[0] + ">"
-        lines.append(f"git: initialised; commits will be authored as {ident}")
+    return result.stdout.strip() if result.returncode == 0 and result.stdout.strip() else None
+
+
+def _git_init(output: Path, lines: list[str], env: Mapping[str, str]) -> None:
+    """``git init`` only: no identity is written and no commit is made (D4).
+
+    The identity git will use for the first commit (from the global config or the
+    environment) is printed, unless it hits the denylist: then only a warning is printed,
+    never the identity or the entry.
+    """
+    git_env = {**os.environ, **env}
+    subprocess.run(["git", "init", "-q", "-b", "main", str(output)], check=True, env=git_env)
+    ident = _git_read(output, git_env, "var", "GIT_AUTHOR_IDENT")
+    values = [
+        v
+        for v in (
+            _git_read(output, git_env, "config", "--get", "user.email"),
+            _git_read(output, git_env, "config", "--get", "user.name"),
+            ident,
+        )
+        if v
+    ]
+    if values and leakgate.denylist_hits(values, git_env, _home(git_env)):
+        lines.append(
+            "git: initialised; warning: your git identity matches a denylist entry. Set "
+            "another one for this repository (git config user.name / user.email) before "
+            "the first commit"
+        )
+    elif ident:
+        lines.append(f"git: initialised; commits will be authored as {ident.rsplit('>', 1)[0]}>")
     else:
         lines.append("git: initialised; no git identity is configured yet")
 
@@ -344,7 +370,7 @@ def new_assignment(
             return Result(SELF_CHECK, _step_failed(lines, failed, staging), staging=staging)
         _move(staging, output)
         if opts.git and not (output / ".git").exists():
-            _git_init(output, lines)
+            _git_init(output, lines, env)
         took = time.monotonic() - started
         lines.insert(
             0,

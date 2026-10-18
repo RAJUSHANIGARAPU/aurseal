@@ -73,7 +73,10 @@ What it does, in order, all inside a staging directory under `~/.cache/testkeel/
 4. the [leak gate](leak-gate.md);
 5. a self-check: every `.py` file compiles, and `ruff check` passes when ruff is
    installed (skipped with a notice when it is not). Nothing is written into the tree;
-6. move the tree to the output directory, then `git init` unless `--no-git`.
+6. move the tree to the output directory, then `git init` unless `--no-git`. It writes no
+   `user.name` or `user.email` and makes no commit. It prints the identity git will use
+   for your first commit, or, when that identity matches your denylist, only a warning
+   (never the identity or the entry), so you can set another one for this repository.
 
 Exit codes:
 

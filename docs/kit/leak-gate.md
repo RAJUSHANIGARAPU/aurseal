@@ -45,6 +45,13 @@ A host you need beyond the target goes on its own line in
 `~/.config/testkeel/allow-hosts.txt` (or `--allow-host` for `assignment check`). The
 task brief in `.task/` is git-ignored, so the project rules skip it.
 
+### Your git identity
+
+`new-assignment` (with `--git`, the default) checks the identity git will put on your
+first commit (`user.name`, `user.email`, from your global config or the environment)
+against the denylist and warns when it matches. It never changes your git config and
+never commits.
+
 ## What it prints
 
 A finding is a location and a rule id, for example `README.md:12 deny.term [e3]`

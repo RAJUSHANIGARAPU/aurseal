@@ -6,7 +6,24 @@ generated project only, the :mod:`.project` rules. Output is a location and rule
 finding, never the matched text. See :mod:`.gate` for exit codes.
 """
 
-from testkeel.leakgate.gate import CANNOT_RUN, CLEAN, FINDINGS, NOT_ASSESSED, Outcome, run
+from testkeel.leakgate.gate import (
+    CANNOT_RUN,
+    CLEAN,
+    FINDINGS,
+    NOT_ASSESSED,
+    Outcome,
+    denylist_hits,
+    run,
+)
 from testkeel.leakgate.project import ProjectRules
 
-__all__ = ["CANNOT_RUN", "CLEAN", "FINDINGS", "NOT_ASSESSED", "Outcome", "ProjectRules", "run"]
+__all__ = [
+    "CANNOT_RUN",
+    "CLEAN",
+    "FINDINGS",
+    "NOT_ASSESSED",
+    "Outcome",
+    "ProjectRules",
+    "denylist_hits",
+    "run",
+]

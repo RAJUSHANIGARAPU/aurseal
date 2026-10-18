@@ -165,6 +165,43 @@ def test_git_init_makes_no_commit(env, tmp_path):
     assert not (tmp_path / "plan" / ".git" / "refs" / "heads" / "main").exists()
 
 
+def _git_identity(env, tmp_path, email: str) -> dict[str, str | None]:
+    """A global git config of our own; the machine's identity never leaks into the test."""
+    config = tmp_path / "gitconfig"
+    config.write_text(f"[user]\n\tname = Jo Tester\n\temail = {email}\n", "utf-8")
+    unset = ("GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME",
+             "GIT_COMMITTER_EMAIL", "EMAIL", "GIT_DIR", "GIT_WORK_TREE")  # fmt: skip
+    return {**env, "GIT_CONFIG_GLOBAL": str(config), "GIT_CONFIG_NOSYSTEM": "1",
+            **dict.fromkeys(unset)}  # fmt: skip
+
+
+def _init(env):
+    return runner.invoke(
+        app, ["new-assignment", "--non-interactive", "--type", "strategy", "--name", "Plan"],
+        env=env,
+    )  # fmt: skip
+
+
+def test_git_prints_the_identity_it_will_use(env, tmp_path):
+    env = _git_identity(env, tmp_path, "jo@mail.example.test")
+    result = _init({**env, "LEAK_DENYLIST": f"term:{TERM}\n"})
+    assert result.exit_code == 0, result.output
+    assert "commits will be authored as Jo Tester <jo@mail.example.test>" in result.output
+    assert "denylist" not in result.output.replace("the denylist is", "")
+
+
+def test_a_denylisted_git_identity_is_warned_about_without_naming_it(env, tmp_path):
+    env = _git_identity(env, tmp_path, f"jo@{TERM}.test")
+    result = _init({**env, "LEAK_DENYLIST": f"term:{TERM}\n"})
+    assert result.exit_code == 0, result.output
+    assert "your git identity matches a denylist entry" in result.output
+    assert TERM not in result.output.lower()
+    assert "Jo Tester" not in result.output
+    git_config = (tmp_path / "plan" / ".git" / "config").read_text("utf-8")
+    assert "[user]" not in git_config and TERM not in git_config
+    assert not (tmp_path / "plan" / ".git" / "refs" / "heads" / "main").exists()
+
+
 def test_dry_run_writes_nothing(env, tmp_path):
     result = _new(env, "--type", "strategy", "--name", "Plan", "--dry-run")
     assert result.exit_code == 0, result.output
