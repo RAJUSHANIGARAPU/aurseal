@@ -1,0 +1,10 @@
+schemas/        JSON Schema contracts, one per resource
+src/{{ package_name }}/
+  client/       HTTP client: timeouts, GET retries, redacted logging
+  services/     one class per resource; returns models
+  models/       pydantic request and response models
+  contract.py   JSON Schema validation
+  settings.py   APP_* environment settings
+tests/
+  api/          live tests against the API
+  unit/         offline tests on httpx.MockTransport

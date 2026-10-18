@@ -1,0 +1,64 @@
+"""The service layer parses valid answers and rejects ones that break the contract."""
+
+from __future__ import annotations
+
+import json
+
+import httpx
+import jsonschema
+import pytest
+
+from {{ package_name }}.client import ApiClient
+from {{ package_name }}.models import Item, NewItem
+from {{ package_name }}.services import ItemsService
+
+pytestmark = pytest.mark.offline
+
+VALID = {"id": 7, "name": "Kettle", "price": 24.5, "tags": ["kitchen"]}
+
+
+def service_answering(payload: object, status: int = 200) -> ItemsService:
+    def handle(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(status, json=payload)
+
+    client = ApiClient("https://api.example.test", transport=httpx.MockTransport(handle))
+    return ItemsService(client)
+
+
+def test_create_sends_the_model_and_returns_the_parsed_item():
+    sent: list[dict[str, object]] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        sent.append(json.loads(request.content))
+        return httpx.Response(201, json={**sent[-1], "id": 7})
+
+    client = ApiClient("https://api.example.test", transport=httpx.MockTransport(handle))
+    created = ItemsService(client).create(NewItem(name="Kettle", price=24.5))
+
+    assert sent == [{"name": "Kettle", "price": 24.5, "tags": []}]
+    assert created == Item(id=7, name="Kettle", price=24.5)
+
+
+@pytest.mark.parametrize(
+    "drift",
+    [
+        pytest.param({"id": "7"}, id="id-became-a-string"),
+        pytest.param({"price": "24.50"}, id="price-became-a-string"),
+        pytest.param({"name": ""}, id="name-became-empty"),
+        pytest.param({"tags": "kitchen"}, id="tags-became-a-string"),
+    ],
+)
+def test_an_answer_that_drifts_from_the_contract_is_rejected(drift):
+    with pytest.raises(jsonschema.ValidationError):
+        service_answering({**VALID, **drift}).get(7)
+
+
+def test_a_missing_required_field_is_rejected():
+    payload = {key: value for key, value in VALID.items() if key != "price"}
+    with pytest.raises(jsonschema.ValidationError, match="price"):
+        service_answering(payload).get(7)
+
+
+def test_an_error_status_is_raised_not_parsed():
+    with pytest.raises(httpx.HTTPStatusError):
+        service_answering({"error": "not found"}, status=404).get(7)

@@ -1,0 +1,18 @@
+"""Live fixtures: one client per session, pointed at the API under test."""
+
+from __future__ import annotations
+
+from collections.abc import Iterator
+
+import pytest
+
+from {{ package_name }}.client import ApiClient
+from {{ package_name }}.settings import Settings
+
+
+@pytest.fixture(scope="session")
+def api(settings: Settings) -> Iterator[ApiClient]:
+    with ApiClient(
+        settings.api_base_url, timeout_s=settings.timeout_s, max_retries=settings.max_retries
+    ) as client:
+        yield client
