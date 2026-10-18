@@ -169,3 +169,22 @@ the demo system or local tooling config.
 conftest skips collection otherwise). Never put `src` on the pytest path: the tests must
 import the installed package. Package release tags are `testkeel-v*`, because plain `v*`
 fires `release.yml`.
+
+## Leak check
+
+**Rule.** `leak-check.yml` runs `python -m testkeel.leakgate` on every pull request (tree,
+title, body, commit messages, added lines), on every push to `main` (tree) and weekly
+(tree, plus the whole history against the denylist). The denylist is the repository secret
+`LEAK_DENYLIST` and never a file in the repository. Without it a branch of this repository
+fails closed; a fork or bot pull request runs the built-in personal-data rules and reports
+the denylist as NOT ASSESSED until a maintainer dispatches the workflow with `pr=<number>`.
+Findings print a location and a rule id, never the matched text. `pull_request_target` is
+never used.
+
+**Prevents.** A private name, an employer name or personal data reaching `main` unnoticed;
+the check itself republishing what it found.
+
+**Change safely.** A personal-data false positive goes in `leakgate-allow.toml` with a
+reason; a denylist false positive is fixed in the private list. Run the same scan locally
+with `python -m testkeel.leakgate scan --tree .` before pushing: on a public repository a
+pushed branch is already published, so the CI run is detection, not prevention.
