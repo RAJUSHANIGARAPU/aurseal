@@ -1,0 +1,31 @@
+"""The item list page object against a local HTML fixture: needs Chromium, never the network."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+from playwright.sync_api import Page, expect
+
+from {{ package_name }}.pages.items_page import ItemsPage
+
+pytestmark = pytest.mark.offline
+
+FIXTURE = Path(__file__).parents[1] / "fixtures" / "static" / "items.html"
+
+
+@pytest.fixture
+def listing(page: Page) -> ItemsPage:
+    page.set_content(FIXTURE.read_text(encoding="utf-8"))
+    return ItemsPage(page)
+
+
+def test_a_listed_item_is_found_by_its_name(listing: ItemsPage):
+    expect(listing.row("Kettle")).to_be_visible()
+    expect(listing.row("Kettle")).to_contain_text("24.50")
+
+
+@pytest.mark.parametrize("name", ["Kett", "kettle", "Kettle li"], ids=["prefix", "case", "partial"])
+def test_only_the_exact_name_matches(listing: ItemsPage, name):
+    expect(listing.row("Kettle lid")).to_be_visible()
+    expect(listing.row(name)).to_have_count(0)

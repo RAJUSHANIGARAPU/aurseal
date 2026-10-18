@@ -4,7 +4,7 @@ services:
     env_file:
       - path: .env
         required: false
-{%- if type == 'web-ui' %}
+{%- if type in ['web-ui', 'fullstack'] %}
     # Chromium needs more shared memory than the container default.
     ipc: host
 {%- endif %}

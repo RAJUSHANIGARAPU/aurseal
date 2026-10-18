@@ -1,0 +1,42 @@
+"""The seam between the layers: data created through the API, checked in the UI.
+
+Setting up through the API is fast and exact; the browser is used only for what a user
+would see. Both layers read one settings object, so they always target one environment.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Iterator
+
+import pytest
+from playwright.sync_api import Page, expect
+
+from {{ package_name }}.client import ApiClient
+from {{ package_name }}.data.items import ItemBuilder
+from {{ package_name }}.models import Item
+from {{ package_name }}.pages.items_page import ItemsPage
+from {{ package_name }}.services import ItemsService
+from {{ package_name }}.settings import Settings
+
+pytestmark = pytest.mark.regression
+
+
+@pytest.fixture
+def items(settings: Settings) -> Iterator[ItemsService]:
+    with ApiClient(
+        settings.api_base_url, timeout_s=settings.timeout_s, max_retries=settings.max_retries
+    ) as client:
+        yield ItemsService(client)
+
+
+@pytest.fixture
+def item(items: ItemsService) -> Iterator[Item]:
+    """An item this test owns: created through the API, deleted afterwards."""
+    created = items.create(ItemBuilder(prefix="seam").build())
+    yield created
+    items.delete(created.id)
+
+
+def test_item_created_via_api_appears_in_the_ui_list(page: Page, item: Item):
+    listing = ItemsPage(page).open()
+    expect(listing.row(item.name)).to_be_visible()

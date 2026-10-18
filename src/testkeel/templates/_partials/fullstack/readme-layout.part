@@ -1,0 +1,15 @@
+schemas/        JSON Schema contracts, one per resource
+src/{{ package_name }}/
+  pages/        one class per page; methods are user actions
+  components/   parts shared by several pages
+  client/       HTTP client: timeouts, GET retries, redacted logging
+  services/     one class per resource; returns models
+  models/       pydantic request and response models
+  data/         test data tables and builders, shared by both layers
+  contract.py   JSON Schema validation
+  settings.py   APP_* environment settings, shared by both layers
+tests/
+  ui/           live browser tests, including the API-to-UI seam
+  api/          live tests against the API
+  unit/         offline tests: page objects on local HTML, client and services on mocks
+  fixtures/     static HTML for the offline tests
