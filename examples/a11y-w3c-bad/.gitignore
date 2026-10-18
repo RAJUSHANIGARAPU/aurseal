@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# Secrets: copy .env.example to .env and fill it in locally
+.env
+
+# Test output
+reports/
+test-results/
+allure-results/
+allure-report/
+site/
+
+# The task brief stays private unless you choose to publish it
+.task/
+
+# OS and editors
+.DS_Store
+.idea/
+.vscode/

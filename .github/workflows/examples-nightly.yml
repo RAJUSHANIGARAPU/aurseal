@@ -99,9 +99,39 @@ jobs:
           path: examples/graphql-countries/reports/
           retention-days: 7
 
+  a11y-w3c-bad:
+    name: a11y-w3c-bad (live)
+    if: github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    continue-on-error: true
+    # Browsers come from the image, pinned to the example's playwright== version.
+    container:
+      image: mcr.microsoft.com/playwright/python:v1.58.0-noble
+      options: --ipc=host
+    outputs:
+      outcome: ${{ steps.live.outcome }}
+    defaults:
+      run:
+        working-directory: examples/a11y-w3c-bad
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v10
+      - run: uv sync --locked
+      - name: Live suite
+        id: live
+        continue-on-error: true
+        run: uv run pytest -n auto -o log_cli=true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: example-a11y-w3c-bad
+          path: examples/a11y-w3c-bad/reports/
+          retention-days: 7
+
   drift-issues:
     name: One issue per failing example
-    needs: [web-ui-saucedemo, api-rest-restful-booker, graphql-countries]
+    needs: [web-ui-saucedemo, api-rest-restful-booker, graphql-countries, a11y-w3c-bad]
     if: always() && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -117,6 +147,7 @@ jobs:
             web-ui-saucedemo=${{ needs.web-ui-saucedemo.outputs.outcome }}
             api-rest-restful-booker=${{ needs.api-rest-restful-booker.outputs.outcome }}
             graphql-countries=${{ needs.graphql-countries.outputs.outcome }}
+            a11y-w3c-bad=${{ needs.a11y-w3c-bad.outputs.outcome }}
         run: |
           for pair in $OUTCOMES; do
             example="${pair%%=*}"
