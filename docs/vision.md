@@ -1,54 +1,24 @@
-# Vision — wiki_project
+# Goals
 
-## What This Is
+**What it is.** An open-source Python test automation framework, built on pytest and
+Playwright, for web interfaces and HTTP APIs. Pointing it at a new web application should
+take a base URL and credentials in the environment configuration, nothing more.
 
-A **universal, plug-and-play test automation framework** that works for any company, any project, any stack — with zero org-specific assumptions.
+**Design rule.** The core assumes no particular company, product, component library or
+data model. Whatever is specific to one application belongs in the test project that uses
+the framework, not in the framework.
 
-Python, Pytest, Playwright. Self-healing. AI-powered. Built to be adopted in minutes, not weeks.
+**Direction.** Take human effort out of the test lifecycle: write tests from
+specifications and recordings, repair broken selectors, diagnose failures and report on
+suite health. Every automated decision is logged so a person can review it and undo it.
 
-## The One Rule
+**Principles.**
 
-**Zero org assumptions.** No proprietary UI frameworks, no domain-specific data models, no internal tooling dependencies.
+- Quick to adopt: configuration over code, sensible defaults per environment.
+- Additive: a new capability never breaks a test that already passes.
+- Stack-agnostic: patterns that hold for any web stack, not one front-end library.
+- Auditable and overridable: automation leaves a record and a human has the last word.
+- Honest reporting: a signal that was not measured is reported as not measured, never as
+  zero.
 
-Every capability must be expressible in terms any engineering team on the planet can understand and apply immediately.
-
-## End Goal — Fully Autonomous, Humanless Framework
-
-The target state requires no human intervention in the test lifecycle:
-
-| Concern | Human today | Target (AI) |
-|---------|-------------|-------------|
-| Test authoring | Engineer writes tests | Config/schema is the only input; tests generated automatically |
-| Locator maintenance | Engineer fixes broken selectors | AI detects failure, heals selector, persists fix, retries |
-| Failure triage | Engineer reads logs and traces | AI diagnoses root cause, proposes fix, applies it, reruns |
-| CI management | Engineer monitors pipelines | AI manages full cycle end-to-end |
-| Regression analysis | Engineer compares runs | AI detects, bisects, reports with fix proposals |
-
-## Build Principles
-
-- **Plug-and-play** — clone, configure one URL, run. No framework-specific knowledge required
-- **Progressive** — every addition builds on what exists; existing tests never break
-- **Universal** — patterns are framework-agnostic; no assumption about the UI stack being tested
-- **AI-first** — self-healing, AI triage, and autonomous fix loops are first-class citizens, not add-ons
-- **Transparent** — every AI decision is logged; humans can audit, override, or learn from it
-
-## How This Grows
-
-New capabilities are proven in a real-world project context first, then contributed here in Python — generalised and stripped of any org-specific logic. The framework grows from real usage, not hypothetical design.
-
-## Current Capability Map
-
-| Capability | Status |
-|-----------|--------|
-| Base page + locator strategy | Working |
-| Config reader (env-aware) | Working |
-| Playwright factory (ThreadLocal equiv) | Working |
-| AI self-healing (Claude API) | Working (`core/ai/`) |
-| Auto-fix loop | Working (`scripts/auto_runner.py`) |
-| Trace analysis skill | Working |
-| Test generation from trace | Working |
-| API client layer | Working (`api/clients/`) |
-| UI page objects | Working (`ui/pages/`) |
-| Dynamic test generation from schema | Roadmap |
-| State machine traversal | Roadmap |
-| Full humanless pipeline | Roadmap |
+**Status.** The current feature list is in the [README](../README.md#3-core-capabilities).

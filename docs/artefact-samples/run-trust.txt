@@ -1,0 +1,19 @@
+VERDICT=PASS ENFORCEMENT=REPORT RUN=sample-run LANE=sample
++====================================================================================================+
+| RUN TRUST OK                                                                                       |
++====================================================================================================+
+| selected 4 . executed 3 . skipped 1 (25%)                                                          |
+| detectors selected 1 . verdicts reached 1                                                          |
+| needing acquired data 0 . passing on acquired data 0                                               |
++----------------------------------------------------------------------------------------------------+
+| what was skipped, and why:                                                                         |
+|     SKIPPED scripts/artefact_samples/sample_suite.py::test_skipped_without_a_target                |
+|         no target configured for this sample                                                       |
++----------------------------------------------------------------------------------------------------+
+| rules with nothing to judge (absent, not passed):                                                  |
+|     executed floor - just 4 test(s) were selected, under the floor of 10: a narrowed selection, not|
+|     a shrunken run                                                                                 |
+|     fixture provenance - no test needing acquired data was selected                                |
++----------------------------------------------------------------------------------------------------+
+| All rules in scope passed: enough of the suite ran for this to count as a result.                  |
++====================================================================================================+

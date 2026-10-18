@@ -371,8 +371,6 @@ Use these from the repo root inside Claude Code:
 |---------|-------------|
 | `/analyze-trace` | Extracts actions, errors, and DOM state from a Playwright trace ZIP |
 | `/analyze-test-failure` | Reads failure bundles and diagnoses root cause with fix proposals |
-| `/auto-run-fix` | Autonomous loop: run → analyse → fix → rerun until green |
-| `/generate-test-from-trace` | Generates Page Object + test from a recorded trace |
 
 Skills are in `.claude/commands/`.
 
@@ -416,41 +414,58 @@ pytest -m contract
 
 ## 13. Docker Execution
 
-### UI Tests
+`docker compose` runs the suite in the same pinned Playwright image CI uses
+(`Dockerfile`, tag equal to the `playwright==` pin in `requirements.txt`) and writes
+results to the host's `reports/`. No Python or browsers needed on the host.
 
 ```bash
 docker compose build
-docker compose run tests
+docker compose run --rm tests                        # offline suite + demo browser examples
+docker compose run --rm tests tests/gate -q          # any pytest arguments
+BROWSER=firefox docker compose run --rm tests tests/demo_examples -m demo_ui --browser firefox
 
-# Override browser
-docker compose run tests --browser firefox
+# Live report from reports/allure-results on http://localhost:5050 (refreshes every 5 s)
+docker compose --profile report up report
 
-# Parallel
-docker compose run tests -n 4
+# Demo examples against a containerised demo service instead of the in-process fixture
+DEMO_SUT_URL=http://demo:8765 docker compose --profile demo run --rm tests tests/demo_examples -m demo_ui
 ```
 
-Artifacts are written to the local `reports/` directory via volume mount.
+| Variable | Default | Meaning |
+|---|---|---|
+| `TEST_ENV` | `qa` | target environment |
+| `BROWSER` | `chromium` | browser engine |
+| `ANTHROPIC_API_KEY` | empty | model key; features that need it degrade without it |
+| `REPORT_PORT` | `5050` | host port of the report server |
+| `REPORT_HISTORY` | `20` | runs of history the report keeps |
+| `DEMO_SUT_URL` | empty | demo base URL (`http://demo:8765` with the `demo` profile) |
+
+Secret-like values come from the host environment or an ignored `.env` file, never from
+the compose file. The report server image is pinned to an exact version.
 
 ### API Agent
 
 ```bash
-docker compose run api-agent run --collection api/postman/sample_collection.json
+docker build -f Dockerfile.api-agent -t api-agent .
+docker run --rm -e ANTHROPIC_API_KEY api-agent
 ```
 
 ---
 
 ## 14. CI Integration
 
-```
-.github/workflows/tests.yml
-```
+| Workflow | Runs |
+|---|---|
+| `.github/workflows/tests.yml` | the test lanes (offline first, then browser, checks, visual, platform, matrix, render), evidence publishing and notification |
+| `.github/workflows/secret-scan.yml` | gitleaks over the full history on every push of every branch and every pull request |
+| `.github/workflows/mutation.yml` | the mutation score gate, nightly and on dispatch |
+| `.github/workflows/release.yml` | the release verdict on a tag or on dispatch |
 
-Pipeline steps:
-- Ruff lint check
-- Playwright browser install
-- UI test execution with artifact upload
-- Agent unit test execution
-- Failure bundle and trace archival
+Every rule the workflows follow (concurrency, time budget, retention, pinned container,
+nightly switch, manual-run inputs, per-environment credentials, external config binding,
+token-only lane, evidence publishing, notification) is documented in
+[docs/features/ci-workflow.md](docs/features/ci-workflow.md) and checked offline by
+`python -m gate.workflow_lint`.
 
 ---
 
@@ -469,19 +484,38 @@ Pre-commit hooks run ruff on every commit. All checks must pass before commit is
 
 ## 16. Configuration & Environments
 
-```
-config/environments.json
-```
-
-Switch environment:
+Environments are declared in `config/environments.json` (`local`, `qa`, `staging`).
 
 ```bash
 pytest --env qa        # default
 pytest --env staging
-pytest --env prod
+TEST_ENV=staging pytest
 ```
 
-The `ConfigReader` class resolves base URLs per environment. Add new environments by extending `environments.json` — no code changes needed.
+Precedence, highest first (`core.config_reader`):
+
+1. **CLI flag** — `--env` picks the environment (then `TEST_ENV`, then `qa`);
+2. **environment variable** — every key under its upper-case spelling (`base_url` ->
+   `BASE_URL`, `auth_mode` -> `AUTH_MODE`);
+3. **`.env` file** — the git-ignored `.env.<env>` in the repository root (template: `config/env/.env.example`);
+4. **per-environment profile** — the environment's block in `config/environments.json`;
+5. **defaults** — the caller's default.
+
+A blank value counts as absent at every rung. An unknown environment fails at start and lists
+the declared ones. Per-environment login variables (`credentials` block) are described in
+[docs/features/ci-workflow.md](docs/features/ci-workflow.md#per-environment-credentials).
+
+---
+
+## Further documentation
+
+| Document | What it answers |
+|---|---|
+| [docs/features/](docs/features/README.md) | one page per area: what it does, how to use it, configuration, example |
+| [docs/whats-live.md](docs/whats-live.md) | what runs in the default gate, in an opt-in lane, locally only, or is experimental |
+| [docs/ci-decisions.md](docs/ci-decisions.md) | why each CI rule exists, what it prevents, how to change it safely |
+| [docs/green-is-evidence.md](docs/green-is-evidence.md) | when a green run counts as evidence, and how to read one |
+| [docs/artefacts.md](docs/artefacts.md) | every machine-readable artefact a run writes, with committed samples |
 
 ---
 
@@ -498,7 +532,7 @@ plugins/
   registry.py          — Auto-discovers *.plugin.py files, dispatches by trigger event
   tier1/               — Foundational plugins (unit-ai, integration-graph, api-contract, e2e-playwright)
   tier2/               — Quality & Safety (visual-regression, security-scan, accessibility-a11y, mutation-testing)
-  tier3/               — Performance & Resilience (load-performance, chaos-resilience, property-fuzz)
+  tier3/               — Performance & Resilience (load-performance, fault-injection, property-fuzz)
   tier4/               — Novel (behavioral-equivalence, test-meta-quality, llm-output-oracle,
                          business-rule-compliance, state-machine-exhaustive,
                          synthetic-data-edge, temporal-regression)
@@ -564,7 +598,6 @@ ai_generated_tests/
   integration/  — Integration test stubs (integration-graph plugin)
   a11y/         — Axe-core accessibility scripts (accessibility-a11y plugin)
   load/         — k6 load test scripts (load-performance plugin)
-  chaos/        — Multi-fault scenario docs (chaos-resilience plugin)
   property/     — Hypothesis property tests (property-fuzz plugin)
   state_machine/ — State transition tests (state-machine-exhaustive plugin)
   synthetic/    — Extreme profile JSON + Playwright tests (synthetic-data-edge plugin)

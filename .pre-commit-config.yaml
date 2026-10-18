@@ -1,6 +1,47 @@
+default_install_hook_types: [pre-commit, commit-msg]
+
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.2
     hooks:
       - id: ruff-check
       - id: ruff-format
+
+  # Workflows only ever run on the CI service. These two hooks make a broken
+  # workflow fail the commit instead of the next CI run.
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.7
+    hooks:
+      - id: actionlint
+
+  - repo: local
+    hooks:
+      - id: workflow-lint
+        name: workflow lint (parse + structure)
+        entry: python -m gate.workflow_lint
+        language: system
+        files: ^\.github/workflows/.*\.ya?ml$
+        pass_filenames: true
+
+  # Leak gate (tools/leak_gate/README.md). The data lives outside the repo;
+  # without it these hooks fail closed.
+  - repo: local
+    hooks:
+      - id: leak-gate-blocklist
+        name: leak gate (name blocklist, staged lines)
+        entry: python -m tools.leak_gate.blocklist --staged
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: leak-gate-similarity
+        name: leak gate (code similarity, staged lines)
+        entry: python -m tools.leak_gate.similarity check --staged
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: leak-gate-blocklist-message
+        name: leak gate (name blocklist, commit message)
+        entry: python -m tools.leak_gate.blocklist --message-file
+        language: system
+        stages: [commit-msg]
+        always_run: true

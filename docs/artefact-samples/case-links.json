@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "run_id": "sample-run",
+  "generated_at": "2000-01-01T00:00:00Z",
+  "links": [
+    {
+      "nodeid": "scripts/artefact_samples/sample_suite.py::test_a_letter_renders_its_greeting",
+      "case_id": "c-f877ef02486d81c6",
+      "requirements": [
+        "REQ-1"
+      ],
+      "origin": "marker"
+    }
+  ],
+  "invalid": [],
+  "mismatches": [],
+  "tests": {
+    "scripts/artefact_samples/sample_suite.py::test_a_letter_renders_its_greeting": {
+      "case_id": "c-f877ef02486d81c6"
+    }
+  }
+}

@@ -1,0 +1,64 @@
+{
+  "breaches": [],
+  "detectors_selected": 1,
+  "enforcement": "report",
+  "executed": 3,
+  "headline": "RUN TRUST OK",
+  "lane": "sample",
+  "not_applicable": [
+    "executed floor - just 4 test(s) were selected, under the floor of 10: a narrowed selection, not a shrunken run",
+    "fixture provenance - no test needing acquired data was selected"
+  ],
+  "passed_on_acquired": 0,
+  "run_id": "sample-run",
+  "seeded_selected": 0,
+  "selected": 4,
+  "skip_ratio": 0.25,
+  "skipped": 1,
+  "tests": {
+    "scripts/artefact_samples/sample_suite.py::test_a_failing_expectation": {
+      "cleared": false,
+      "defect": null,
+      "markers": [],
+      "nodeid": "scripts/artefact_samples/sample_suite.py::test_a_failing_expectation",
+      "outcome": "failed",
+      "reason": ""
+    },
+    "scripts/artefact_samples/sample_suite.py::test_a_letter_renders_its_greeting": {
+      "cleared": false,
+      "defect": null,
+      "markers": [],
+      "nodeid": "scripts/artefact_samples/sample_suite.py::test_a_letter_renders_its_greeting",
+      "outcome": "passed",
+      "reason": ""
+    },
+    "scripts/artefact_samples/sample_suite.py::test_purpose_line_is_present": {
+      "cleared": false,
+      "defect": "BUG-7",
+      "markers": [
+        "known_defect"
+      ],
+      "nodeid": "scripts/artefact_samples/sample_suite.py::test_purpose_line_is_present",
+      "outcome": "xfailed",
+      "reason": ""
+    },
+    "scripts/artefact_samples/sample_suite.py::test_skipped_without_a_target": {
+      "cleared": false,
+      "defect": null,
+      "markers": [],
+      "nodeid": "scripts/artefact_samples/sample_suite.py::test_skipped_without_a_target",
+      "outcome": "skipped",
+      "reason": "no target configured for this sample"
+    }
+  },
+  "thresholds": {
+    "enforcement": "report",
+    "max_skip_ratio": 0.5,
+    "min_acquired": 1,
+    "min_executed": 10,
+    "min_verdicts": 1
+  },
+  "timestamp": "2000-01-01T00:00:00Z",
+  "verdict": "PASS",
+  "verdicts_reached": 1
+}

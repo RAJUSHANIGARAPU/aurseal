@@ -1,0 +1,49 @@
+{
+  "fullName": "scripts.artefact_samples.sample_suite#test_a_failing_expectation",
+  "historyId": "14a452484964460c9ef15411d5a42c0d",
+  "labels": [
+    {
+      "name": "parentSuite",
+      "value": "scripts.artefact_samples"
+    },
+    {
+      "name": "suite",
+      "value": "sample_suite"
+    },
+    {
+      "name": "host",
+      "value": "$HOST"
+    },
+    {
+      "name": "thread",
+      "value": "$PID-MainThread"
+    },
+    {
+      "name": "framework",
+      "value": "pytest"
+    },
+    {
+      "name": "language",
+      "value": "cpython3"
+    },
+    {
+      "name": "package",
+      "value": "scripts.artefact_samples.sample_suite"
+    }
+  ],
+  "name": "test_a_failing_expectation",
+  "start": 0,
+  "status": "failed",
+  "statusDetails": {
+    "message": "AssertionError: the sample run needs one real failure\nassert ['Total: 10.00'] == ['Total: 12.00']\n  \n  At index 0 diff: 'Total: 10.00' != 'Total: 12.00'\n  Use -v to get more diff",
+    "trace": "def test_a_failing_expectation():\n        lines = render_lines(\"Total: {{total}}\", {\"total\": \"10.00\"})\n>       assert lines == [\"Total: 12.00\"], \"the sample run needs one real failure\"\nE       AssertionError: the sample run needs one real failure\nE       assert ['Total: 10.00'] == ['Total: 12.00']\nE         \nE         At index 0 diff: 'Total: 10.00' != 'Total: 12.00'\nE         Use -v to get more diff\n\n$REPO/scripts/artefact_samples/sample_suite.py:23: AssertionError"
+  },
+  "stop": 0,
+  "testCaseId": "14a452484964460c9ef15411d5a42c0d",
+  "titlePath": [
+    "scripts",
+    "artefact_samples",
+    "sample_suite.py"
+  ],
+  "uuid": "00000000-0000-0000-0000-000000000006"
+}

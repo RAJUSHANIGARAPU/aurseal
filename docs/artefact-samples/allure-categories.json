@@ -1,0 +1,96 @@
+[
+  {
+    "name": "Known defect no longer reproduces (verify the fix, then drop the marker)",
+    "messageRegex": "(?s).*XPASS\\(strict\\).*known defect.*",
+    "matchedStatuses": [
+      "failed"
+    ]
+  },
+  {
+    "name": "Known defect still reproduces (expected red)",
+    "messageRegex": "(?s).*known defect .* is open.*",
+    "matchedStatuses": [
+      "skipped"
+    ]
+  },
+  {
+    "name": "Backend 5xx / transient network",
+    "messageRegex": "(?s).*(HTTP 5\\d\\d|\\b50[234]\\b|Bad Gateway|Service Unavailable|Gateway Time-?out|[Cc]onnection (reset|refused|aborted)|ERR_CONNECTION|ECONNRESET|net::ERR_).*",
+    "matchedStatuses": [
+      "failed",
+      "broken"
+    ]
+  },
+  {
+    "name": "Authentication",
+    "messageRegex": "(?s).*(\\b401\\b|\\b403\\b|[Uu]nauthori[sz]ed|[Ff]orbidden|login page).*",
+    "matchedStatuses": [
+      "failed",
+      "broken"
+    ]
+  },
+  {
+    "name": "Configuration / setup",
+    "messageRegex": "(?s).*(Missing config key|Unknown env|Unknown auth mode|fixture '.*' not found).*",
+    "matchedStatuses": [
+      "failed",
+      "broken"
+    ]
+  },
+  {
+    "name": "Broken locators",
+    "messageRegex": "(?s).*(strict mode violation|waiting for (get_by_|locator)|resolved to 0 elements|element is not (attached|visible|enabled)|Unsupported locator type).*",
+    "matchedStatuses": [
+      "failed",
+      "broken"
+    ]
+  },
+  {
+    "name": "Timeouts",
+    "messageRegex": "(?s).*([Tt]imeout .*exceeded|TimeoutError|timed out).*",
+    "matchedStatuses": [
+      "failed",
+      "broken"
+    ]
+  },
+  {
+    "name": "Skipped: known product bug",
+    "messageRegex": "(?s).*(known product bug|blocked by [A-Z][A-Z0-9]+-\\d+).*",
+    "matchedStatuses": [
+      "skipped"
+    ]
+  },
+  {
+    "name": "Skipped: environment limitation (not a defect)",
+    "messageRegex": "(?s).*(environment limitation|not available (on|in) this environment|no test data|could not seed|requires (a |the )?(live|staging|network)).*",
+    "matchedStatuses": [
+      "skipped"
+    ]
+  },
+  {
+    "name": "Skipped: superseded or duplicate coverage",
+    "messageRegex": "(?s).*(superseded|duplicate(s|d)? coverage).*",
+    "matchedStatuses": [
+      "skipped"
+    ]
+  },
+  {
+    "name": "Skipped: harness / on-demand (not product signal)",
+    "messageRegex": "(?s).*(on-demand|opt-in|harness|ENABLE_[A-Z_]+).*",
+    "matchedStatuses": [
+      "skipped"
+    ]
+  },
+  {
+    "name": "Test or harness errors",
+    "matchedStatuses": [
+      "broken"
+    ]
+  },
+  {
+    "name": "Product defects",
+    "matchedStatuses": [
+      "failed"
+    ]
+  }
+]
