@@ -57,10 +57,23 @@ fullstack    planned   web-ui and api-rest combined (needs browser)
 | `--docker` / `--no-docker` | flag | `--docker` | Dockerfile and compose file. |
 | `--git` / `--no-git` | flag | `--git` | `git init`, no commit. |
 | `--credit` / `--no-credit` | flag | `--no-credit` | One README footer line naming testkeel. |
+| `--lock` / `--no-lock` | flag | `--lock` | Run `uv lock` against PyPI only. |
 | `--output-dir` | path | `./<slug>` | Where to write. |
 | `--dry-run` / `--no-dry-run` | flag | `--no-dry-run` | List what would be written. |
 | `--force` / `--no-force` | flag | `--no-force` | Write into a non-empty dir. |
 | `--non-interactive` / `--no-non-interactive` | flag | `--no-non-interactive` | Never prompt. |
+
+What it does, in order, all inside a staging directory under `~/.cache/testkeel/`:
+
+1. validate the options;
+2. render the templates;
+3. `uv lock`, with PyPI as the only index (uv's config files and `UV_INDEX*` variables are
+   ignored, so a private registry never lands in `uv.lock`). Skipped with a notice when
+   there is no `pyproject.toml`, when `uv` is not on `PATH`, or with `--no-lock`;
+4. the [leak gate](leak-gate.md);
+5. a self-check: every `.py` file compiles, and `ruff check` passes when ruff is
+   installed (skipped with a notice when it is not). Nothing is written into the tree;
+6. move the tree to the output directory, then `git init` unless `--no-git`.
 
 Exit codes:
 
@@ -71,6 +84,7 @@ Exit codes:
 | 2 | Usage error, including a `planned` type. |
 | 3 | Output directory not empty (use `--force`). |
 | 4 | Leak gate failed; nothing was written. |
+| 5 | `uv lock` or the self-check failed; nothing was written. The failing step and the path of the kept staging directory are printed. |
 | 6 | Missing prerequisite. |
 | 130 | Interrupted. |
 

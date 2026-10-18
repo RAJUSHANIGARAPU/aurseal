@@ -7,6 +7,9 @@ the real ones, so these tests do not depend on the real templates' content.
 from __future__ import annotations
 
 import json
+import os
+import shutil
+import stat
 from pathlib import Path
 
 import pytest
@@ -36,14 +39,24 @@ def fixture_render(type_, destination, data):
 
 TERM = "zorblax"
 runner = CliRunner()
+REAL_LOCK = scaffold.lock
+LOCKED: list[Path] = []
+
+
+def fake_lock(staging, _environ):
+    """Stands in for ``uv lock`` (network); the real one is tested on its own below."""
+    LOCKED.append(staging)
+    return "lock: (test stand-in)"
 
 
 @pytest.fixture
 def env(tmp_path, monkeypatch) -> dict[str, str]:
-    """An isolated home and cache, and the stand-in template."""
+    """An isolated home and cache, the stand-in template and a stand-in lock step."""
     home = tmp_path / "home"
     home.mkdir()
+    LOCKED.clear()
     monkeypatch.setattr(scaffold, "render", fixture_render)
+    monkeypatch.setattr(scaffold, "lock", fake_lock)
     monkeypatch.chdir(tmp_path)
     return {"HOME": str(home), "XDG_CACHE_HOME": str(tmp_path / "cache"), "LEAK_DENYLIST": ""}
 
@@ -251,3 +264,140 @@ def test_assignment_check_exit_codes(env, tmp_path):
     ]
     missing = runner.invoke(app, ["assignment", "check", str(tmp_path / "none")], env=env)
     assert missing.exit_code == 2
+
+
+# ------------------------------------------------------------------ lock and self-check
+
+
+def _fake_uv(tmp_path: Path, exit_code: int = 0) -> Path:
+    """A ``uv`` on PATH that records its arguments and index variables, then writes a lock."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    uv = bin_dir / "uv"
+    uv.write_text(
+        "#!/bin/sh\n"
+        f'echo "$@" > "{tmp_path}/uv-args"\n'
+        f'env | grep "^UV_" > "{tmp_path}/uv-env" || true\n'
+        f"if [ {exit_code} -ne 0 ]; then echo 'resolution failed' >&2; exit {exit_code}; fi\n"
+        "printf 'version = 1\\n' > uv.lock\n",
+        "utf-8",
+    )
+    uv.chmod(uv.stat().st_mode | stat.S_IEXEC)
+    return bin_dir
+
+
+def _project(tmp_path: Path) -> Path:
+    staging = tmp_path / "staged"
+    staging.mkdir()
+    (staging / "pyproject.toml").write_text('[project]\nname = "x"\nversion = "0.1.0"\n', "utf-8")
+    return staging
+
+
+@pytest.mark.skipif(os.name != "posix", reason="the stand-in uv is a shell script")
+def test_lock_forces_pypi_and_drops_index_overrides(tmp_path):
+    bin_dir = _fake_uv(tmp_path)
+    staging = _project(tmp_path)
+    environ = {
+        "PATH": f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}",
+        "UV_INDEX_URL": "https://registry.corp.example/simple",
+        "UV_EXTRA_INDEX_URL": "https://registry.corp.example/extra",
+    }
+    note = REAL_LOCK(staging, environ)
+    assert note == "lock: uv.lock written (index: PyPI)"
+    assert (staging / "uv.lock").is_file()
+    args = (tmp_path / "uv-args").read_text("utf-8").split()
+    assert args[:4] == ["lock", "--no-config", "--default-index", scaffold.PYPI_SIMPLE]
+    assert "corp.example" not in (tmp_path / "uv-env").read_text("utf-8")
+
+
+def test_lock_without_uv_or_pyproject_is_a_notice(tmp_path, monkeypatch):
+    staging = _project(tmp_path)
+    monkeypatch.setattr(scaffold.shutil, "which", lambda *_a, **_k: None)
+    assert "uv is not on PATH" in REAL_LOCK(staging, {})
+    assert not (staging / "uv.lock").exists()
+    (staging / "pyproject.toml").unlink()
+    assert "nothing to lock" in REAL_LOCK(staging, {})
+
+
+@pytest.mark.skipif(shutil.which("uv") is None, reason="uv is not installed")
+def test_lock_runs_the_real_uv_offline(tmp_path):
+    staging = _project(tmp_path)
+    environ = {"UV_OFFLINE": "1", "UV_CACHE_DIR": str(tmp_path / "uv-cache")}
+    assert "written" in REAL_LOCK(staging, environ)
+    assert 'name = "x"' in (staging / "uv.lock").read_text("utf-8")
+
+
+@pytest.mark.skipif(os.name != "posix", reason="the stand-in uv is a shell script")
+def test_a_failing_lock_exits_5_and_keeps_staging(env, tmp_path, monkeypatch):
+    monkeypatch.setattr(scaffold, "lock", REAL_LOCK)
+    bin_dir = _fake_uv(tmp_path, exit_code=1)
+    env = {**env, "PATH": f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}"}
+    result = _new(env, "--type", "web-ui", "--name", "Shop")
+    assert result.exit_code == 5, result.output
+    assert "self-check failed at uv lock (exit 1)" in result.output
+    assert "resolution failed" in result.output
+    assert not (tmp_path / "shop").exists()
+    kept = _staging(tmp_path)
+    assert len(kept) == 1 and str(kept[0]) in result.output
+
+
+def test_the_pipeline_locks_unless_told_not_to(env, tmp_path):
+    result = _new(env, "--type", "web-ui", "--name", "Shop")
+    assert result.exit_code == 0, result.output
+    assert len(LOCKED) == 1 and "lock: (test stand-in)" in result.output
+    assert "self-check: green" in result.output
+    skipped = _new(env, "--type", "web-ui", "--name", "Shop two", "--no-lock")
+    assert skipped.exit_code == 0, skipped.output
+    assert len(LOCKED) == 1 and "lock: skipped (--no-lock)" in skipped.output
+
+
+def _render_with(extra: dict[str, str]):
+    def render(type_, destination, data):
+        fixture_render(type_, destination, data)
+        for name, text in extra.items():
+            (destination / name).parent.mkdir(parents=True, exist_ok=True)
+            (destination / name).write_text(text, "utf-8")
+
+    return render
+
+
+def test_code_that_does_not_compile_fails_the_self_check(env, tmp_path):
+    result = scaffold.new_assignment(
+        scaffold.Options(type="web-ui", name="Shop", git=False, lock=False),
+        staging_root=tmp_path / "cache" / "testkeel" / "staging",
+        environ=env,
+        renderer=_render_with({"tests/test_broken.py": "def broken(:\n"}),
+    )
+    assert result.code == 5
+    text = "\n".join(result.lines)
+    assert "self-check failed at compile" in text
+    assert "tests/test_broken.py:1: SyntaxError" in text
+    assert not (tmp_path / "shop").exists()
+    assert result.staging is not None and result.staging.is_dir()
+    assert not list(result.staging.rglob("__pycache__"))
+
+
+@pytest.mark.skipif(scaffold._ruff_command() is None, reason="ruff is not installed")
+def test_lint_errors_fail_the_self_check(env, tmp_path):
+    result = scaffold.new_assignment(
+        scaffold.Options(type="web-ui", name="Shop", git=False, lock=False),
+        staging_root=tmp_path / "cache" / "testkeel" / "staging",
+        environ=env,
+        renderer=_render_with({"tests/test_lint.py": "import os\n"}),
+    )
+    assert result.code == 5
+    text = "\n".join(result.lines)
+    assert "self-check failed at ruff check" in text and "F401" in text
+    assert result.staging is not None
+    assert not (result.staging / ".ruff_cache").exists()
+    assert not (tmp_path / "shop").exists()
+
+
+def test_without_ruff_the_self_check_compiles_only(tmp_path, monkeypatch):
+    staging = tmp_path / "staged"
+    (staging / "tests").mkdir(parents=True)
+    (staging / "tests" / "test_x.py").write_text("import os\n", "utf-8")
+    monkeypatch.setattr(scaffold, "_ruff_command", lambda: None)
+    assert scaffold.self_check(staging) == [
+        "self-check: ruff is not available; lint skipped (compile only)"
+    ]
