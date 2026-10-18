@@ -1,0 +1,5 @@
+    base_url: str = Field(
+        default="{{ target_url }}",
+        description="Web application under test",
+    )
+    expect_timeout_ms: int = Field(default=5_000, gt=0, description="Web-first assertion timeout")
