@@ -100,21 +100,30 @@ def test_package_names_never_shadow_a_module(slug, package):
 # ------------------------------------------------------------------ list-types
 
 
-def test_list_types_shows_available_and_planned():
+ALL_TYPES = {
+    "web-ui", "api-rest", "api-graphql", "a11y", "strategy", "perf-k6", "perf-locust", "mobile",
+    "fullstack",
+}  # fmt: skip
+
+
+def test_list_types_shows_every_type_available():
     result = runner.invoke(app, ["list-types", "--json"])
     assert result.exit_code == 0
-    status = {t["name"]: t["status"] for t in json.loads(result.output)}
-    assert {n for n, s in status.items() if s == "available"} == {"web-ui", "api-rest", "strategy"}
-    assert {n for n, s in status.items() if s == "planned"} == {
-        "api-graphql",
-        "perf-k6",
-        "perf-locust",
-        "a11y",
-        "mobile",
-        "fullstack",
-    }
+    types = {t["name"]: t for t in json.loads(result.output)}
+    assert set(types) == ALL_TYPES
+    assert {t["status"] for t in types.values()} == {"available"}
+    assert set(types["fullstack"]["urls"]) == {"target_url", "api_base_url"}
+    assert types["mobile"]["urls"] == {}
+    assert types["perf-k6"]["needs"] == ["k6"]
     plain = runner.invoke(app, ["list-types"])
-    assert "perf-k6" in plain.output and "planned" in plain.output
+    assert "perf-k6" in plain.output and "(needs k6)" in plain.output
+
+
+def test_every_listed_type_has_a_template():
+    from testkeel import templates
+    from testkeel.assignment.types import TYPES
+
+    assert [t.name for t in TYPES] == list(templates.TYPES)
 
 
 # ------------------------------------------------------------------ new-assignment
@@ -214,7 +223,13 @@ def test_dry_run_writes_nothing(env, tmp_path):
 @pytest.mark.parametrize(
     ("args", "code", "message"),
     [
-        (["--type", "perf-k6", "--name", "x"], 2, "planned"),
+        (
+            ["--type", "web-ui", "--name", "x", "--api-base-url", "https://a.test"],
+            2,
+            "does not apply",
+        ),
+        (["--type", "mobile", "--name", "x", "--target-url", "https://a.test"], 2, "takes no URL"),
+        (["--type", "fullstack", "--name", "x", "--api-base-url", "ftp://x"], 2, "http(s) URL"),
         (["--type", "nope", "--name", "x"], 2, "unknown type"),
         (["--type", "web-ui"], 2, "missing --name"),
         (["--name", "x"], 2, "missing --type"),
@@ -231,6 +246,50 @@ def test_usage_errors_exit_2_and_write_nothing(env, tmp_path, args, code, messag
     assert message in result.output
     assert _staging(tmp_path) == []
     assert not (tmp_path / "x").exists()
+
+
+def test_a_planned_type_is_refused(env, tmp_path, monkeypatch):
+    from testkeel.assignment import types
+
+    planned = types.AssignmentType("perf-jmeter", types.PLANNED, "Load tests with JMeter")
+    monkeypatch.setitem(scaffold.BY_NAME, planned.name, planned)
+    result = _new(env, "--type", "perf-jmeter", "--name", "x")
+    assert result.exit_code == 2
+    assert "planned" in result.output
+    assert _staging(tmp_path) == []
+
+
+def test_fullstack_requires_both_urls(env, tmp_path, monkeypatch):
+    seen: list[dict] = []
+
+    def recording_render(type_, destination, data):
+        seen.append(dict(data))
+        fixture_render("web-ui", destination, data)
+
+    monkeypatch.setattr(scaffold, "render", recording_render)
+    result = _new(
+        env, "--type", "fullstack", "--name", "Shop", "--target-url", "https://shop.example.test",
+        "--api-base-url", "https://api.shop.example.test",
+    )  # fmt: skip
+    assert result.exit_code == 0, result.output
+    assert seen[-1]["target_url"] == "https://shop.example.test"
+    assert seen[-1]["api_base_url"] == "https://api.shop.example.test"
+    result = _new(env, "--type", "fullstack", "--name", "Other", "--target-url", "https://o.test")
+    assert result.exit_code == 2
+    assert "fullstack needs --api-base-url" in result.output
+
+
+def test_a_type_without_a_url_gets_none(env, tmp_path, monkeypatch):
+    seen: list[dict] = []
+
+    def recording_render(type_, destination, data):
+        seen.append(dict(data))
+        fixture_render("api-rest", destination, data)
+
+    monkeypatch.setattr(scaffold, "render", recording_render)
+    result = _new(env, "--type", "mobile", "--name", "App")
+    assert result.exit_code == 0, result.output
+    assert "target_url" not in seen[-1] and "api_base_url" not in seen[-1]
 
 
 def test_a_non_empty_output_dir_needs_force(env, tmp_path):

@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
+from testkeel.assignment.types import BY_NAME, TYPES
 from testkeel.cli import app
 from testkeel.leakgate import CLEAN, FINDINGS, ProjectRules, run
 from testkeel.leakgate.__main__ import main
@@ -271,7 +272,15 @@ def test_new_assignment_refuses_a_rendered_trace(tmp_path, home):
 # ------------------------------------------------------------------ the real templates
 
 
-@pytest.mark.parametrize("type_", ["web-ui", "api-rest", "strategy"])
+PLACEHOLDER_URLS = {
+    "target_url": "https://shop.example.test",
+    "api_base_url": "https://api.example.test",
+}
+
+
+# Every type the CLI offers. The declared targets are reserved names, so any public host a
+# template itself names must be a listed demo or tooling host.
+@pytest.mark.parametrize("type_", [t.name for t in TYPES])
 @pytest.mark.parametrize("extra", [{}, {"report": "both", "credit": True, "ci": "github"}])
 def test_the_packaged_templates_pass_the_project_rules(tmp_path, home, type_, extra):
     pytest.importorskip("copier", reason="copier is not installed")
@@ -281,8 +290,7 @@ def test_the_packaged_templates_pass_the_project_rules(tmp_path, home, type_, ex
         "project_name": "ACME Shop",
         "project_slug": "acme-shop",
         "company": "ACME",
-        "target_url": "https://shop.example.test",
-        "api_base_url": "https://api.example.test",
+        **{option: PLACEHOLDER_URLS[option] for option, _ in BY_NAME[type_].urls},
         **extra,
     }
     project = render(type_, tmp_path / "out", answers)
@@ -292,6 +300,6 @@ def test_the_packaged_templates_pass_the_project_rules(tmp_path, home, type_, ex
         environ={"HOME": str(home), "LEAK_DENYLIST": ""},
         home=home,
         missing_list="warn",
-        project=ProjectRules.for_project([answers["target_url"], answers["api_base_url"]]),
+        project=ProjectRules.for_project([answers.get("target_url"), answers.get("api_base_url")]),
     )
     assert _found(outcome) == []
