@@ -1,8 +1,62 @@
 {
+  "local": {
+    "base_url": "http://localhost:8800/",
+    "api_base_url": "http://localhost:8800/api/",
+    "browser": "chromium",
+    "headless": true,
+    "timeout_ms": 15000,
+    "slow_mo_ms": 0,
+    "video": "retain-on-failure",
+    "tracing": "retain-on-failure",
+    "ai_model": "claude-sonnet-4-6",
+    "ai_timeout_s": 30,
+    "auth_mode": "none",
+    "read_only": false,
+    "api_assertions_enabled": true,
+    "credentials": {
+      "username_var": "LOGIN_USERNAME",
+      "password_var": "LOGIN_PASSWORD",
+      "shared": false
+    }
+  },
   "qa": {
-    "base_url": "https://www.catawiki.com/en/"
+    "base_url": "https://www.catawiki.com/en/",
+    "api_base_url": "https://www.catawiki.com/",
+    "browser": "chromium",
+    "headless": true,
+    "timeout_ms": 30000,
+    "slow_mo_ms": 0,
+    "video": "retain-on-failure",
+    "tracing": "retain-on-failure",
+    "ai_model": "claude-sonnet-4-6",
+    "ai_timeout_s": 30,
+    "auth_mode": "none",
+    "read_only": false,
+    "api_assertions_enabled": true,
+    "credentials": {
+      "username_var": "LOGIN_USERNAME",
+      "password_var": "LOGIN_PASSWORD",
+      "shared": true
+    }
   },
   "staging": {
-    "base_url": "https://www.catawiki.com/en/"
+    "base_url": "https://www.catawiki.com/en/",
+    "api_base_url": "https://www.catawiki.com/",
+    "browser": "chromium",
+    "headless": true,
+    "timeout_ms": 45000,
+    "slow_mo_ms": 0,
+    "video": "retain-on-failure",
+    "tracing": "retain-on-failure",
+    "ai_model": "claude-sonnet-4-6",
+    "ai_timeout_s": 45,
+    "auth_mode": "none",
+    "read_only": true,
+    "api_assertions_enabled": true,
+    "credentials": {
+      "username_var": "LOGIN_USERNAME",
+      "password_var": "LOGIN_PASSWORD",
+      "shared": false
+    }
   }
 }

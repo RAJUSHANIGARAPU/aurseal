@@ -17,3 +17,9 @@ def collect_browser_evidence():
 def enable_artifacts():
     """No-op override: api_agent tests do not use Playwright tracing."""
     yield
+
+
+@pytest.fixture(autouse=True)
+def gateway_retry():
+    """No-op override: framework tests do not route browser traffic."""
+    yield

@@ -8,6 +8,8 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from traceability.review import mark_draft
+
 if TYPE_CHECKING:
     from api.agents.ingestion import PostmanRequest
     from api.engine.context_memory import ContextMemory
@@ -105,7 +107,7 @@ class GenerationAgent:
 
         for module_name, module_requests in groups.items():
             file_path = self._output_dir / module_name
-            content = self._render_module(module_requests)
+            content = mark_draft(self._render_module(module_requests), "postman", module_name)
             try:
                 ast.parse(content)
             except SyntaxError as exc:

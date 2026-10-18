@@ -1,23 +1,29 @@
-"""Security scan plugin — pip-audit CVE checks and source pattern scanning."""
+"""Security scan plugin — a thin adapter over ``checks.security``.
+
+The old plugin grepped source files with two regexes (false positives on any test token,
+nothing on real ones), ran ``pip-audit`` and then ignored its result: a CVE could never
+change the status. It also walked ``.venv``. What the plugin guarantees now:
+
+* gitleaks (secrets in git history), bandit (first-party code, tests and ``.venv`` excluded)
+  and pip-audit (the pinned lock file) are the tools; ``context['tools']`` narrows them;
+* a blocking finding — anything not covered by an unexpired ``security/allowlist.yml``
+  entry, a pip-audit vulnerability included — or an expired entry ⇒ ``fail``;
+* any requested tool missing or without an answer ⇒ ``unknown``, never ``pass``;
+* every requested tool ran and nothing blocks ⇒ ``pass``;
+* dry run ⇒ ``skip``; nothing is started.
+"""
 
 from __future__ import annotations
 
-import re
-import subprocess
 import sys
 from pathlib import Path
 
+from checks._outcome import CheckOutcome
+from checks._sink import REPO_ROOT, JsonlSink
+from checks.security import scan as security_scan
+from checks.security.allowlist import Allowlist
 from plugins._base_plugin import BasePlugin, PluginPriority, PluginResult
-from plugins.cost_governor import CostGovernor
-
-_SECRET_PATTERNS = [
-    re.compile(r'(?i)(password|secret|api_key|token)\s*=\s*["\'][^"\']{4,}["\']'),
-    re.compile(r"(?i)-----BEGIN (RSA|EC|DSA|OPENSSH) PRIVATE KEY-----"),
-]
-_SQL_INJECTION_PATTERNS = [
-    re.compile(r'(?i)execute\s*\(\s*["\']?\s*SELECT.*\+'),
-    re.compile(r'(?i)f["\'].*SELECT.*\{'),
-]
+from plugins._check_adapter import plugin_result
 
 
 class SecurityScanPlugin(BasePlugin):
@@ -26,60 +32,32 @@ class SecurityScanPlugin(BasePlugin):
     trigger_conditions = ["deploy", "manual"]
 
     def run(self, context: dict) -> PluginResult:
-        source_dir = Path(context.get("source_dir", "."))
-        py_files = list(source_dir.rglob("*.py"))
-
+        requested = list(context.get("tools") or security_scan.TOOLS)
         if context.get("dry_run"):
-            return PluginResult(
-                status="pass",
-                findings=[{"files_to_scan": len(py_files)}],
-                dry_run=True,
+            return plugin_result(
+                CheckOutcome.skipped(security_scan.KIND, "dry run: no tool started"),
+                tools=requested,
             )
-
-        governor = context.get("cost_governor") or CostGovernor()  # noqa: F841
-
-        # Run pip-audit
-        cve_findings: list[dict] = []
+        root = Path(context.get("source_dir") or REPO_ROOT)
+        if not root.is_absolute():
+            root = (REPO_ROOT / root).resolve()
         try:
-            proc = subprocess.run(
-                ["pip-audit", "--format", "json"],
-                capture_output=True,
-                text=True,
-                timeout=120,
+            allowlist = Allowlist.load(context.get("allowlist") or security_scan.DEFAULT_ALLOWLIST)
+        except ValueError as exc:
+            return plugin_result(
+                CheckOutcome.error(security_scan.KIND, f"allow-list rejected: {exc}")
             )
-            if proc.returncode != 0:
-                cve_findings.append({"pip_audit_error": proc.stderr[:500]})
-            else:
-                import json
-
-                try:
-                    audit_data = json.loads(proc.stdout)
-                    cve_count = len(audit_data.get("vulnerabilities", []))
-                    cve_findings.append({"cve_count": cve_count, "vulnerabilities": audit_data})
-                except Exception:  # noqa: BLE001
-                    cve_findings.append({"pip_audit_output": proc.stdout[:500]})
-        except FileNotFoundError:
-            cve_findings.append({"pip_audit": "not installed"})
-        except Exception as exc:  # noqa: BLE001
-            cve_findings.append({"pip_audit_error": str(exc)})
-
-        # Scan source patterns
-        pattern_matches: list[dict] = []
-        for py_file in py_files:
-            try:
-                content = py_file.read_text(encoding="utf-8", errors="ignore")
-            except Exception:  # noqa: BLE001
-                continue
-            for pattern in _SECRET_PATTERNS:
-                if pattern.search(content):
-                    pattern_matches.append({"file": str(py_file), "type": "potential_secret"})
-            for pattern in _SQL_INJECTION_PATTERNS:
-                if pattern.search(content):
-                    pattern_matches.append({"file": str(py_file), "type": "sql_injection_risk"})
-
-        all_findings = cve_findings + pattern_matches
-        status = "fail" if pattern_matches else "pass"
-        return PluginResult(status=status, findings=all_findings)
+        sink = context.get("metric_sink")
+        if sink is None and context.get("record_metrics"):
+            sink = JsonlSink()
+        outcome = security_scan.scan(
+            requested,
+            root=root,
+            lockfile=Path(context.get("lockfile") or security_scan.DEFAULT_LOCKFILE),
+            allowlist=allowlist,
+            sink=sink,
+        )
+        return plugin_result(outcome, tools=requested)
 
 
 if __name__ == "__main__":
@@ -87,8 +65,9 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--tools", default=",".join(security_scan.TOOLS))
     args = parser.parse_args()
-    ctx: dict = {"source_dir": "."}
+    ctx: dict = {"tools": [t for t in args.tools.split(",") if t]}
     plugin = SecurityScanPlugin()
     result = plugin.dry_run(ctx) if args.dry_run else plugin.execute(ctx)
     print(f"status={result.status} findings={result.findings}")

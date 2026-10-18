@@ -23,6 +23,7 @@ import pytest
 from core.agents.generator_agent import GeneratorAgent
 from core.agents.planner_agent import PlannerAgent
 from tests.core._fake_claude import GENERATED, FakeClaude, write_trace
+from traceability.review import unmark_draft
 
 EXISTING = '''"""Hand-written test that must survive a failed generation."""
 
@@ -110,14 +111,14 @@ class TestGenerateFromTraceSucceeds:
         write_trace(workdir)
         FakeClaude().install(monkeypatch)
         GeneratorAgent()._tool_generate_from_trace(output_path=str(target))
-        assert target.read_text() == GENERATED
+        assert unmark_draft(target.read_text()) == GENERATED
 
     def test_it_creates_the_output_directory(self, workdir, monkeypatch):
         write_trace(workdir)
         FakeClaude().install(monkeypatch)
         out = workdir / "ui" / "tests" / "test_new.py"
         GeneratorAgent()._tool_generate_from_trace(output_path=str(out))
-        assert out.read_text() == GENERATED
+        assert unmark_draft(out.read_text()) == GENERATED
 
 
 class TestGenerateFromSpec:
@@ -168,7 +169,7 @@ class TestGenerateFromSpecSucceeds:
             spec_path=str(spec), output_path=str(target)
         )
         assert result["generated"] is True
-        assert target.read_text() == GENERATED
+        assert unmark_draft(target.read_text()) == GENERATED
 
     def test_the_spec_body_reaches_the_prompt(self, workdir, target, spec, monkeypatch):
         fake = FakeClaude().install(monkeypatch)
@@ -196,4 +197,4 @@ class TestPlannerGenerateTestSucceeds:
         FakeClaude().install(monkeypatch)
         result = PlannerAgent()._tool_generate_test(output_path=str(target))
         assert result["generated"] is True
-        assert target.read_text() == GENERATED
+        assert unmark_draft(target.read_text()) == GENERATED

@@ -1,0 +1,20 @@
+# Optional dependencies for the platform layer. Everything here is imported lazily: the
+# offline suite and the results store work without them.
+
+# results.io.junit: hardened XML parsing for JUnit imports (the stdlib parser behind a
+# DOCTYPE/ENTITY guard is used when absent).
+defusedxml>=0.7.1
+
+# qaplatform: the REST API server (qaplatform/http/app.py) and its tests
+# (tests/qaplatform_http, collected only when these are installed). Pinned, not ranged:
+# the service and the offline suite never import them.
+fastapi==0.115.12
+starlette==0.46.2
+pydantic==2.11.4
+uvicorn==0.34.2
+anyio==4.9.0
+# The read-only web UI (qaplatform/http/ui); the API runs without it.
+jinja2==3.1.6
+markupsafe==3.0.2
+# The test client used by tests/qaplatform_http.
+httpx==0.28.1

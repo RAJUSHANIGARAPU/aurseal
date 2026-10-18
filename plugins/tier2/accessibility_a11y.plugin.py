@@ -1,41 +1,37 @@
-"""Accessibility a11y plugin — generates axe-core Playwright test scripts."""
+"""Accessibility plugin — a thin adapter over ``checks.a11y`` (axe-core in a real browser).
+
+The template generator that wrote test files whose body was ``pass`` is gone, and so is the
+``http://localhost`` default. What the plugin guarantees:
+
+* no routes ⇒ ``unknown`` (no target is invented);
+* axe or the browser unavailable, a route that does not load, a scan that ran no rules ⇒
+  ``unknown``;
+* a blocking violation (impact at or above ``min_impact``) not explained by the open-issue
+  manifest, or a known one that no longer reproduces ⇒ ``fail``;
+* every route scanned and nothing unexplained ⇒ ``pass``;
+* dry run ⇒ ``skip``; no browser is started and nothing is written.
+"""
 
 from __future__ import annotations
 
 import sys
-from pathlib import Path
 
+from checks._browser import BrowserUnavailable
+from checks._outcome import CheckOutcome
+from checks._sink import JsonlSink
+from checks.a11y import runner
+from checks.a11y.assertions import load_known
+from checks.a11y.axe import AxeUnavailable
+from checks.a11y.judge import KIND, judge, record
+from checks.a11y.policy import A11yPolicy
 from plugins._base_plugin import BasePlugin, PluginPriority, PluginResult
-from plugins.cost_governor import CostGovernor
-
-_WCAG_CHECKS = [
-    "1.1.1 Non-text Content",
-    "1.4.3 Contrast (Minimum)",
-    "2.1.1 Keyboard",
-    "2.4.1 Bypass Blocks",
-    "3.1.1 Language of Page",
-    "4.1.2 Name, Role, Value",
-]
-
-_AXE_TEMPLATE = '''"""Auto-generated axe-core accessibility test."""
-from __future__ import annotations
-
-import pytest
-from playwright.sync_api import Page
+from plugins._check_adapter import plugin_result
 
 
-@pytest.mark.a11y
-def test_accessibility_{slug}(page: Page) -> None:
-    """Run axe-core accessibility checks on {route}."""
-    page.goto("{route}")
-    page.wait_for_load_state("networkidle")
-    # Requires: pip install axe-playwright
-    # from axe_playwright_python.sync_playwright import Axe
-    # results = Axe().run(page)
-    # assert results.violations_count == 0, results.generate_report()
-    # WCAG checks targeted: {wcag}
-    pass
-'''
+def _routes(raw: object) -> list[str]:
+    if not isinstance(raw, list | tuple):
+        return []
+    return [r.strip() for r in raw if isinstance(r, str) and r.strip().startswith("http")]
 
 
 class AccessibilityA11yPlugin(BasePlugin):
@@ -44,50 +40,34 @@ class AccessibilityA11yPlugin(BasePlugin):
     trigger_conditions = ["ui_change"]
 
     def run(self, context: dict) -> PluginResult:
-        routes: list[str] = context.get("routes", ["http://localhost"])
-
+        routes = _routes(context.get("routes"))
+        if not routes:
+            return plugin_result(
+                CheckOutcome.unknown(KIND, "no routes were supplied: nothing scanned")
+            )
+        try:
+            policy = A11yPolicy(
+                min_impact=context.get("min_impact", "serious"),
+                tags=tuple(context.get("tags") or ("wcag2a", "wcag2aa")),
+                disabled_rules=tuple(context.get("disabled_rules") or ()),
+            )
+            manifest = load_known(context.get("open_issues"))
+        except (ValueError, OSError) as exc:
+            return plugin_result(CheckOutcome.error(KIND, f"bad configuration: {exc}"))
         if context.get("dry_run"):
-            reqs_file = Path("requirements.txt")
-            axe_available = False
-            if reqs_file.exists():
-                axe_available = "axe-playwright" in reqs_file.read_text(encoding="utf-8")
-            return PluginResult(
-                status="pass",
-                findings=[
-                    {
-                        "axe_playwright_available": axe_available,
-                        "wcag_checks": _WCAG_CHECKS,
-                        "routes": routes,
-                    }
-                ],
-                dry_run=True,
+            return plugin_result(
+                CheckOutcome.skipped(KIND, "dry run: no browser started"), routes=routes
             )
-
-        governor = context.get("cost_governor") or CostGovernor()  # noqa: F841
-        out_dir = Path("ai_generated_tests/a11y")
-        out_dir.mkdir(parents=True, exist_ok=True)
-        generated: list[str] = []
-
-        for route in routes:
-            slug = route.replace("://", "_").replace("/", "_").replace(".", "_")[:40]
-            script = _AXE_TEMPLATE.format(
-                slug=slug,
-                route=route,
-                wcag=", ".join(_WCAG_CHECKS),
-            )
-            out_file = out_dir / f"test_a11y_{slug}.py"
-            out_file.write_text(script, encoding="utf-8")
-            generated.append(str(out_file))
-
-        return PluginResult(
-            status="pass",
-            findings=[
-                {
-                    "generated_files": generated,
-                    "wcag_checks": _WCAG_CHECKS,
-                }
-            ],
-        )
+        try:
+            reports = runner.scan_routes(routes, policy, context.get("browser", "chromium"))
+        except (AxeUnavailable, BrowserUnavailable) as exc:
+            return plugin_result(CheckOutcome.unknown(KIND, str(exc)), routes=routes)
+        sink = context.get("metric_sink")
+        if sink is None and context.get("record_metrics"):
+            sink = JsonlSink()
+        if sink is not None:
+            record(reports, sink, manifest)
+        return plugin_result(judge(reports, policy, manifest, record_verdicts=False), routes=routes)
 
 
 if __name__ == "__main__":
@@ -95,8 +75,9 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--route", action="append", default=[], help="repeatable URL")
     args = parser.parse_args()
-    ctx: dict = {"routes": ["http://localhost"]}
+    ctx: dict = {"routes": args.route}
     plugin = AccessibilityA11yPlugin()
     result = plugin.dry_run(ctx) if args.dry_run else plugin.execute(ctx)
     print(f"status={result.status} findings={result.findings}")

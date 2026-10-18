@@ -110,6 +110,37 @@ class _StateMachineVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
 
+def _declared(workflow_files: list) -> list[dict]:
+    """Graph facts for declared workflow files (``context["workflow_files"]``).
+
+    A declared machine needs no discovery: its states and transitions are read from the
+    file, so unreachable states and the path count are facts, not guesses. Nothing is
+    driven here either; this only reports what the declaration says.
+    """
+    from generators.state_graph import StateGraph
+    from generators.workflow_model import WorkflowError, load
+
+    out = []
+    for path in workflow_files:
+        try:
+            definition = load(path)
+        except WorkflowError as exc:
+            out.append({"file": str(path), "error": str(exc)})
+            continue
+        graph = StateGraph(definition)
+        out.append(
+            {
+                "file": str(path),
+                "key": definition.key,
+                "states": list(definition.states),
+                "unreachable": graph.unreachable(),
+                "paths": len(graph.paths()),
+                "problems": definition.problems(),
+            }
+        )
+    return out
+
+
 def _slug(source: str, class_name: str) -> str:
     """A file-name stem unique to (module, class).
 
@@ -145,6 +176,8 @@ class StateMachineExhaustivePlugin(BasePlugin):
             for entry in visitor.candidates:
                 candidates.append({**entry, "file": source})
 
+        declared = _declared(list(context.get("workflow_files") or []))
+
         if is_dry:
             return PluginResult(
                 status=PluginStatus.SKIP.value,
@@ -153,6 +186,7 @@ class StateMachineExhaustivePlugin(BasePlugin):
                         "state_machines": machines,
                         "state_only_candidates": candidates,
                         "count": len(machines),
+                        "declared_machines": declared,
                     }
                 ],
                 dry_run=True,
@@ -181,6 +215,7 @@ class StateMachineExhaustivePlugin(BasePlugin):
                 f"{sm['file']}::{sm['class_name']}": len(sm["transitions"]) for sm in machines
             },
             "nothing_was_traversed": True,
+            "declared_machines": declared,
         }
 
         if candidates:

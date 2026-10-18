@@ -59,3 +59,12 @@ class ContextMemory:
             else:
                 raise TypeError(f"Cannot traverse into {type(current)} at path segment '{part}'")
         return current
+
+
+def resolve_path(obj: Any, path: str) -> Any:
+    """Resolve a dotted path (``data.items.0.id``) strictly.
+
+    Raises ``KeyError`` / ``IndexError`` / ``TypeError`` when the path does not
+    exist, unlike :meth:`ContextMemory.extract_from_response`, which skips it.
+    """
+    return ContextMemory._resolve_path(obj, path)
