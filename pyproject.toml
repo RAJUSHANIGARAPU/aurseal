@@ -10,3 +10,46 @@ ignore = []
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
+
+# ---------------------------------------------------------------- the testkeel package
+# Only src/testkeel is packaged; the framework modules at the repository root are not.
+
+[build-system]
+requires = ["hatchling>=1.26"]
+build-backend = "hatchling.build"
+
+[project]
+name = "testkeel"
+version = "0.1.0"
+description = "Scaffold, check and report on test automation projects"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Topic :: Software Development :: Testing",
+]
+dependencies = [
+    "pydantic>=2,<3",
+    "copier>=9,<10",
+    "typer>=0.12,<1",
+]
+
+[project.scripts]
+testkeel = "testkeel.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/testkeel"]
+
+[tool.hatch.build.targets.sdist]
+only-include = ["src/testkeel", "LICENSE", "README.md", "pyproject.toml"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+# The repository root has an __init__.py; without these the package would be read as
+# <root>.src.testkeel instead of testkeel.
+mypy_path = "src"
+explicit_package_bases = true
+plugins = ["pydantic.mypy"]

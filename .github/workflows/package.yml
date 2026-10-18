@@ -1,0 +1,62 @@
+name: Package
+
+# Lint, strict type check and build of the installable package (src/testkeel). Its tests
+# run in the offline job of tests.yml, where the CI-selection gate sees them; this
+# workflow only checks what that job cannot: the type check on the package's own Python
+# and the contents of the built wheel.
+# Why: docs/ci-decisions.md#package
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "src/testkeel/**"
+      - "tests/package/**"
+      - "pyproject.toml"
+      - ".github/workflows/package.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  package:
+    name: Lint, types and wheel
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install the package and its tools
+        run: |
+          uv venv
+          uv pip install -e . ruff==0.15.2 mypy==2.4.0
+
+      - name: Lint
+        run: |
+          uv run --no-sync ruff check src/testkeel
+          uv run --no-sync ruff format --check src/testkeel
+
+      - name: Type check (strict)
+        run: uv run --no-sync mypy --strict src/testkeel
+
+      - name: Build the wheel and sdist
+        run: uv build --out-dir dist
+
+      - name: The wheel contains only the package
+        run: |
+          uv run --no-sync python - <<'PY'
+          import pathlib, sys, zipfile
+          wheel = next(pathlib.Path("dist").glob("testkeel-*.whl"))
+          names = zipfile.ZipFile(wheel).namelist()
+          stray = [n for n in names if not n.startswith(("testkeel/", "testkeel-"))]
+          print(f"{wheel.name}: {len(names)} entries")
+          if stray:
+              sys.exit(f"files outside testkeel/ in the wheel: {stray}")
+          PY
