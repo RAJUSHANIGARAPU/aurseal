@@ -20,6 +20,12 @@ runs the client and service tests on `httpx.MockTransport`, with no network. The
 run against <https://countries.trevorblades.com> every night, never on a pull request: a
 third-party outage is not a defect in this code.
 
+`make test-local` runs the whole suite against the API built from a pinned upstream commit
+([local/countries](local/countries/Dockerfile)) on `localhost:8303/graphql`, then removes
+the container; this is what a pull request runs. The schema drift test skips there, because
+`schema.graphql` was recorded from the public endpoint. Prerequisites: Docker, uv and GNU
+make.
+
 ## Decisions and trade-offs
 
 | Decision | Alternatives considered | Why | Cost accepted |
@@ -70,10 +76,8 @@ and the schema as a whole (drift).
 
 ## What I would do next
 
-1. Run the API from its source in a container for pull requests, so the live tests also
-   run per change without the public host.
-2. Cover `continents` and `languages`, with one stable fact each.
-3. Record the schema drift as a dated report in the nightly run, so harmless additions are
+1. Cover `continents` and `languages`, with one stable fact each.
+2. Record the schema drift as a dated report in the nightly run, so harmless additions are
    reviewed in a batch instead of failing the night they appear.
 
 ## Project layout

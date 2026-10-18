@@ -1,0 +1,12 @@
+# The local target of `make test-local`: Restful Booker in a container on localhost:8302,
+# so a pull request never depends on the public instance.
+# The image is the one the upstream project (github.com/mwinteringham/restful-booker,
+# GPL-3.0) publishes on Docker Hub, pinned by digest: `latest` as pushed on 2026-03-27.
+# It is used as a test target only; none of its code is copied into this repository.
+services:
+  restful-booker:
+    image: mwinteringham/restfulbooker@sha256:e4a04233731ceca2e6d99bca16689e0d4bc44631047ab351b6f11b5fa08fb418
+    # Published for amd64 only; Docker on arm64 runs it under emulation.
+    platform: linux/amd64
+    ports:
+      - "127.0.0.1:8302:3001"
