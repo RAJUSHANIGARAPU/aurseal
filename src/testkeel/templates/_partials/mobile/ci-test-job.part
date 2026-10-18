@@ -4,7 +4,7 @@
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.2.0
         with:
           python-version: "{{ python_version }}"
       - run: uv sync --locked
@@ -28,7 +28,7 @@
       APP_APPIUM_URL: http://127.0.0.1:4723
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.2.0
         with:
           python-version: "{{ python_version }}"
       - run: uv sync --locked
