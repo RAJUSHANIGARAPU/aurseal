@@ -1,1 +1,1 @@
-"""Verification oracles: equivalence, invariants, batch truthfulness, idempotency."""
+"""Verification oracles: equivalence, invariants, batch truthfulness, idempotency, verdicts."""
