@@ -1,0 +1,36 @@
+# Files below are exactly what the template renders for the answers in this header.
+# CI re-renders the template and fails if any of them differ; every other file in
+# this directory is written by hand for this example.
+# type: a11y
+# project_name: W3C Before and After
+# project_slug: a11y-w3c-bad
+# target_url: https://www.w3.org/WAI/demos/bad
+# company:
+# task_summary: WCAG 2.1 AA scans of the W3C Before and After Demonstration, with the inaccessible version as a built-in positive control.
+.dockerignore
+.editorconfig
+.env.example
+.github/workflows/ci.yml
+.gitignore
+.pre-commit-config.yaml
+.python-version
+Dockerfile
+Makefile
+docker-compose.yml
+pyproject.toml
+src/a11y_w3c_bad/__init__.py
+src/a11y_w3c_bad/a11y/__init__.py
+src/a11y_w3c_bad/a11y/baseline.py
+src/a11y_w3c_bad/a11y/scanner.py
+src/a11y_w3c_bad/log.py
+src/a11y_w3c_bad/settings.py
+tests/__init__.py
+tests/a11y/__init__.py
+tests/a11y/test_pages.py
+tests/conftest.py
+tests/fixtures/static/after.html
+tests/fixtures/static/before.html
+tests/unit/__init__.py
+tests/unit/test_baseline.py
+tests/unit/test_scanner.py
+tests/unit/test_settings.py
