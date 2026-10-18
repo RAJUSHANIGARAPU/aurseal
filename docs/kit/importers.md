@@ -12,6 +12,7 @@ that record. `testkeel report` picks the importer by sniffing the start of each 
 | `testkeel` | The canonical upload document (`RunUpload` JSON) | the [pytest plugin](#pytest-plugin) |
 | `cypress` | mochawesome JSON (one spec or a `mochawesome-merge` report); the Cypress Module API results | `--reporter mochawesome --reporter-options json=true`; `JSON.stringify(await cypress.run())` |
 | `newman` | Newman's `json` reporter (the run summary) | `newman run collection.json --reporters json --reporter-json-export newman.json` |
+| `k6` | k6's end-of-test summary: `handleSummary` data or `--summary-export` | `handleSummary(data) { return { "k6-summary.json": JSON.stringify(data) }; }` |
 
 ## Status mapping
 
@@ -45,6 +46,23 @@ so one request is one case with a result per data row.
 A request error or a script error is `broken`, a failed assertion `failed` (the message
 names the assertion), a request whose assertions were all skipped `skipped`. A request
 sent again within one iteration (`setNextRequest`) is another attempt of the same record.
+
+## k6
+
+Every threshold is a record: the metric is the suite, the threshold expression the name,
+and the status `passed` or `failed`. A run without thresholds has no verdict and imports
+no records. The summary does not name the script, so keep each script's summaries in a
+project of their own.
+
+Each record carries a `perf.k6` result type payload (schema `perf.k6/1`): the metric's
+type and values (p95, p99, rates, counts), the threshold, its outcome and the value it
+judged. The result type is a plugin like any other (entry point group
+`testkeel.result_types`), so its JSON Schema is available to anything that discovers it.
+
+`--summary-export` writes thresholds as booleans that are true when the threshold
+failed; the importer reads them that way. k6's newer machine-readable summary
+(`--new-machine-readable-summary`) holds no threshold outcomes and is refused with a
+message saying so.
 
 ## pytest plugin
 

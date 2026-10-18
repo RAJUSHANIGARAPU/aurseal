@@ -42,9 +42,13 @@ testkeel = "testkeel.cli:app"
 [project.entry-points."testkeel.importers"]
 cypress = "testkeel.importers.cypress:CypressImporter"
 junit = "testkeel.importers.junit:JUnitImporter"
+k6 = "testkeel.importers.k6:K6Importer"
 newman = "testkeel.importers.newman:NewmanImporter"
 playwright = "testkeel.importers.playwright:PlaywrightImporter"
 testkeel = "testkeel.importers.upload:UploadImporter"
+
+[project.entry-points."testkeel.result_types"]
+"perf.k6" = "testkeel.importers.k6:K6ResultType"
 
 [project.entry-points.pytest11]
 # Inert unless --testkeel-out is given.
