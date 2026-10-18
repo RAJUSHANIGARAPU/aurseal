@@ -1,4 +1,4 @@
-{%- if type in ['web-ui', 'fullstack'] -%}
+{%- if browser -%}
 # Same Playwright version as pyproject.toml, so the browsers in the image match the client.
 FROM mcr.microsoft.com/playwright/python:v1.58.0-noble
 {%- else -%}
@@ -19,7 +19,7 @@ COPY pyproject.toml uv.lock .python-version ./
 RUN uv sync --locked --no-dev
 
 COPY . .
-{%- if type in ['web-ui', 'fullstack'] %}
+{%- if browser %}
 
 RUN chown -R pwuser /app
 USER pwuser
