@@ -1,0 +1,101 @@
+name: CI
+
+# Smoke only: load and stress need a target you own (see the README), never a shared host.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  # A newer push to a pull request supersedes the older run; runs on main always finish.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          python-version: "3.12"
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy
+
+  test:
+    needs: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          python-version: "3.12"
+      - run: uv sync --locked
+      - name: Offline tests (SLO file, target guard, settings)
+        run: uv run pytest -m offline
+
+  smoke:
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: grafana/setup-k6-action@v1
+        with:
+          k6-version: "2.3.0"
+      # handleSummary writes into reports/, and k6 does not create directories.
+      - run: mkdir -p reports
+      - uses: grafana/run-k6-action@v1
+        env:
+          TARGET_URL: https://quickpizza.grafana.com
+        with:
+          path: k6/scenarios/smoke.js
+      - uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          name: reports
+          path: reports/
+          retention-days: 7
+
+  report:
+    needs: smoke
+    # The report matters most when the smoke failed, so build it unless the run was cancelled.
+    if: ${{ !cancelled() && needs.smoke.result != 'skipped' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: reports
+          path: reports
+      - name: Assemble the site
+        run: |
+          mkdir -p site
+          cp reports/k6-smoke-summary.html site/index.html
+          cp reports/k6-smoke-summary.json site/
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+  deploy:
+    needs: report
+    if: ${{ !cancelled() && needs.report.result == 'success' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
