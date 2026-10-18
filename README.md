@@ -1,4 +1,53 @@
-# wiki_project — Universal Test Automation Framework
+# testkeel
+
+Open-source test automation kit: scaffold interview-grade test projects in under a minute,
+plus importers, reports and a single-team results platform.
+
+[![Tests](https://github.com/RAJUSHANIGARAPU/wiki_project/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/RAJUSHANIGARAPU/wiki_project/actions/workflows/tests.yml)
+[![Leak check](https://github.com/RAJUSHANIGARAPU/wiki_project/actions/workflows/leak-check.yml/badge.svg?branch=main)](https://github.com/RAJUSHANIGARAPU/wiki_project/actions/workflows/leak-check.yml)
+[![Docs](https://github.com/RAJUSHANIGARAPU/wiki_project/actions/workflows/pages.yml/badge.svg?branch=main)](https://rajushanigarapu.github.io/wiki_project/)
+
+## Quickstart
+
+```bash
+uv tool install git+https://github.com/RAJUSHANIGARAPU/wiki_project   # or: pipx install git+...
+testkeel new-assignment --type web-ui --name acme-checkout
+cd acme-checkout && make test
+```
+
+The project is rendered into a staging directory, checked by the leak gate, and only then
+written. `testkeel list-types` shows what is available; the
+[quickstart](https://rajushanigarapu.github.io/wiki_project/kit/quickstart/) covers the
+other types and options.
+
+## See it working
+
+Two projects generated from the templates, each run nightly against a public practice
+target:
+
+| Example | Template | Live report | Source |
+|---|---|---|---|
+| Sauce Demo shop: sign-in, cart, checkout | `web-ui` | [report](https://rajushanigarapu.github.io/wiki_project/reports/web-ui-saucedemo/) | [examples/web-ui-saucedemo](examples/web-ui-saucedemo/README.md) |
+| Restful Booker API: auth, booking CRUD | `api-rest` | [report](https://rajushanigarapu.github.io/wiki_project/reports/api-rest-restful-booker/) | [examples/api-rest-restful-booker](examples/api-rest-restful-booker/README.md) |
+
+Documentation: [rajushanigarapu.github.io/wiki_project](https://rajushanigarapu.github.io/wiki_project/).
+
+## What's inside
+
+| Part | What it does | Docs |
+|---|---|---|
+| `testkeel new-assignment` | Renders a project: page objects or an API client, offline tests that pass on the first run, test plan, ruff + strict mypy, Makefile, Dockerfile, CI with a published report | [CLI reference](https://rajushanigarapu.github.io/wiki_project/kit/cli/) |
+| Templates | `web-ui` (Playwright), `api-rest` (httpx + pydantic), `strategy` (documents); six more types planned | [Templates](https://rajushanigarapu.github.io/wiki_project/kit/templates/) |
+| Leak gate | Keeps listed private names and personal data out of generated projects and out of this repository; prints locations, never the matched text | [Leak gate](https://rajushanigarapu.github.io/wiki_project/kit/leak-gate/) |
+| Importers and report | JUnit XML and Playwright JSON into one result model with stable test identities; `testkeel report` renders a self-contained HTML summary | [CLI reference](https://rajushanigarapu.github.io/wiki_project/kit/cli/) |
+| Results platform | A versioned REST API over a results store, for one team's runs, verdicts and evidence (`qaplatform/`) | [Integration API](docs/integration_api.md) |
+| The framework | The pytest + Playwright framework the kit grew out of: lanes, run-trust gate, evidence, traceability | [Framework reference](#framework-reference) |
+
+---
+
+# Framework reference
+
+**wiki_project — Universal Test Automation Framework**
 
 A plug-and-play, AI-powered test automation framework for any web application. Clone it, point it at a URL, run. No org-specific assumptions, no proprietary dependencies.
 
