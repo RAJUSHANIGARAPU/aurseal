@@ -1,0 +1,32 @@
+# Personal-data false positives for `python -m testkeel.leakgate` (rule + path + reason).
+# Denylist rules cannot be allowlisted here; fix those in the private list.
+
+[[allow]]
+rule = "pii.phone"
+path = "tests/demo_examples/ui/test_customer_maintenance.py"
+reason = "fictional number in the demo customer form test"
+
+[[allow]]
+rule = "pii.phone"
+path = "tests/demo_sut/test_customers.py"
+reason = "fictional numbers in the demo phone validation table"
+
+[[allow]]
+rule = "pii.phone"
+path = "tests/test_data/synthetic/test_mask.py"
+reason = "fictional number the masking test masks"
+
+[[allow]]
+rule = "pii.phone"
+path = "web_discovery/data_generator/generator.py"
+reason = "fictional 555 fallback number for generated form data"
+
+[[allow]]
+rule = "pii.email"
+path = "tests/contract_testing/test_consumer.py"
+reason = "made-up address in a schema inference sample"
+
+[[allow]]
+rule = "pii.home"
+path = "tests/gate/test_requirement.py"
+reason = "deliberately non-existent ~user path"
