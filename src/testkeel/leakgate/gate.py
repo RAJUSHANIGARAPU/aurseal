@@ -30,6 +30,7 @@ class Outcome:
 def run(
     trees: Sequence[Path] = (),
     messages: Sequence[tuple[str, Path]] = (),
+    texts: Sequence[tuple[str, str]] = (),
     commit_range: str | None = None,
     history: bool = False,
     range_root: Path = Path("."),
@@ -41,6 +42,8 @@ def run(
     home: Path | None = None,
 ) -> Outcome:
     env = dict(os.environ if environ is None else environ)
+    if home is None and env.get("HOME"):
+        home = Path(env["HOME"])
     notes: list[str] = []
     try:
         lists = None if fork else deny.load(denylist_path, env, home)
@@ -73,6 +76,8 @@ def run(
             scanner.tree(tree)
         for label, path in messages:
             scanner.message(label, path.read_text(encoding="utf-8", errors="replace"))
+        for label, text in texts:
+            scanner.message(label, text)
         if commit_range:
             scanner.commit_range(range_root, commit_range)
         if history:
