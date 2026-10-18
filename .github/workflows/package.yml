@@ -2,8 +2,9 @@ name: Package
 
 # Lint, strict type check and build of the installable package (src/testkeel). Its tests
 # run in the offline job of tests.yml, where the CI-selection gate sees them; this
-# workflow only checks what that job cannot: the type check on the package's own Python
-# and the contents of the built wheel.
+# workflow only checks what that job cannot: the type check on the package's own Python,
+# the contents of the built wheel, and the generated-project checks that need each
+# project's own dependencies and Chromium (skipped in the offline job, which has neither).
 # Why: docs/ci-decisions.md#package
 on:
   push:
@@ -59,4 +60,52 @@ jobs:
           print(f"{wheel.name}: {len(names)} entries")
           if stray:
               sys.exit(f"files outside testkeel/ in the wheel: {stray}")
+          PY
+
+  generated-projects:
+    name: Generated projects (all dependencies)
+    runs-on: ubuntu-latest
+    # A render suite that hangs (a gevent/xdist deadlock in Locust, a browser that never
+    # starts) must fail in minutes, not hold a runner for six hours.
+    timeout-minutes: 20
+    env:
+      # Locust monkey-patches the standard library with gevent on import, which deadlocks
+      # pytest-xdist and pytest-rerunfailures; the perf-locust template sets the same.
+      LOCUST_SKIP_MONKEY_PATCH: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+
+      # Every dependency a generated project needs, so no render test skips for a
+      # missing one. Versions match the templates' pins.
+      - name: Install the package and the generated projects' dependencies
+        run: |
+          uv venv
+          uv pip install -r requirements.txt -e . mypy==2.4.0 hatchling==1.32.4 \
+            httpx==0.28.1 pydantic-settings==2.16.0 types-jsonschema==4.26.0.20261006 \
+            "gql[httpx]==4.4.0" axe-playwright-python==0.1.8 locust==2.46.7 \
+            Appium-Python-Client==6.0.0 selenium==4.43.0 pytest-html==4.2.0
+
+      - name: Install Chromium
+        run: uv run --no-sync playwright install --with-deps chromium
+
+      - name: Render, lint, type-check and run every generated project's offline tests
+        run: uv run --no-sync pytest tests/package -n auto -rs --junitxml=reports/package.xml
+
+      # A skipped render test here is a dependency this job failed to install: the check
+      # it stands for ran nowhere, so it fails the job instead of passing quietly.
+      - name: Nothing was skipped
+        run: |
+          uv run --no-sync python - <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+          suites = ET.parse("reports/package.xml").getroot().iter("testsuite")
+          skipped = sum(int(suite.get("skipped", 0)) for suite in suites)
+          print(f"skipped: {skipped}")
+          if skipped:
+              sys.exit("tests/package skipped tests; see the -rs summary above")
           PY
