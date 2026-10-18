@@ -32,7 +32,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="text such as a PR title or body; findings read LABEL:line",
     )
     scan.add_argument("--range", dest="commit_range", help="commit messages and added lines")
-    scan.add_argument("--repo", type=Path, default=Path("."), help="repository for --range")
+    scan.add_argument(
+        "--history", action="store_true", help="every commit message and added line, all refs"
+    )
+    scan.add_argument(
+        "--repo", type=Path, default=Path("."), help="repository for --range/--history"
+    )
     scan.add_argument("--denylist", type=Path, help="list file (default: env, then config)")
     scan.add_argument("--allow", type=Path, help="allowlist (default: <tree>/leakgate-allow.toml)")
     scan.add_argument("--missing-list", choices=["fail", "warn"], default="fail")
@@ -47,12 +52,13 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     trees = list(args.tree)
-    if not trees and not args.message_file and not args.commit_range:
+    if not trees and not args.message_file and not args.commit_range and not args.history:
         trees = [Path(".")]
     outcome = run(
         trees=trees,
         messages=args.message_file,
         commit_range=args.commit_range,
+        history=args.history,
         range_root=args.repo,
         denylist_path=args.denylist,
         allow_path=args.allow,

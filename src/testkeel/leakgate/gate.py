@@ -31,6 +31,7 @@ def run(
     trees: Sequence[Path] = (),
     messages: Sequence[tuple[str, Path]] = (),
     commit_range: str | None = None,
+    history: bool = False,
     range_root: Path = Path("."),
     denylist_path: Path | None = None,
     allow_path: Path | None = None,
@@ -59,8 +60,8 @@ def run(
         lists = None
     try:
         allows = allowlist.load(allow_path) if allow_path else ()
-        if allow_path is None and trees:
-            allows = allowlist.load(trees[0] / allowlist.FILE_NAME)
+        if allow_path is None:
+            allows = allowlist.load((trees[0] if trees else range_root) / allowlist.FILE_NAME)
     except (allowlist.AllowError, OSError) as exc:
         return Outcome(CANNOT_RUN, error=str(exc))
 
@@ -74,6 +75,8 @@ def run(
             scanner.message(label, path.read_text(encoding="utf-8", errors="replace"))
         if commit_range:
             scanner.commit_range(range_root, commit_range)
+        if history:
+            scanner.history(range_root)
     except (OSError, RuntimeError) as exc:
         return Outcome(CANNOT_RUN, error=str(exc))
 

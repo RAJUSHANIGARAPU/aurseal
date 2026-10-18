@@ -1,0 +1,122 @@
+name: Leak check
+
+# Private names (a denylist kept in the LEAK_DENYLIST secret, never in the repository)
+# and personal data (built-in rules) must not reach this public repository. Findings
+# print a location and a rule id only, never the matched text.
+#   pull request: the tree, the PR title and body, the commit messages and added lines
+#   weekly:       the tree, plus every commit message and added line in the history
+#                 against the denylist (a newly listed term is checked against
+#                 everything already published)
+#   dispatch:     the weekly scan, or with `pr` set, a fork pull request's head as data
+# A fork or bot pull request has no secret: the built-in rules still run and the
+# denylist reports NOT ASSESSED until a maintainer dispatches this workflow for it.
+# Why: docs/ci-decisions.md#leak-check
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    # Off the hour: hosted CI queues heavily at :00. Weekly, Monday.
+    - cron: "41 3 * * 1"
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "Pull request number to scan as data (fork PRs); empty = full scan"
+        type: string
+        default: ""
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  leak-check:
+    name: Leak check
+    if: github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # A fork pull request's head is checked out as data only; the scanner always runs
+      # from the base checkout above.
+      - name: Check out the pull request head as data
+        if: github.event_name == 'workflow_dispatch' && inputs.pr != ''
+        uses: actions/checkout@v4
+        with:
+          ref: refs/pull/${{ inputs.pr }}/head
+          path: pr-head
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install the scanner
+        run: pip install -e .
+
+      - name: Fetch the pull request title and body
+        if: github.event_name == 'workflow_dispatch' && inputs.pr != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ inputs.pr }}
+        run: |
+          umask 077
+          gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json title --jq .title > "$RUNNER_TEMP/pr-title.txt"
+          gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json body --jq .body > "$RUNNER_TEMP/pr-body.txt"
+
+      # The secret and the PR text reach the scanner through env and temp files only,
+      # never through an expression inside the script.
+      - name: Scan
+        env:
+          LEAK_DENYLIST: ${{ secrets.LEAK_DENYLIST }}
+          EVENT: ${{ github.event_name }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          DISPATCH_PR: ${{ inputs.pr }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          umask 077
+          args=(scan)
+          if [ "$EVENT" = "pull_request" ]; then
+            printf '%s\n' "$PR_TITLE" > "$RUNNER_TEMP/pr-title.txt"
+            printf '%s\n' "$PR_BODY" > "$RUNNER_TEMP/pr-body.txt"
+            args+=(--tree . --range "$BASE_SHA..$HEAD_SHA")
+            args+=(--message-file "pr-title=$RUNNER_TEMP/pr-title.txt")
+            args+=(--message-file "pr-body=$RUNNER_TEMP/pr-body.txt")
+            if [ "$HEAD_REPO" != "$GITHUB_REPOSITORY" ] || [ "$ACTOR" = "dependabot[bot]" ]; then
+              args+=(--fork)
+            fi
+          elif [ -n "$DISPATCH_PR" ]; then
+            args+=(--tree pr-head --repo pr-head --range "origin/main..HEAD")
+            args+=(--message-file "pr-title=$RUNNER_TEMP/pr-title.txt")
+            args+=(--message-file "pr-body=$RUNNER_TEMP/pr-body.txt")
+          elif [ "$EVENT" = "push" ]; then
+            args+=(--tree .)
+          else
+            args+=(--tree . --history)
+          fi
+          set +e
+          python -m testkeel.leakgate "${args[@]}"
+          code=$?
+          set -e
+          if [ "$code" -eq 3 ]; then
+            echo "::notice title=Leak check::denylist NOT ASSESSED (fork or bot pull request); a maintainer runs this workflow with pr=<number>"
+            echo "Leak check: built-in rules clean; denylist NOT ASSESSED (fork or bot pull request)." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if [ "$code" -eq 1 ]; then
+            echo "Leak check: findings (locations above). On an already pushed branch this is an incident: rewrite the commits, then rotate anything secret." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit "$code"

@@ -48,7 +48,14 @@ class Scanner:
 
     # ------------------------------------------------------------------ text
 
-    def text(self, label: str, text: str, path: str | None = None, mask: str | None = None) -> None:
+    def text(
+        self,
+        label: str,
+        text: str,
+        path: str | None = None,
+        mask: str | None = None,
+        pii: bool = True,
+    ) -> None:
         """Scan one text. ``path`` is matched by the allowlist; ``mask`` is what is printed."""
         shown = mask or label
         lines = text.splitlines()
@@ -57,6 +64,8 @@ class Scanner:
                 self.findings.add(Finding(shown, number, entry.rule, entry.entry_id))
             for number, entry in self._matcher.lines(text):
                 self.findings.add(Finding(shown, number, entry.rule, entry.entry_id))
+        if not pii:
+            return
         check = line_rules(path or label, self.home)
         for number, line in enumerate(lines, start=1):
             for rule in check(line):
@@ -134,17 +143,53 @@ class Scanner:
             sha, _, body = chunk.strip("\n").partition("\x00")
             if sha:
                 self.text(f"commit {sha[:7]} msg", body)
+        diff = _git(
+            root, "-c", "core.quotepath=off", "diff", "--no-color", "--no-ext-diff",
+            "--unified=0", spec,
+        )  # fmt: skip
         added: dict[str, list[tuple[int, str]]] = {}
-        for path, number, line in _added_lines(
-            _git(root, "-c", "core.quotepath=off", "diff", "--no-color", "--no-ext-diff",
-                 "--unified=0", spec)
-        ):  # fmt: skip
+        for path, number, line in _added_lines(diff.splitlines()):
             added.setdefault(path, []).append((number, line))
-        shown = self.names(added)
+        self._added(added, self.names(added), "")
+
+    def history(self, root: Path) -> None:
+        """Every commit message and added line of every ref, against the denylist only.
+
+        A newly listed term must be checked against everything already published. The
+        personal-data rules are not applied here: published history cannot be fixed without
+        a rewrite, and a check that stays red for that reason gets ignored. They run on the
+        tree, on pull-request diffs and on messages instead.
+        """
+        commits: list[tuple[str, dict[str, list[tuple[int, str]]]]] = []
+        lines = _git(
+            root, "-c", "core.quotepath=off", "log", "--all", "--no-color", "--no-ext-diff",
+            "--unified=0", "-p", "--format=%x1e%H%x00%B%x00",
+        ).split("\x1e")  # fmt: skip
+        for chunk in lines:
+            sha, _, rest = chunk.lstrip("\n").partition("\x00")
+            if not sha:
+                continue
+            body, _, patch = rest.partition("\x00")
+            self.text(f"commit {sha[:7]} msg", body, pii=False)
+            added: dict[str, list[tuple[int, str]]] = {}
+            for path, number, line in _added_lines(patch.splitlines()):
+                added.setdefault(path, []).append((number, line))
+            commits.append((sha, added))
+        shown = self.names({path for _, added in commits for path in added})
+        for sha, added in commits:
+            self._added(added, shown, f"commit {sha[:7]} ", pii=False)
+
+    def _added(
+        self,
+        added: dict[str, list[tuple[int, str]]],
+        shown: dict[str, str],
+        prefix: str,
+        pii: bool = True,
+    ) -> None:
         for path, lines in added.items():
             for number, line in lines:
                 probe = Scanner(self.denylist, self.allows, self.home)
-                probe.text(path, line, path, shown[path])
+                probe.text(path, line, path, prefix + shown[path], pii=pii)
                 for finding in probe.findings:
                     self.findings.add(
                         Finding(finding.location, number, finding.rule, finding.entry)
@@ -180,10 +225,10 @@ def _git(root: Path, *args: str) -> str:
 _HUNK_RE = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@")
 
 
-def _added_lines(diff: str) -> Iterator[tuple[str, int, str]]:
+def _added_lines(diff: Iterable[str]) -> Iterator[tuple[str, int, str]]:
     path: str | None = None
     number = 0
-    for line in diff.splitlines():
+    for line in diff:
         if line.startswith("+++ "):
             target = line[4:]
             path = None if target == "/dev/null" else target.removeprefix("b/")
