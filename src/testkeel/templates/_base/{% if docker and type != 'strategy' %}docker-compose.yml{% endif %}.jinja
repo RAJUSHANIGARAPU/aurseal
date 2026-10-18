@@ -1,0 +1,12 @@
+services:
+  tests:
+    build: .
+    env_file:
+      - path: .env
+        required: false
+{%- if type == 'web-ui' %}
+    # Chromium needs more shared memory than the container default.
+    ipc: host
+{%- endif %}
+    volumes:
+      - ./reports:/app/reports
