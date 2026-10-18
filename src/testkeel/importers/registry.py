@@ -14,6 +14,7 @@ from typing import IO
 from testkeel.importers._build import ReportError
 from testkeel.importers.junit import JUnitImporter
 from testkeel.importers.playwright import PlaywrightImporter
+from testkeel.importers.upload import UploadImporter
 from testkeel.model.v1 import TestRecord
 from testkeel.plugin_api.v1 import IMPORTERS, Importer, discover
 
@@ -22,6 +23,7 @@ MIN_CONFIDENCE = 0.5
 BUILTIN: dict[str, Importer] = {
     JUnitImporter.name: JUnitImporter(),
     PlaywrightImporter.name: PlaywrightImporter(),
+    UploadImporter.name: UploadImporter(),
 }
 
 

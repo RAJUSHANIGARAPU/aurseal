@@ -1,0 +1,60 @@
+# Importers
+
+An importer reads one report file into the result model (`testkeel.model.v1`): one
+record per test, configuration and parameter variant, with retries kept as attempts of
+that record. `testkeel report` picks the importer by sniffing the start of each file;
+`--format NAME` skips the sniffing.
+
+| Name | Reads | Produce it with |
+|---|---|---|
+| `junit` | JUnit XML (pytest, Maven Surefire and compatible reporters) | `pytest --junitxml=junit.xml`, Surefire's default reports |
+| `playwright` | Playwright's JSON reporter | `reporter: [["json", { outputFile: "results.json" }]]` |
+| `testkeel` | The canonical upload document (`RunUpload` JSON) | the [pytest plugin](#pytest-plugin) |
+
+## Status mapping
+
+Every importer maps its format onto the same statuses: `passed`, `failed` (an assertion
+or a timeout), `broken` (an error outside the assertion: setup, teardown, interrupted),
+`skipped`. A `reason` keeps what the status alone loses: `timeout`, `xfail`, `xpass`,
+`xpass_strict`, `expected_failure`.
+
+A record's status is its last attempt's status. A record that failed and then passed on a
+retry is `passed` with `flaky_in_run` set.
+
+## pytest plugin
+
+Installing `testkeel` installs a pytest plugin. It does nothing until you ask for the
+file:
+
+```bash
+pytest --testkeel-out=reports/testkeel.json
+testkeel report reports/testkeel.json
+```
+
+What it records, compared with `--junitxml`:
+
+- **Identity from the node id.** `tests/shop/test_cart.py::TestCart::test_total[EUR-10]`
+  is path `tests/shop/test_cart.py`, suite `TestCart`, name `test_total`, variant
+  `EUR-10`: the same identity the JUnit importer reconstructs, without the guesswork.
+- **Explicit case ids.** `@pytest.mark.case("SHOP-7")` (or `case_id`), or
+  `record_property("case_id", "SHOP-7")`.
+- **Retries.** With pytest-rerunfailures each rerun is an attempt of one record.
+- **xfail and xpass.** `xfail` is skipped with reason `xfail`; an `xpass` passes with
+  reason `xpass`; a strict `xpass` fails with reason `xpass_strict`.
+- **Setup and teardown errors** are `broken`, call failures `failed`.
+
+Under pytest-xdist the controller writes the file; workers write nothing. Turn the plugin
+off entirely with `-p no:testkeel`.
+
+## Writing an importer
+
+An importer is a class with a `name`, `sniff(head: bytes) -> float` (confidence that a
+file starting with `head` is its format) and `parse(stream) -> Iterator[TestRecord]`.
+Register it in your package's `pyproject.toml`:
+
+```toml
+[project.entry-points."testkeel.importers"]
+myformat = "my_package.importer:MyImporter"
+```
+
+A plugin with the name of a built-in replaces it.

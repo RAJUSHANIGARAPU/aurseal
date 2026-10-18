@@ -110,13 +110,13 @@ Exit codes:
 Usage: testkeel report [OPTIONS] FILES...
 ```
 
-`FILES`: one or more JUnit XML or Playwright JSON reports (required).
+`FILES`: one or more report files in any [importer](importers.md) format (required).
 
 | Option | Value | Default | Meaning |
 |---|---|---|---|
 | `--output`, `-o` | path | `site` | Directory to write. |
 | `--title` | text | `Test report` | Page title. |
-| `--format` | text | detected | Skip format detection (`junit`, `playwright`). |
+| `--format` | text | detected | Skip format detection; an [importer](importers.md) name. |
 
 Exit codes: 0 written, 2 usage error, 3 unreadable input or zero tests found.
 

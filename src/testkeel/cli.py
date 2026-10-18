@@ -139,13 +139,15 @@ def assignment_check(
 
 @app.command("report")
 def report_command(
-    files: Annotated[list[Path], typer.Argument(help="JUnit XML or Playwright JSON reports.")],
+    files: Annotated[
+        list[Path], typer.Argument(help="Report files (JUnit XML, Playwright JSON, ...).")
+    ],
     output: Annotated[Path, typer.Option("--output", "-o", help="Directory to write.")] = Path(
         "site"
     ),
     title: Annotated[str, typer.Option(help="Page title.")] = "Test report",
     format: Annotated[
-        str | None, typer.Option("--format", help="Skip format detection (junit, playwright).")
+        str | None, typer.Option("--format", help="Skip format detection (an importer name).")
     ] = None,
 ) -> None:
     """Render a self-contained HTML summary of one or more result files."""
