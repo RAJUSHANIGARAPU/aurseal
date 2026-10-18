@@ -1,0 +1,18 @@
+{
+  "subscription": {
+    "number": "SUB-004512",
+    "data_region": "EU-NORTH",
+    "version": 2
+  },
+  "change": {
+    "total": 4.0,
+    "period_start": "2026-06-11"
+  },
+  "price": {
+    "period_gross": 45.0
+  },
+  "customer": {
+    "name": "Mira Sample",
+    "number": "CUS-D1-41"
+  }
+}

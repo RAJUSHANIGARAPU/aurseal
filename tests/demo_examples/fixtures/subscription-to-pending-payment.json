@@ -1,0 +1,31 @@
+{
+  "name": "subscription-to-pending-payment",
+  "create": {
+    "method": "POST",
+    "path": "/subscriptions",
+    "body": {
+      "customer_id": "${customer_id}",
+      "partner_id": "${partner_id}",
+      "plan_id": "${plan_id}",
+      "start_date": "${TODAY_TOKEN}"
+    },
+    "capture": {"subscription_id": "id", "subscription_number": "number"}
+  },
+  "steps": [
+    {"name": "set customer", "method": "PATCH", "path": "/subscriptions/${subscription_id}",
+     "body": {"customer_id": "${customer_id}"}},
+    {"name": "set plan and term", "method": "PATCH", "path": "/subscriptions/${subscription_id}",
+     "body": {"plan_id": "${plan_id}", "start_date": "${TODAY_TOKEN}", "term_months": 12,
+              "frequency": "${frequency}"}},
+    {"name": "set payment method", "method": "PATCH",
+     "path": "/subscriptions/${subscription_id}",
+     "body": {"payment_method": {"type": "DIRECT_DEBIT", "account": "${debit_account}"}}},
+    {"name": "quote", "method": "POST", "path": "/quotes/calculate",
+     "body": {"plan_id": "${plan_id}"},
+     "capture": {"quoted_net": "net_amount", "quoted_tax_rate": "tax_rate"}},
+    {"name": "confirm quote", "method": "POST",
+     "path": "/subscriptions/${subscription_id}/actions/submit",
+     "body": {"net_amount": "${quoted_net}", "tax_rate": "${quoted_tax_rate}"},
+     "capture": {"status": "status"}}
+  ]
+}

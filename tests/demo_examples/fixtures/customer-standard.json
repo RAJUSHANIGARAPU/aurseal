@@ -1,0 +1,21 @@
+{
+  "name": "customer-standard",
+  "create": {
+    "method": "POST",
+    "path": "/customers",
+    "body": {
+      "type": "INDIVIDUAL",
+      "display_name": "Replay Member ${SEED_TAG}",
+      "email": "replay.member@example.test",
+      "billing_address": {
+        "line1": "4 Willow Yard",
+        "line2": "",
+        "postal_code": "ZT 2290",
+        "city": "Northcombe",
+        "country": "XA"
+      },
+      "payout_account": "${payout_account}"
+    },
+    "capture": {"id": "id", "number": "number", "name": "display_name", "status": "status"}
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "name": "subscription-to-active",
+  "create": {
+    "method": "POST",
+    "path": "/subscriptions",
+    "body": {
+      "customer_id": "${customer_id}",
+      "partner_id": "${partner_id}",
+      "plan_id": "${plan_id}",
+      "start_date": "${start_date}",
+      "frequency": "${frequency}"
+    },
+    "capture": {"subscription_id": "id", "subscription_number": "number"}
+  },
+  "steps": [
+    {"name": "quote", "method": "POST", "path": "/quotes/calculate",
+     "body": {"plan_id": "${plan_id}"}, "capture": {"quoted_net": "net_amount"}},
+    {"name": "submit", "method": "POST",
+     "path": "/subscriptions/${subscription_id}/actions/submit",
+     "body": {"net_amount": "${quoted_net}"}},
+    {"name": "confirm", "method": "POST",
+     "path": "/subscriptions/${subscription_id}/actions/confirm", "capture": {"status": "status"}}
+  ]
+}

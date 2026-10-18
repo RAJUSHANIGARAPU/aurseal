@@ -1,0 +1,33 @@
+{
+  "name": "customer-matrix",
+  "create": {
+    "method": "POST",
+    "path": "/customers",
+    "body": {
+      "type": "INDIVIDUAL",
+      "display_name": "${DISPLAY_NAME}",
+      "email": "${EMAIL}",
+      "billing_address": {
+        "line1": "17 Lantern Row",
+        "line2": "",
+        "postal_code": "${POSTAL_CODE}",
+        "city": "Easthollow",
+        "country": "${COUNTRY}"
+      },
+      "payout_account": "${ACCOUNT}"
+    },
+    "capture": {"customer_id": "id", "customer_name": "display_name"}
+  },
+  "steps": [
+    {"name": "verify", "method": "POST", "path": "/customers/${customer_id}/actions/verify",
+     "capture": {"customer_status": "status"}},
+    {"name": "subscribe", "method": "POST", "path": "/subscriptions",
+     "body": {
+       "customer_id": "${customer_id}",
+       "partner_id": "${partner_id}",
+       "plan_id": "${plan_id}",
+       "commission_percentage": "${SHARE}"
+     },
+     "capture": {"subscription_id": "id", "share": "commission_percentage"}}
+  ]
+}

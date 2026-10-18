@@ -1,0 +1,19 @@
+{
+  "invoice": {
+    "number": "200317",
+    "total": 117.0,
+    "net": 97.5,
+    "tax": 19.5,
+    "period_start": "2026-06-01",
+    "period_end": "2026-09-01",
+    "due_date": "2026-06-15"
+  },
+  "subscription": {
+    "number": "SUB-004512",
+    "po_reference": "PO 2026/118"
+  },
+  "customer": {
+    "name": "Mira Sample",
+    "number": "CUS-D1-41"
+  }
+}

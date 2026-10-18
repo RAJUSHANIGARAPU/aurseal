@@ -1,0 +1,18 @@
+{
+  "username_field": {
+    "type": "label",
+    "value": "^\\s*(email( address)?|e-mail|username|user name)\\s*\\*?\\s*$",
+    "regex": true
+  },
+  "password_field": {
+    "type": "label",
+    "value": "^\\s*password\\s*\\*?\\s*$",
+    "regex": true
+  },
+  "submit_button": {
+    "type": "role",
+    "role": "button",
+    "name": "^\\s*(continue|next|log ?in|sign ?in)\\s*$",
+    "regex": true
+  }
+}

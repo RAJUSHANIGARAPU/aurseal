@@ -1,0 +1,9 @@
+{
+  "name": "reseller",
+  "create": {
+    "method": "POST",
+    "path": "/partners",
+    "body": {"name": "Reseller ${SEED_TAG}", "reseller_terms_id": "${reseller_terms.id}"},
+    "capture": {"id": "id", "number": "number", "name": "name"}
+  }
+}

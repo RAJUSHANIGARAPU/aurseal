@@ -52,6 +52,7 @@ class TestSearch:
         expect(page).to_have_url(f"https://www.catawiki.com/en/s?q={keyword}", timeout=10_000)
 
     @pytest.mark.regression
+    @pytest.mark.negative
     def test_search_unrecognized_query(self, home, page, config):
         home.search("xyznonexistent99999catawiki")
 

@@ -1,0 +1,20 @@
+{
+  "subscription": {
+    "number": "SUB-004512",
+    "data_region": "EU-NORTH",
+    "workspace_type": "TRAINING",
+    "po_reference": "PO 2026/118",
+    "start_date": "2026-06-01",
+    "term_end": "2027-06-01"
+  },
+  "price": {
+    "period_gross": 117.0
+  },
+  "billing_contact": {
+    "name": "Theo Sample"
+  },
+  "customer": {
+    "name": "Mira Sample",
+    "number": "CUS-D1-41"
+  }
+}

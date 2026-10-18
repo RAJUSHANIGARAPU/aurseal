@@ -1,0 +1,24 @@
+{
+  "name": "subscription-backdated-renewable",
+  "create": {
+    "method": "POST",
+    "path": "/subscriptions",
+    "body": {
+      "customer_id": "${customer_id}",
+      "partner_id": "${partner_id}",
+      "plan_id": "${plan_id}",
+      "start_date": "${RUN_DAY_DATE_MINUS_365D}",
+      "frequency": "${frequency}"
+    },
+    "capture": {"subscription_id": "id", "subscription_number": "number"}
+  },
+  "steps": [
+    {"name": "submit", "method": "POST",
+     "path": "/subscriptions/${subscription_id}/actions/submit", "body": {}},
+    {"name": "confirm", "method": "POST",
+     "path": "/subscriptions/${subscription_id}/actions/confirm",
+     "capture": {"term_end": "term_end"}},
+    {"name": "bill every period before the renewal date", "method": "POST", "path": "/jobs/run",
+     "body": {"subscription_id": "${subscription_id}"}, "capture": {"booked": "booked"}}
+  ]
+}

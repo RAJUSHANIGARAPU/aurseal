@@ -9,7 +9,21 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from autonomous_ui.healer import UIHealer
+from autonomous_ui.locator_store import strip_heal_metadata
 from autonomous_ui.models import FailureAnalysis, FailureType
+
+
+@pytest.fixture(autouse=True)
+def _heal_files(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Heal events go to tmp, and the registry-write tests below opt in to autopersist.
+
+    The default (propose into a side file) is covered by the tests at the end of
+    this file, which remove HEAL_AUTOPERSIST again.
+    """
+    events = tmp_path / "healing-events.jsonl"
+    monkeypatch.setenv("HEAL_EVENTS_FILE", str(events))
+    monkeypatch.setenv("HEAL_AUTOPERSIST", "true")
+    return events
 
 
 def _analysis(
@@ -86,8 +100,10 @@ def test_locator_heal_patches_registry(tmp_path: Path, healer: UIHealer) -> None
 
     assert result.applied
     assert result.strategy == "locator_patch"
-    patched = json.loads(registry_file.read_text())
-    assert patched["search_input"] == {"type": "css", "value": "input[name='q']"}
+    patched = json.loads(registry_file.read_text())["search_input"]
+    assert strip_heal_metadata(patched) == {"type": "css", "value": "input[name='q']"}
+    assert patched["healed_from"] == {"type": "testid", "value": "search-field"}
+    assert patched["last_healed"]
 
 
 def test_locator_heal_refuses_repeated_patch_for_same_key(tmp_path: Path) -> None:
@@ -343,7 +359,8 @@ def test_well_shaped_new_locator_is_applied(tmp_path: Path, new_locator) -> None
         result = healer.heal(_analysis(failure_type=FailureType.LOCATOR))
 
     assert result.applied
-    assert json.loads(registry_file.read_text())["search_input"] == new_locator
+    healed = json.loads(registry_file.read_text())["search_input"]
+    assert strip_heal_metadata(healed) == new_locator
 
 
 def test_unchanged_locator_is_not_reported_as_a_fix(tmp_path: Path) -> None:
@@ -447,3 +464,126 @@ def test_empty_response_still_records_a_retry(tmp_path: Path) -> None:
 
     assert result.applied
     assert result.strategy == "wait_retry"
+
+
+def test_prompt_carries_the_shared_priority_order(tmp_path: Path) -> None:
+    from core.locator_strategy import priority_prompt
+
+    registry_file = _registry_file(tmp_path)
+    healer = _healer_returning("")
+    with (
+        patch("autonomous_ui.healer._LOCATOR_REGISTRY", registry_file),
+        patch("autonomous_ui.healer._HEALING_OVERRIDES", tmp_path / "overrides.json"),
+    ):
+        healer.heal(_analysis(failure_type=FailureType.LOCATOR))
+    prompt = healer._llm.complete.call_args.args[0]
+    assert priority_prompt() in prompt
+    assert "[data > testid > aria_label > label > role > placeholder > text > css]" in prompt
+
+
+@pytest.mark.parametrize(
+    "new_locator",
+    [
+        {"type": "data", "attribute": "data-key", "value": "search"},
+        {"type": "aria_label", "value": "Search"},
+        {"type": "label", "value": "Search"},
+    ],
+)
+def test_higher_ranked_shapes_are_accepted(tmp_path: Path, new_locator) -> None:
+    registry_file = _registry_file(tmp_path)
+    healer = _healer_returning(
+        {"locator_key": "search_input", "new_locator": new_locator, "reasoning": "x"}
+    )
+    with patch("autonomous_ui.healer._LOCATOR_REGISTRY", registry_file):
+        assert healer.heal(_analysis(failure_type=FailureType.LOCATOR)).applied
+
+
+# ------------------------------------------------------------------
+# Default: propose, don't auto-persist; every decision is logged
+# ------------------------------------------------------------------
+
+
+def _css_patch() -> dict:
+    return {
+        "locator_key": "search_input",
+        "new_locator": {"type": "css", "value": "input[name='q']"},
+        "reasoning": "testid gone",
+    }
+
+
+def test_default_heal_is_proposed_and_the_registry_is_untouched(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("HEAL_AUTOPERSIST")
+    registry_file = _registry_file(tmp_path)
+    before = registry_file.read_text()
+    healer = _healer_returning(_css_patch())
+    with patch("autonomous_ui.healer._LOCATOR_REGISTRY", registry_file):
+        result = healer.heal(_analysis(failure_type=FailureType.LOCATOR))
+
+    assert registry_file.read_text() == before
+    assert not result.applied  # nothing a rerun would pick up
+    assert result.strategy == "locator_patch"
+    pending = tmp_path / "wiki_locators.heals-pending.json"
+    assert result.patched_files == [pending]
+    proposal = json.loads(pending.read_text())["search_input"]
+    assert proposal["current"] == {"type": "testid", "value": "search-field"}
+    assert strip_heal_metadata(proposal["proposed"]) == _css_patch()["new_locator"]
+    assert proposal["reason"] == "testid gone"
+    assert "HEAL_AUTOPERSIST" in result.details
+
+
+def test_constructor_overrides_the_environment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    registry_file = _registry_file(tmp_path)
+    llm = MagicMock()
+    llm.complete.return_value = json.dumps(_css_patch())
+    healer = UIHealer(llm=llm, autopersist=False)  # env says true
+    with patch("autonomous_ui.healer._LOCATOR_REGISTRY", registry_file):
+        assert not healer.heal(_analysis(failure_type=FailureType.LOCATOR)).applied
+    assert json.loads(registry_file.read_text())["search_input"]["type"] == "testid"
+
+
+def test_a_healed_entry_echoed_back_is_still_a_no_op(tmp_path: Path) -> None:
+    registry_file = _registry_file(tmp_path)
+    healer = _healer_returning(_css_patch())
+    with patch("autonomous_ui.healer._LOCATOR_REGISTRY", registry_file):
+        assert healer.heal(_analysis(failure_type=FailureType.LOCATOR)).applied
+    again = _healer_returning(_css_patch())  # a new session, same suggestion
+    with patch("autonomous_ui.healer._LOCATOR_REGISTRY", registry_file):
+        result = again.heal(_analysis(failure_type=FailureType.LOCATOR))
+    assert not result.applied
+    assert "unchanged" in result.details
+
+
+def test_every_decision_is_logged(tmp_path: Path, _heal_files: Path) -> None:
+    registry_file = _registry_file(tmp_path)
+    healer = _healer_returning(_css_patch())
+    with patch("autonomous_ui.healer._LOCATOR_REGISTRY", registry_file):
+        healer.heal(_analysis(failure_type=FailureType.LOCATOR))
+        healer.heal(_analysis(failure_type=FailureType.LOCATOR))  # now a no-op
+        healer.heal(_analysis(failure_type=FailureType.LOCATOR, confidence="low"))
+
+    events = [json.loads(line) for line in _heal_files.read_text().splitlines()]
+    assert [(e["strategy"], e["applied"]) for e in events] == [
+        ("locator_patch", True),
+        ("none", False),
+        ("none", False),
+    ]
+    first = events[0]
+    assert first["locator_key"] == "search_input"
+    assert first["old_locator"] == {"type": "testid", "value": "search-field"}
+    assert first["new_locator"] == {"type": "css", "value": "input[name='q']"}
+    assert first["persisted"] is True
+    assert first["failure_type"] == "locator" and first["confidence"] == "high"
+    assert events[2]["locator_key"] == "" and events[2]["persisted"] is None
+
+
+def test_a_failing_event_log_never_fails_the_heal(tmp_path: Path) -> None:
+    log = MagicMock()
+    log.append.side_effect = RuntimeError("disk full")
+    llm = MagicMock()
+    llm.complete.return_value = ""
+    result = UIHealer(llm=llm, event_log=log).heal(_analysis(confidence="low"))
+    assert result.strategy == "none"

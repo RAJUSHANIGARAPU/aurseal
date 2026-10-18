@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Demo document payload",
+  "description": "Every path the six demo templates read, and nothing else.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "subscription": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "number": {
+          "type": "string"
+        },
+        "start_date": {
+          "type": "string"
+        },
+        "term_start": {
+          "type": "string"
+        },
+        "term_end": {
+          "type": "string"
+        },
+        "data_region": {
+          "type": "string"
+        },
+        "workspace_type": {
+          "type": "string"
+        },
+        "po_reference": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        }
+      }
+    },
+    "customer": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "partner": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "billing_contact": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "closure": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "reason": {
+          "type": "string"
+        }
+      }
+    },
+    "price": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "monthly_net": {
+          "type": "number"
+        },
+        "monthly_tax": {
+          "type": "number"
+        },
+        "monthly_gross": {
+          "type": "number"
+        },
+        "period_gross": {
+          "type": "number"
+        }
+      }
+    },
+    "fees": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "net": {
+          "type": "number"
+        }
+      }
+    },
+    "change": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "total": {
+          "type": "number"
+        },
+        "period_start": {
+          "type": "string"
+        }
+      }
+    },
+    "cancel": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "total": {
+          "type": "number"
+        },
+        "net": {
+          "type": "number"
+        },
+        "tax": {
+          "type": "number"
+        },
+        "period_start": {
+          "type": "string"
+        }
+      }
+    },
+    "invoice": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "number": {
+          "type": "string"
+        },
+        "total": {
+          "type": "number"
+        },
+        "net": {
+          "type": "number"
+        },
+        "tax": {
+          "type": "number"
+        },
+        "period_start": {
+          "type": "string"
+        },
+        "period_end": {
+          "type": "string"
+        },
+        "due_date": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}
