@@ -38,7 +38,8 @@ jobs:
       - name: Install the package and its tools
         run: |
           uv venv
-          uv pip install -e . ruff==0.15.2 mypy==2.4.0
+          # pytest: src/testkeel/pytest_plugin.py imports it, so the strict type check needs it
+          uv pip install -e . ruff==0.15.2 mypy==2.4.0 pytest==9.1.1
 
       - name: Lint
         run: |
