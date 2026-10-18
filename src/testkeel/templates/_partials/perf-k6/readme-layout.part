@@ -1,0 +1,11 @@
+k6/
+  scenarios/    smoke.js, load.js, stress.js: one profile per file
+  lib/          config, target guard, checks, test data, summary rendering
+  data/         paths.csv: what every profile requests
+  slo.json      the SLO budgets; thresholds.js turns them into k6 thresholds
+src/{{ package_name }}/
+  guard.py      refuses load against a non-local target (make load / stress)
+  slo.py        validates slo.json
+  settings.py   APP_* environment settings
+tests/
+  unit/         offline tests: SLO file, guard, settings

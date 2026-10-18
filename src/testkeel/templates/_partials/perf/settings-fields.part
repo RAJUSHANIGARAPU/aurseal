@@ -1,0 +1,4 @@
+    target_url: str = Field(
+        default="{{ target_url }}",
+        description="Base URL of the system under load",
+    )

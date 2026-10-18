@@ -53,6 +53,11 @@ CASES = {
     "a11y-both-no-ci": ("a11y", {"report": "both", "ci": "none"}),
     "strategy": ("strategy", {}),
     "strategy-no-ci": ("strategy", {"ci": "none"}),
+    "perf-k6": ("perf-k6", {}),
+    "perf-k6-allure-no-docker-no-ci": (
+        "perf-k6",
+        {"report": "allure", "docker": False, "ci": "none"},
+    ),
 }
 CODE_CASES = [name for name, (type_, _) in CASES.items() if type_ != "strategy"]
 BROWSER_TYPES = {"web-ui", "a11y"}
@@ -319,6 +324,48 @@ def test_a11y_ships_an_empty_baseline_and_both_fixtures(rendered):
     assert baseline["violations"] == []
     for name in ("before.html", "after.html"):
         assert (project / "tests" / "fixtures" / "static" / name).is_file(), name
+
+
+@pytest.mark.skipif(
+    not _importable("pydantic_settings"), reason="the perf projects' dependencies are not installed"
+)
+@pytest.mark.parametrize("name", [n for n in CODE_CASES if CASES[n][0] == "perf-k6"])
+def test_perf_offline_tests_pass_without_network(rendered, name):
+    result = _run(
+        [sys.executable, "-m", "pytest", "-m", "offline", "-p", "no:cacheprovider",
+         "-o", "addopts=-ra --strict-markers"],
+        rendered[name],
+    )  # fmt: skip
+    assert result.returncode == 0, result.stdout[-3000:] + result.stderr[-2000:]
+    assert re.search(r"\b\d{2,} passed\b", result.stdout), result.stdout[-1000:]
+
+
+@pytest.mark.parametrize("name", [n for n in CASES if CASES[n][0] == "perf-k6"])
+def test_k6_image_matches_the_version_ci_installs(rendered, name):
+    project = rendered[name]
+    sources = [
+        (path, pattern)
+        for path, pattern in (
+            (project / "Dockerfile", r"grafana/k6:([\d.]+)"),
+            (project / ".github/workflows/ci.yml", r'k6-version: "([\d.]+)"'),
+        )
+        if path.exists()
+    ]
+    pins = {pin for path, pattern in sources for pin in re.findall(pattern, path.read_text())}
+    assert len(pins) == (1 if sources else 0), pins
+
+
+@pytest.mark.parametrize("name", [n for n in CASES if CASES[n][0] == "perf-k6"])
+def test_load_profiles_are_guarded_and_ci_runs_only_the_smoke(rendered, name):
+    project = rendered[name]
+    makefile = (project / "Makefile").read_text(encoding="utf-8")
+    for profile in ("load", "stress"):
+        recipe = makefile.split(f"\n{profile}:", 1)[1].split("\n\n", 1)[0]
+        assert f"$(GUARD) {profile} " in recipe, f"make {profile} must run the target guard first"
+    workflow = project / ".github/workflows/ci.yml"
+    if workflow.exists():
+        scenarios = set(re.findall(r"k6/scenarios/(\w+)\.js", workflow.read_text(encoding="utf-8")))
+        assert scenarios == {"smoke"}
 
 
 # ------------------------------------------------------------------ the examples

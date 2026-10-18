@@ -22,6 +22,7 @@ type:
     - api-graphql
     - a11y
     - strategy
+    - perf-k6
 
 layer:
   type: str
@@ -64,7 +65,7 @@ target_url:
   type: str
   help: Web application under test
   default: "https://example.test"
-  when: "{{ type in ['web-ui', 'a11y'] }}"
+  when: "{{ type in ['web-ui', 'a11y', 'perf-k6'] }}"
   validator: >-
     {% if not (target_url | regex_search('^https?://[^\\s/]+')) %}an http(s) URL{% endif %}
 

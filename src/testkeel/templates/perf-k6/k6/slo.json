@@ -1,0 +1,16 @@
+{
+  "smoke": {
+    "p95_ms": 1000,
+    "error_rate": 0.01
+  },
+  "load": {
+    "p95_ms": 500,
+    "error_rate": 0.01
+  },
+  "stress": {
+    "p95_ms": 1500,
+    "error_rate": 0.01,
+    "abort_on_fail": true,
+    "delay_abort_eval": "10s"
+  }
+}

@@ -1,0 +1,5 @@
+# Target of every profile. `make` reads it from the environment or the command line
+# (`make load APP_TARGET_URL=http://localhost:3333`); docker compose reads it from here.
+APP_TARGET_URL={{ target_url }}
+# Load and stress refuse a non-local target. Set to 1 only with the host owner's consent.
+# ALLOW_REMOTE_LOAD=1
