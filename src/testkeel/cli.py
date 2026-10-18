@@ -3,6 +3,8 @@
 Exit codes. new-assignment: 0 created, 1 unexpected error, 2 usage error (also a planned
 type), 3 output dir not empty, 4 leak gate failed, 5 lock or self-check failed, 6 missing
 prerequisite, 130 interrupted. assignment check: 0 clean, 2 cannot run, 4 findings.
+assignment update: 0 updated, 1 unexpected error, 2 usage error, 3 conflicts left to
+resolve, 6 git missing or the template source cannot be fetched.
 report: 0 written, 2 usage, 3 unreadable input or zero tests found.
 """
 
@@ -17,7 +19,7 @@ from typing import Annotated
 import typer
 
 from testkeel import __version__
-from testkeel.assignment import scaffold
+from testkeel.assignment import scaffold, update
 from testkeel.assignment.types import TYPES
 from testkeel.importers import ReportError, registry
 from testkeel.model.v1 import RunUpload, TestRecord
@@ -134,6 +136,23 @@ def assignment_check(
     else:
         for line in result.lines:
             typer.echo(line)
+    raise typer.Exit(result.code)
+
+
+@assignment_app.command("update")
+def assignment_update(
+    path: Annotated[Path, typer.Argument(help="Project directory.")] = Path("."),
+    to: Annotated[
+        str | None, typer.Option(help="Release tag to update to. Default: this version's.")
+    ] = None,
+    source: Annotated[
+        str | None, typer.Option(help="Template repository. Default: the one recorded.")
+    ] = None,
+) -> None:
+    """Merge template changes from a newer release into an --updatable project."""
+    result = update.update(path, to=to, source=source)
+    for line in result.lines:
+        typer.echo(line, err=result.code not in (scaffold.OK, update.CONFLICT))
     raise typer.Exit(result.code)
 
 

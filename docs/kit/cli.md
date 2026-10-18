@@ -14,6 +14,7 @@ Usage: testkeel [OPTIONS] COMMAND [ARGS]...
 | `testkeel new-assignment` | Render a new assignment project, leak-gate it, then write it. |
 | `testkeel report` | Render a self-contained HTML summary of one or more result files. |
 | `testkeel assignment check` | Run the leak gate over an existing project. |
+| `testkeel assignment update` | Merge template changes from a newer release into an `--updatable` project. |
 
 Every command accepts `--help`.
 
@@ -86,10 +87,11 @@ What it does, in order, all inside a staging directory under `~/.cache/testkeel/
 By default a project carries no `.copier-answers.yml`: Copier would record where the
 templates were installed, a path on your machine. `--updatable` keeps the file and
 records `https://github.com/RAJUSHANIGARAPU/wiki_project` at the tag
-`testkeel-v<version>` instead, so the project says where it came from. `copier update`
-cannot use that source yet: the templates live under `src/testkeel/templates/` and are
-rendered in two passes (common skeleton, then the type), which `copier update` does not
-follow.
+`testkeel-v<version>` instead, so the project says where it came from, and
+[`testkeel assignment update`](#testkeel-assignment-update) can bring template changes
+from a later release into it. Run that command, not `copier update`: the templates are
+rendered in several passes (common skeleton, then the type), which `copier update` does
+not replay.
 
 Exit codes:
 
@@ -139,6 +141,52 @@ It runs the same rules as `new-assignment`, including the
 check, so name it with `--allow-host` or in `~/.config/testkeel/allow-hosts.txt`.
 
 Exit codes: 0 clean, 2 cannot run, 4 findings.
+
+## `testkeel assignment update`
+
+```text
+Usage: testkeel assignment update [OPTIONS] [PATH]
+```
+
+`PATH`: project directory, default `.`. The project must have been made with
+`--updatable` and must be a git repository with nothing uncommitted.
+
+| Option | Meaning |
+|---|---|
+| `--to` | Release tag to update to. Default: the installed version's tag, `testkeel-v<version>`. |
+| `--source` | Template repository (URL or path). Default: the `_src_path` recorded in `.copier-answers.yml`. |
+
+The usual flow: upgrade testkeel, then, in the project,
+
+```bash
+testkeel assignment update
+git diff            # review
+git add -A && git commit -m "chore: update the scaffold to testkeel-v0.2.0"
+```
+
+The command fetches the recorded tag and the target tag from the template repository,
+renders the project's type with its recorded answers at both, and applies the
+difference to the project file by file, like `copier update` would:
+
+- a file the template did not change between the two tags is left alone, however you
+  changed it;
+- a file you did not change takes the new version;
+- a file both you and the template changed is merged with `git merge-file`; where the
+  two edits touch the same lines, conflict markers (`<<<<<<< yours` ...
+  `>>>>>>> testkeel-v<new>`) are left in the file and the command lists it as `CONFLICT`;
+- a new template file is added; a file the template removed is deleted only if you never
+  changed it;
+- files the template never rendered (your tests, `uv.lock`, `.task/`) are not touched.
+
+`_commit` in `.copier-answers.yml` moves to the new tag. Nothing is committed: review
+with `git diff`, undo the whole update with `git checkout -- . && git clean -fd`. When
+`pyproject.toml` changed, run `uv lock` before you commit. Both renders use the installed
+testkeel's render passes over each tag's template files; no code from the fetched tags
+runs. Why it works this way: [templates](templates.md#updating-a-project).
+
+Exit codes: 0 updated (or already at the target), 1 unexpected error, 2 usage error (not
+`--updatable`, not a git repository, uncommitted changes), 3 updated with conflicts to
+resolve, 6 git missing, or the template repository or tag cannot be fetched.
 
 ## The leak gate on its own
 
