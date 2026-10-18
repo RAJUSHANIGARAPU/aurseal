@@ -1,0 +1,9 @@
+services:
+  k6:
+    build: .
+    environment:
+      # From the shell or .env; load and stress refuse a non-local target either way.
+      TARGET_URL: ${APP_TARGET_URL:-{{ target_url }}}
+      ALLOW_REMOTE_LOAD: ${ALLOW_REMOTE_LOAD:-}
+    volumes:
+      - ./reports:/app/reports

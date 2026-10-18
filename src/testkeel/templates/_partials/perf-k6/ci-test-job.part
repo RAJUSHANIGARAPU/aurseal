@@ -1,0 +1,35 @@
+  test:
+    needs: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          python-version: "{{ python_version }}"
+      - run: uv sync --locked
+      - name: Offline tests (SLO file, target guard, settings)
+        run: uv run pytest -m offline
+
+  smoke:
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: grafana/setup-k6-action@v1
+        with:
+          k6-version: "2.3.0"
+      # handleSummary writes into reports/, and k6 does not create directories.
+      - run: mkdir -p reports
+      - uses: grafana/run-k6-action@v1
+        env:
+          TARGET_URL: {{ target_url }}
+        with:
+          path: k6/scenarios/smoke.js
+      - uses: actions/upload-artifact@v7
+        if: {% raw %}${{ !cancelled() }}{% endraw %}
+        with:
+          name: reports
+          path: reports/
+          retention-days: 7
