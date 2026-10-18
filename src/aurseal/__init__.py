@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 # The one place the version is written: pyproject.toml reads it from here
-# ([tool.hatch.version]) and the release tag must be testkeel-v<this>.
+# ([tool.hatch.version]) and the release tag must be aurseal-v<this>.
 __version__ = "0.1.0"
 
 # The package was called testkeel up to 0.1.0. Its config directory

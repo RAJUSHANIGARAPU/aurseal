@@ -25,7 +25,7 @@ from aurseal.cli import app  # noqa: E402
 
 runner = CliRunner()
 V1 = scaffold.TEMPLATE_TAG
-V2 = "testkeel-v99.0.0"
+V2 = "aurseal-v99.0.0"
 GIT = ["git", "-c", "user.name=Test", "-c", "user.email=test@example.test",
        "-c", "commit.gpgsign=false", "-c", "init.defaultBranch=main"]  # fmt: skip
 
@@ -189,21 +189,73 @@ def test_an_unknown_tag_is_reported(env, source):
     project = generate(env)
     result = runner.invoke(
         app,
-        ["assignment", "update", str(project), "--to", "testkeel-v0.0.0", "--source",
+        ["assignment", "update", str(project), "--to", "aurseal-v0.0.0", "--source",
          str(source)],
         env=env,
     )  # fmt: skip
     assert result.exit_code == scaffold.PREREQUISITE
-    assert "cannot fetch tag testkeel-v0.0.0" in result.output
+    assert "cannot fetch tag aurseal-v0.0.0" in result.output
+
+
+# The package's name up to 0.1.0, spelled out here so the fallback is pinned to it.
+OLD_TAG = "testkeel-v0.1.0"
+OLD_TEMPLATES = "src/testkeel/templates"
+
+
+def test_a_release_under_the_previous_name_keeps_its_templates_path():
+    with pytest.warns(DeprecationWarning, match="previous package name"):
+        assert update.templates_path(OLD_TAG) == OLD_TEMPLATES
+    assert update.templates_path(V2) == update.TEMPLATES_PATH == "src/aurseal/templates"
+
+
+@pytest.fixture
+def renamed_source(tmp_path) -> Path:
+    """Tag OLD_TAG with the templates under the previous package directory, then V2 with
+    the template change under the current one, like the repository across the rename."""
+    repo = tmp_path / "renamed"
+    old = repo / OLD_TEMPLATES
+    shutil.copytree(templates.TEMPLATES_DIR, old, ignore=shutil.ignore_patterns("__pycache__"))
+    git(tmp_path, "init", "-q", str(repo))
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "templates")
+    git(repo, "tag", OLD_TAG)
+    target = repo / update.TEMPLATES_PATH
+    target.parent.mkdir(parents=True)
+    git(repo, "mv", OLD_TEMPLATES, update.TEMPLATES_PATH)
+    with (target / EDITORCONFIG).open("a", encoding="utf-8") as fh:
+        fh.write(APPENDED)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "rename and template change")
+    git(repo, "tag", V2)
+    bare = tmp_path / "renamed.git"
+    git(tmp_path, "clone", "-q", "--bare", str(repo), str(bare))
+    return bare
+
+
+def test_a_project_from_a_release_under_the_previous_name_updates(env, renamed_source):
+    project = generate(env)
+    answers = project / scaffold.ANSWERS_FILE
+    answers.write_text(
+        answers.read_text("utf-8").replace(f"_commit: {V1}", f"_commit: {OLD_TAG}"), "utf-8"
+    )
+    git(project, "commit", "-q", "-am", "made with the previous release")
+
+    with pytest.warns(DeprecationWarning, match="previous package name"):
+        result = run_update(env, project, renamed_source)
+
+    assert result.exit_code == update.OK, result.output
+    assert f"from {OLD_TAG} to {V2}" in result.output
+    assert (project / ".editorconfig").read_text("utf-8").endswith(APPENDED)
+    assert f"_commit: {V2}" in answers.read_text("utf-8")
 
 
 def test_answers_are_read_as_written(tmp_path):
     text = (
-        "# comment\n_commit: testkeel-v0.1.0\n_src_path: https://example.test/repo\n"
+        "# comment\n_commit: aurseal-v0.1.0\n_src_path: https://example.test/repo\n"
         'docker: true\nproject_name: "ACME: Shop"\npython_version: "3.12"\n'
     )
     assert update.read_answers(text) == {
-        "_commit": "testkeel-v0.1.0",
+        "_commit": "aurseal-v0.1.0",
         "_src_path": "https://example.test/repo",
         "docker": True,
         "project_name": "ACME: Shop",

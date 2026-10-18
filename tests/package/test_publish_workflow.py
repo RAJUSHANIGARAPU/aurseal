@@ -1,7 +1,7 @@
 """The publish workflow: which pushes fire it, what it can publish, and its checks run for real.
 
 Tag filters are evaluated the way GitHub evaluates them (``*`` matches anything but ``/``),
-so the claim "a testkeel-v tag fires publish.yml and nothing else, a plain v tag never
+so the claim "a aurseal-v tag fires publish.yml and nothing else, a plain v tag never
 fires it" is checked against every workflow in the repository, not assumed. The tag and
 branch checks are taken from the workflow file and executed with bash, so what is tested
 is what CI runs.
@@ -91,7 +91,7 @@ def _step(job: str, name: str) -> dict:
 
 def test_the_tag_filter_semantics_are_not_vacuous():
     assert fires_on_tag_push({"on": {"push": {"tags": ["v*"]}}}, "v1.0.0")
-    assert not fires_on_tag_push({"on": {"push": {"tags": ["v*"]}}}, "testkeel-v1.0.0")
+    assert not fires_on_tag_push({"on": {"push": {"tags": ["v*"]}}}, "aurseal-v1.0.0")
     assert not fires_on_tag_push({"on": {"push": {"branches": ["main"]}}}, "v1.0.0")
     assert fires_on_tag_push({"on": "push"}, "v1.0.0")
     assert fires_on_tag_push({"on": {"push": None}}, "v1.0.0")
@@ -99,10 +99,10 @@ def test_the_tag_filter_semantics_are_not_vacuous():
     assert not _glob("v*").match("v1/x")
 
 
-def test_publish_fires_on_testkeel_tags_and_a_manual_run_only():
+def test_publish_fires_on_aurseal_tags_and_a_manual_run_only():
     triggers = _triggers(_load(PUBLISH))
     assert set(triggers) == {"push", "workflow_dispatch"}
-    assert triggers["push"] == {"tags": ["testkeel-v*"]}
+    assert triggers["push"] == {"tags": ["aurseal-v*"]}
 
 
 def test_the_release_tag_of_this_version_fires_publish_and_no_other_workflow():
@@ -141,7 +141,7 @@ def test_pypi_is_reached_from_a_tag_push_only_and_through_its_environment():
     assert pypi["needs"] == "build"
     assert pypi["environment"]["name"] == "pypi"
     assert "github.event_name == 'push'" in pypi["if"]
-    assert "refs/tags/testkeel-v" in pypi["if"]
+    assert "refs/tags/aurseal-v" in pypi["if"]
     publish = pypi["steps"][-1]
     assert publish["uses"].startswith("pypa/gh-action-pypi-publish@")
     assert "repository-url" not in (publish.get("with") or {})
@@ -208,7 +208,7 @@ def _run(script: str, cwd: Path, **env: str) -> subprocess.CompletedProcess[str]
     [
         (TEMPLATE_TAG, True),
         (f"v{__version__}", False),
-        ("testkeel-v99.0.0", False),
+        ("aurseal-v99.0.0", False),
         (f"{TEMPLATE_TAG}.post1", False),
     ],
 )

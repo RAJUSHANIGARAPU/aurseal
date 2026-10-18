@@ -14,8 +14,8 @@ from aurseal.assignment.scaffold import TEMPLATE_TAG
 from aurseal.cli import app
 
 ROOT = Path(__file__).resolve().parents[2]
-# A release tag: testkeel-v + a PEP 440 public version without epoch or local part.
-TAG_RE = re.compile(r"^testkeel-v(\d+\.\d+\.\d+(?:(?:a|b|rc)\d+)?(?:\.post\d+)?(?:\.dev\d+)?)$")
+# A release tag: aurseal-v + a PEP 440 public version without epoch or local part.
+TAG_RE = re.compile(r"^aurseal-v(\d+\.\d+\.\d+(?:(?:a|b|rc)\d+)?(?:\.post\d+)?(?:\.dev\d+)?)$")
 
 
 def _pyproject() -> dict:
@@ -42,7 +42,7 @@ def test_the_version_flag_and_command_print_the_same_version():
     assert flag.output.strip() == command.output.strip() == aurseal.__version__
 
 
-def test_the_release_tag_is_testkeel_v_plus_the_version():
+def test_the_release_tag_is_aurseal_v_plus_the_version():
     match = TAG_RE.match(TEMPLATE_TAG)
     assert match, TEMPLATE_TAG
     assert match.group(1) == aurseal.__version__
@@ -50,5 +50,5 @@ def test_the_release_tag_is_testkeel_v_plus_the_version():
 
 def test_the_tag_pattern_is_not_vacuous():
     assert not TAG_RE.match(f"v{aurseal.__version__}")
-    assert not TAG_RE.match("testkeel-v1.2")
-    assert TAG_RE.match("testkeel-v1.2.0rc1")
+    assert not TAG_RE.match("aurseal-v1.2")
+    assert TAG_RE.match("aurseal-v1.2.0rc1")

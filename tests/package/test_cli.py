@@ -520,7 +520,7 @@ def test_updatable_records_the_public_source_at_the_release_tag(env, tmp_path, m
     text = (tmp_path / "booking-api" / ".copier-answers.yml").read_text("utf-8")
     answers = yaml.safe_load(text)
     assert answers["_src_path"] == PUBLIC_SOURCE == "https://github.com/RAJUSHANIGARAPU/aurseal"
-    assert answers["_commit"] == f"testkeel-v{__version__}"
+    assert answers["_commit"] == f"aurseal-v{__version__}"
     assert answers["type"] == "api-rest"
     assert answers["project_slug"] == "booking-api"
     assert answers["updatable"] is True and answers["docker"] is True

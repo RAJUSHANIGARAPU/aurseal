@@ -142,7 +142,7 @@ def test_the_answers_file_is_allowed_for_an_updatable_project(tmp_path, home):
     files = {".copier-answers.yml": "_src_path: /somewhere/else\n"}
     assert _gate(tmp_path, home, files, ProjectRules(updatable=True)).code == CLEAN
     assert _gate(tmp_path, home, files, ProjectRules()).code == FINDINGS
-    public = {".copier-answers.yml": f"_commit: testkeel-v0.1.0\n_src_path: {PUBLIC_SOURCE}\n"}
+    public = {".copier-answers.yml": f"_commit: aurseal-v0.1.0\n_src_path: {PUBLIC_SOURCE}\n"}
     assert _gate(tmp_path, home, public, ProjectRules()).code == CLEAN
     before_rename = {
         ".copier-answers.yml": "_commit: testkeel-v0.1.0\n"

@@ -39,7 +39,7 @@ OK, UNEXPECTED, USAGE, NOT_EMPTY, LEAK, SELF_CHECK, PREREQUISITE, INTERRUPTED = 
 )  # fmt: skip
 ANSWERS_FILE = ".copier-answers.yml"
 #: The release tag ``assignment update`` fetches from :data:`PUBLIC_SOURCE`.
-TEMPLATE_TAG = f"testkeel-v{__version__}"
+TEMPLATE_TAG = f"aurseal-v{__version__}"
 _URL_RE = re.compile(r"^https?://[^\s/]+[^\s]*$")
 #: The only index a generated lock file may name; user-level index settings are ignored.
 PYPI_SIMPLE = "https://pypi.org/simple"

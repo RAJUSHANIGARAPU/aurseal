@@ -1,12 +1,12 @@
 name: Publish
 
 # Builds the aurseal package and publishes it with PyPI trusted publishing: no token is
-# stored anywhere. A push of a testkeel-v<version> tag publishes to PyPI; a manual run
+# stored anywhere. A push of a aurseal-v<version> tag publishes to PyPI; a manual run
 # publishes the same build to TestPyPI and never to PyPI. Plain v* tags belong to
 # release.yml and do not match here. Why: docs/ci-decisions.md#package
 on:
   push:
-    tags: ["testkeel-v*"]
+    tags: ["aurseal-v*"]
   workflow_dispatch:
 
 # Never cancel a publish in progress: a cancelled upload can leave a partial release.
@@ -58,7 +58,7 @@ jobs:
           match = re.search(r'^__version__ = "([^"]+)"$', text, re.MULTILINE)
           if not match:
               sys.exit("no __version__ literal in src/aurseal/__init__.py")
-          tag, expected = os.environ["TAG"], f"testkeel-v{match.group(1)}"
+          tag, expected = os.environ["TAG"], f"aurseal-v{match.group(1)}"
           print(f"tag {tag}, package version {match.group(1)}")
           if tag != expected:
               sys.exit(f"tag {tag} does not name the package version: expected {expected}")
@@ -94,7 +94,7 @@ jobs:
   pypi:
     name: Publish to PyPI
     needs: build
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/testkeel-v')
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/aurseal-v')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment:
