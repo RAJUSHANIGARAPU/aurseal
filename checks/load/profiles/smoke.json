@@ -1,0 +1,10 @@
+{
+  "name": "smoke",
+  "stages": [["5s", 5], ["10s", 5], ["5s", 0]],
+  "thresholds": [
+    {"metric": "http_req_duration", "expr": "p(95)<500"},
+    {"metric": "http_req_failed", "expr": "rate<0.01"},
+    {"metric": "checks", "expr": "rate>0.99"}
+  ],
+  "think_time_s": 0.1
+}

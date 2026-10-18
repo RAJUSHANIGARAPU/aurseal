@@ -1,0 +1,13 @@
+# Which tracker owns which defect-id prefix (the single authority; a requirement prefix
+# such as REQ is refused). ${VAR} expands from the environment.
+trackers:
+  file:
+    type: file
+    path: defects/defects.yaml
+    prefixes: [BUG]
+  github:
+    type: github
+    repo: ${GITHUB_REPOSITORY}
+    prefixes: [GH]
+    labels: [bug]
+    severity_label_prefix: "severity:"

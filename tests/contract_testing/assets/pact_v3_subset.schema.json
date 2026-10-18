@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Pact v3 subset (consumer, provider, interactions, request/response, body matching rules)",
+  "type": "object",
+  "required": ["consumer", "provider", "interactions", "metadata"],
+  "properties": {
+    "consumer": {"type": "object", "required": ["name"], "properties": {"name": {"type": "string"}}},
+    "provider": {"type": "object", "required": ["name"], "properties": {"name": {"type": "string"}}},
+    "interactions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["description", "request", "response"],
+        "properties": {
+          "description": {"type": "string"},
+          "providerStates": {
+            "type": "array",
+            "items": {"type": "object", "required": ["name"], "properties": {"name": {"type": "string"}}}
+          },
+          "request": {
+            "type": "object",
+            "required": ["method", "path"],
+            "properties": {
+              "method": {"type": "string"},
+              "path": {"type": "string"},
+              "query": {"type": "object", "additionalProperties": {"type": "array", "items": {"type": "string"}}},
+              "headers": {"type": "object"},
+              "matchingRules": {"$ref": "#/$defs/rules"}
+            }
+          },
+          "response": {
+            "type": "object",
+            "required": ["status"],
+            "properties": {
+              "status": {"type": "integer", "minimum": 100, "maximum": 599},
+              "headers": {"type": "object"},
+              "matchingRules": {"$ref": "#/$defs/rules"}
+            }
+          }
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "required": ["pactSpecification"],
+      "properties": {
+        "pactSpecification": {
+          "type": "object",
+          "required": ["version"],
+          "properties": {"version": {"const": "3.0.0"}}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "rules": {
+      "type": "object",
+      "properties": {
+        "body": {
+          "type": "object",
+          "propertyNames": {"pattern": "^\\$"},
+          "additionalProperties": {
+            "type": "object",
+            "required": ["matchers"],
+            "properties": {
+              "combine": {"enum": ["AND", "OR"]},
+              "matchers": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "required": ["match"],
+                  "properties": {
+                    "match": {"enum": ["type", "regex", "equality", "include", "integer", "decimal", "number"]},
+                    "min": {"type": "integer", "minimum": 0}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

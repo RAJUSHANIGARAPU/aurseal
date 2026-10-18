@@ -1,0 +1,70 @@
+# Mutation testing scope and thresholds (python -m checks.mutation).
+# The scope is deliberately small: the code whose correctness is the framework's credibility
+# (verdicts, the run gate, the contract differ, the check engines' judges). Thresholds start at
+# the first measured score minus a small margin and are ratcheted up, never down to make a run
+# pass. Scores are only comparable within the same scope and mutmut version.
+#
+# First measured scores (mutmut 3.8.0, 2026-10-17; killed / survived / no tests):
+#   checks           56.50 %  (643 / 468 / 27)   -> threshold 0.53
+#   verification     60.21 %  (1592 / 709 / 343) -> threshold 0.57
+#   gate             71.80 %  (2330 / 915 / 0)   -> threshold 0.68
+#   contract_differ  75.54 %  (105 / 34 / 0)     -> threshold 0.72
+
+[tool.wiki_checks.mutation]
+max_children = 4
+timeout_s = 3600
+# Tests read repository files (schemas, workflow, manifests): copy everything but the mutated
+# sources next to the mutants.
+copy_repository = true
+
+[tool.wiki_checks.mutation.packages.checks]
+source_paths = ["checks"]
+only_mutate = [
+  "checks/_outcome.py",
+  "checks/load/k6.py",
+  "checks/a11y/judge.py",
+  "checks/a11y/policy.py",
+  "checks/visual/compare.py",
+  "checks/security/allowlist.py",
+  "checks/mutation/judge.py",
+]
+tests = ["tests/checks"]
+threshold = 0.53
+
+[tool.wiki_checks.mutation.packages.verification]
+source_paths = ["verification"]
+tests = ["tests/verification"]
+# These start a fresh Python process (pytest in a subprocess), which cannot load mutmut's
+# mutated modules; they still run in the offline suite.
+deselect = [
+  "tests/verification/test_known_defect.py::test_open_defects_invert_and_unexpected_pass_fails_loudly",
+  "tests/verification/test_known_defect.py::test_closed_defect_runs_as_an_ordinary_test",
+  "tests/verification/test_known_defect.py::test_marker_without_defect_id_is_a_usage_error",
+  "tests/verification/test_known_defect.py::test_match_turns_an_undocumented_failure_red_and_records_verdicts",
+  "tests/verification/test_known_defect.py::test_closed_defects_record_closed_verdicts",
+  "tests/verification/test_known_defect.py::test_loose_match_is_a_usage_error",
+  "tests/verification/test_known_defect.py::test_failing_fixture_is_not_exercised",
+  "tests/verification/test_verdicts.py::test_parallel_writers_never_interleave_lines",
+  "tests/verification/test_status_report.py::test_nothing_to_report_writes_nothing",
+  "tests/verification/test_status_report.py::test_plugin_records_once_and_reports_once",
+  "tests/verification/test_status_report.py::test_run_id_scopes_the_report_to_this_run",
+  "tests/verification/test_status_report.py::test_offset_scopes_the_report_without_a_run_id",
+]
+threshold = 0.57
+
+[tool.wiki_checks.mutation.packages.gate]
+source_paths = ["gate"]
+tests = ["tests/gate"]
+deselect = [
+  "tests/gate/test_pytest_plugin.py::test_xdist_workers_are_tallied_on_the_controller",
+  "tests/gate/test_pytest_plugin.py::test_selected_but_never_reported_counts_as_silence",
+  "tests/gate/test_pytest_plugin.py::test_plugin_abstains_every_later_test_after_a_trip",
+  "tests/gate/test_workflow_lint.py::test_cli_runs_as_a_module",
+]
+threshold = 0.68
+
+[tool.wiki_checks.mutation.packages.contract_differ]
+source_paths = ["contract_testing"]
+only_mutate = ["contract_testing/differ.py"]
+tests = ["tests/contract_testing"]
+threshold = 0.72

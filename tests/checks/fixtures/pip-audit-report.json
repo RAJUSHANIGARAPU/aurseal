@@ -1,0 +1,38 @@
+{
+ "dependencies": [
+  {
+   "name": "idna",
+   "version": "3.11",
+   "vulns": [
+    {
+     "id": "PYSEC-2026-215",
+     "fix_versions": [
+      "3.15"
+     ],
+     "aliases": [
+      "GHSA-65pc-fj4g-8rjx",
+      "CVE-2026-45409"
+     ],
+     "description": "This is the same issue as CVE-2024-3651, however the original remediation in 2024 was not a complete fix. Payloads such "
+    },
+    {
+     "id": "PYSEC-2026-215",
+     "fix_versions": [
+      "3.15"
+     ],
+     "aliases": [
+      "GHSA-65pc-fj4g-8rjx",
+      "CVE-2026-45409"
+     ],
+     "description": "Internationalized Domain Names in Applications (IDNA) for Python provides support for Internationalized Domain Names in "
+    }
+   ]
+  },
+  {
+   "name": "allure-pytest",
+   "version": "2.15.3",
+   "vulns": []
+  }
+ ],
+ "fixes": []
+}

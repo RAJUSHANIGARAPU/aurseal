@@ -14,7 +14,7 @@ Validation modes:
 
 Storage backends:
   local     — filesystem under contracts/ directory (default)
-  (remote/broker planned for future)
+  (no broker: files, plus the contract gate in contract_testing.gate)
 """
 
 from __future__ import annotations

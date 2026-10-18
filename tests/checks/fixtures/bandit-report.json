@@ -1,0 +1,47 @@
+{
+ "errors": [],
+ "generated_at": "2026-10-16T21:55:51Z",
+ "metrics": {},
+ "results": [
+  {
+   "code": "83             return\n84         digest = hashlib.sha1(str(path.resolve()).encode()).hexdigest()[:16]\n85         lock_file = Path(tempfile.gettempdir()) / f\"locator-store-{digest}.lock\"\n",
+   "col_offset": 17,
+   "end_col_offset": 59,
+   "filename": "./autonomous_ui/locator_store.py",
+   "issue_confidence": "HIGH",
+   "issue_cwe": {
+    "id": 327,
+    "link": "https://cwe.mitre.org/data/definitions/327.html"
+   },
+   "issue_severity": "HIGH",
+   "issue_text": "Use of weak SHA1 hash for security. Consider usedforsecurity=False",
+   "line_number": 84,
+   "line_range": [
+    84
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b324_hashlib.html",
+   "test_id": "B324",
+   "test_name": "hashlib"
+  },
+  {
+   "code": "83             for table in (*TABLES, \"blobs\"):\n84                 self._conn.execute(f\"DELETE FROM {table}\")\n85             self._conn.execute(\"DELETE FROM sqlite_sequence\")\n",
+   "col_offset": 37,
+   "end_col_offset": 49,
+   "filename": "./demo_sut/store.py",
+   "issue_confidence": "MEDIUM",
+   "issue_cwe": {
+    "id": 89,
+    "link": "https://cwe.mitre.org/data/definitions/89.html"
+   },
+   "issue_severity": "MEDIUM",
+   "issue_text": "Possible SQL injection vector through string-based query construction.",
+   "line_number": 84,
+   "line_range": [
+    84
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b608_hardcoded_sql_expressions.html",
+   "test_id": "B608",
+   "test_name": "hardcoded_sql_expressions"
+  }
+ ]
+}
