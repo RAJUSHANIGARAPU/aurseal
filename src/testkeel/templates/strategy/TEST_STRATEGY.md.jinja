@@ -1,0 +1,43 @@
+# Test strategy: {{ project_name }}
+
+Organisation or programme level, and short: how testing works everywhere. The test plan
+for a single product or release ([TEST_PLAN.md](TEST_PLAN.md)) applies it. Replace every
+_(prompt)_ with your own words.
+
+## Quality goals
+
+_(the two or three outcomes quality must protect, e.g. "no lost orders", "checkout under
+two seconds")_
+
+## Principles
+
+- _(e.g. risk decides depth; every test owns its data; a red build stops the line)_
+
+## Test levels and ownership
+
+| Level | Owned by | Runs when | Blocks |
+|---|---|---|---|
+| Unit | _(developers)_ | every commit | merge |
+| Contract / API | | every commit | merge |
+| UI / end-to-end | | _(nightly, pre-release)_ | release |
+
+## Standard tooling
+
+_(one tool per job, and why: test runner, UI driver, API client, reporting)_
+
+## Environments and test data
+
+_(which environments exist, and the rules for data in them: synthetic only, masked
+production data, reset cadence)_
+
+## Gates and metrics
+
+| Gate | Criterion | Metric that informs it |
+|---|---|---|
+| Merge | _(unit and API suites green)_ | _(gate duration)_ |
+| Release | _(no open P1 defects; all P1 risks covered)_ | _(risk coverage, escaped defects)_ |
+
+## Reporting
+
+_(who gets a test status report, how often, and what is in it; the completion report at
+the end of a release follows the 29119-3 test completion report)_

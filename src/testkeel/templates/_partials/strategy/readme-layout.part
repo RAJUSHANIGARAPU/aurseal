@@ -1,0 +1,3 @@
+TEST_STRATEGY.md    organisation or programme level, short
+TEST_PLAN.md        this product: the 29119-3 test plan, strategy inside it
+.pymarkdown.json    markdown lint rules
