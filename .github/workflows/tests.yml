@@ -141,8 +141,12 @@ jobs:
           python-version: "3.11"
           cache: "pip"
 
+      # The package is installed so tests/package is collected here, where the CI-selection
+      # gate can see it. Why: docs/ci-decisions.md#package
       - name: Install Dependencies
-        run: pip install -r requirements.txt
+        run: |
+          pip install -r requirements.txt
+          pip install -e .
 
       - name: Run Linter
         run: ruff check .

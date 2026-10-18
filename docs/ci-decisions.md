@@ -154,3 +154,18 @@ only when the webhook secret is set; delivery failure is a warning.
 
 **Change safely.** `NOTIFY_ALL_BRANCHES=true` widens it; the webhook URL never appears in a
 log.
+
+## Package
+
+**Rule.** The installable package (`src/testkeel`) is installed in the offline job with
+`pip install -e .`, and its tests (`tests/package/`) run in the offline suite, where the
+CI-selection gate sees them. `package.yml` adds only what that job cannot: `mypy --strict`
+on Python 3.12 and a build whose wheel must hold nothing but `testkeel/`.
+
+**Prevents.** Package tests that no gate audits; a wheel or sdist that ships the framework,
+the demo system or local tooling config.
+
+**Change safely.** Keep `tests/package/` collectable only when the package is installed (its
+conftest skips collection otherwise). Never put `src` on the pytest path: the tests must
+import the installed package. Package release tags are `testkeel-v*`, because plain `v*`
+fires `release.yml`.
