@@ -1,0 +1,12 @@
+    checks._outcome.xǁCheckOutcomeǁok__mutmut_1: survived
+    checks._outcome.xǁCheckOutcomeǁok__mutmut_2: killed
+    checks._outcome.xǁCheckOutcomeǁok__mutmut_3: killed
+    checks._outcome.xǁCheckOutcomeǁok__mutmut_4: survived
+    checks._outcome.xǁCheckOutcomeǁok__mutmut_5: killed
+    checks._outcome.xǁCheckOutcomeǁok__mutmut_6: killed
+    checks._outcome.xǁCheckOutcomeǁok__mutmut_7: killed
+    checks._outcome.xǁCheckOutcomeǁok__mutmut_8: killed
+    checks._outcome.xǁCheckOutcomeǁok__mutmut_9: survived
+    checks._outcome.xǁCheckOutcomeǁbreached__mutmut_1: survived
+    checks._outcome.x_exit_code__mutmut_6: killed
+    checks._outcome.x_exit_code__mutmut_7: killed

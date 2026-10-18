@@ -1,0 +1,17 @@
+[
+ {
+  "RuleID": "generic-api-key",
+  "Description": "Detected a Generic API Key, potentially exposing access to various services and sensitive operations.",
+  "StartLine": 20,
+  "EndLine": 20,
+  "StartColumn": 2,
+  "EndColumn": 25,
+  "Match": "TOKEN = \"REDACTED\"",
+  "Secret": "REDACTED",
+  "File": "tests/tools/test_ci_reader.py",
+  "Entropy": 3.5216405,
+  "Fingerprint": "0123456789abcdef0123456789abcdef01234567:tests/tools/test_ci_reader.py:generic-api-key:20",
+  "Tags": [],
+  "Commit": "0123456789abcdef0123456789abcdef01234567"
+ }
+]

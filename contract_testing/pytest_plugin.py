@@ -14,10 +14,22 @@ Behaviour per mode:
   provider:
     - Installs HTTP capture patch at session start
     - Validates each response against latest stored contract
-    - Reports failures without stopping the test (unless fail_on_breaking=True)
 
   hybrid:
     - Does both: generate + validate in the same session
+
+The gate (``fail_on_breaking``, default true, ``CONTRACT_FAIL_ON_BREAKING``):
+
+  - A breaking diff against the stored contract, or a provider response that does
+    not match it, sets the session exit status to 1, prints what broke, and is
+    recorded as a ``contract`` verdict. The breaking contract is NOT saved, so the
+    next run is red again until the change is accepted deliberately (rerun with
+    ``CONTRACT_FAIL_ON_BREAKING=false``, which saves it as a new major version).
+  - With the gate off, the same changes are reported and recorded; exit status is
+    left alone.
+  - A run whose contract equals the stored one saves nothing (no version bump).
+  - Provider/hybrid mode with no captured interaction is "no contract evidence":
+    reported and recorded as such, never as compatible.
 
 Zero friction — no test markers or fixtures required.
 """
@@ -46,6 +58,9 @@ class ContractPlugin:
         self._store = None
         self._generator = None
         self._validator_contract = None
+        self._breaking: list[str] = []
+        self._provider_failures: list[str] = []
+        self._interactions_seen = 0
 
     @classmethod
     def from_config(cls, config: ContractConfig) -> ContractPlugin:
@@ -102,6 +117,11 @@ class ContractPlugin:
                 self._config.provider_name,
                 self._validation_results,
             )
+            self._provider_failures = [
+                f"{r.interaction_key}: {'; '.join(r.errors)}"
+                for r in self._validation_results
+                if not r.passed
+            ]
 
         summary = reporter.generate_session_summary(
             self._config.consumer_name,
@@ -110,6 +130,45 @@ class ContractPlugin:
             self._validation_results,
         )
         print(f"\n{summary}")
+        self._gate(session)
+
+    # ------------------------------------------------------------------
+    # The gate
+    # ------------------------------------------------------------------
+
+    def _gate(self, session) -> None:
+        from verification.verdicts import ContractVerdict, Kind, record_verdict
+
+        problems = [*self._breaking, *self._provider_failures]
+        no_evidence = self._config.mode in ("provider", "hybrid") and not self._interactions_seen
+        if problems:
+            verdict = (
+                ContractVerdict.BREAKING if self._breaking else ContractVerdict.PROVIDER_MISMATCH
+            )
+        elif no_evidence:
+            verdict = ContractVerdict.NO_EVIDENCE
+        else:
+            verdict = ContractVerdict.COMPATIBLE
+        subject = f"{self._config.consumer_name}->{self._config.provider_name}"
+        record_verdict(
+            Kind.CONTRACT,
+            verdict,
+            subject=subject,
+            detail="; ".join(problems[:5]) or ("no interactions captured" if no_evidence else ""),
+            nodeid=f"contract:{subject}",
+        )
+        if no_evidence and not problems:
+            print("[contract] no contract evidence: no interaction was captured")
+        if not problems:
+            return
+        print(f"[contract] {len(problems)} contract problem(s):")
+        for problem in problems:
+            print(f"  - {problem}")
+        if self._config.fail_on_breaking:
+            import pytest
+
+            session.exitstatus = pytest.ExitCode.TESTS_FAILED
+            print("[contract] failing the run (CONTRACT_FAIL_ON_BREAKING=true)")
 
     # ------------------------------------------------------------------
     # Per-test hooks
@@ -128,6 +187,7 @@ class ContractPlugin:
         from contract_testing import capture
 
         interactions = capture.deactivate()
+        self._interactions_seen += len(interactions)
         self._retain(interactions)
 
         if self._config.mode in ("provider", "hybrid") and self._validator_contract:
@@ -171,17 +231,28 @@ class ContractPlugin:
         if existing:
             differ = ContractDiffer()
             diff = differ.diff(existing, new_contract)
+            if diff.change_type.value == "none":
+                # Same contract: saving would only bump the patch version.
+                logger.info("[contract] contract unchanged (v%s) — nothing saved", existing.version)
+                return
             new_contract.version = diff.next_version(existing.version)
-            if diff.change_type.value != "none" or not self._store.exists(
-                self._config.consumer_name, self._config.provider_name
-            ):
-                reporter.write_diff_report(
-                    self._config.consumer_name,
-                    self._config.provider_name,
-                    existing.version,
-                    new_contract.version,
-                    diff,
-                )
+            reporter.write_diff_report(
+                self._config.consumer_name,
+                self._config.provider_name,
+                existing.version,
+                new_contract.version,
+                diff,
+            )
+            if diff.has_breaking:
+                self._breaking.extend(diff.breaking)
+                if self._config.fail_on_breaking:
+                    logger.warning(
+                        "[contract] breaking change — v%s not saved; the stored v%s stays the "
+                        "baseline",
+                        new_contract.version,
+                        existing.version,
+                    )
+                    return
         self._store.save(new_contract)
         self._contracts_saved += 1
 
