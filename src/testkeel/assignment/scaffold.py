@@ -11,6 +11,7 @@ prerequisite, 130 interrupted.
 
 from __future__ import annotations
 
+import importlib
 import os
 import re
 import shutil
@@ -29,7 +30,6 @@ from testkeel.assignment.types import AVAILABLE, BY_NAME
 from testkeel.leakgate.scan import Finding
 
 OK, UNEXPECTED, USAGE, NOT_EMPTY, LEAK, PREREQUISITE, INTERRUPTED = 0, 1, 2, 3, 4, 6, 130
-TEMPLATES_ROOT = Path(__file__).resolve().parents[1] / "templates"
 ANSWERS_FILE = ".copier-answers.yml"
 _URL_RE = re.compile(r"^https?://[^\s/]+[^\s]*$")
 
@@ -98,8 +98,8 @@ def _validate(opts: Options) -> tuple[str, dict[str, Any], Path]:
         raise Abort(USAGE, "--python must be 3.11, 3.12 or 3.13")
     if opts.report not in {"html", "allure", "both"}:
         raise Abort(USAGE, "--report must be html, allure or both")
-    if opts.ci not in {"github", "gitlab", "none"}:
-        raise Abort(USAGE, "--ci must be github, gitlab or none")
+    if opts.ci not in {"github", "none"}:
+        raise Abort(USAGE, "--ci must be github or none (gitlab is planned)")
     summary = ""
     if opts.task_file is not None:
         if not opts.task_file.is_file():
@@ -129,25 +129,18 @@ def _validate(opts: Options) -> tuple[str, dict[str, Any], Path]:
     return slug, answers, output
 
 
-def render(type_: str, staging: Path, answers: Mapping[str, Any], templates_root: Path) -> None:
-    """Two Copier passes into ``staging``: the common skeleton, then the type overlay.
+Renderer = Callable[[str, Path, Mapping[str, Any]], object]
 
-    ``templates_root`` holds one ``copier.yml`` whose ``_subdirectory`` routes on the
-    ``layer`` answer. No ``_tasks`` and no extensions: ``unsafe`` stays off.
+
+def render(type_: str, staging: Path, answers: Mapping[str, Any]) -> None:
+    """Render with the packaged templates (``testkeel.templates.render``).
+
+    The answers file is never kept: projects are not ``copier update``-able yet
+    (``updatable`` is always false), so it would only be a tool trace.
     """
-    from copier import run_copy
-
-    data = {**answers, "type": type_}
-    for layer in ("base", "overlay"):
-        run_copy(
-            str(templates_root),
-            str(staging),
-            data={**data, "layer": layer},
-            defaults=True,
-            overwrite=True,
-            quiet=True,
-            unsafe=False,
-        )
+    # Imported on use: the templates (and copier) load only when a project is rendered.
+    templates = importlib.import_module("testkeel.templates")
+    templates.render(type_, staging, answers)
     (staging / ANSWERS_FILE).unlink(missing_ok=True)
 
 
@@ -184,10 +177,9 @@ def _git_init(output: Path, lines: list[str]) -> None:
 
 def new_assignment(
     opts: Options,
-    templates_root: Path | None = None,
     staging_root: Path | None = None,
     environ: Mapping[str, str] | None = None,
-    renderer: Callable[[str, Path, Mapping[str, Any], Path], None] = render,
+    renderer: Renderer | None = None,
 ) -> Result:
     started = time.monotonic()
     env = dict(os.environ if environ is None else environ)
@@ -202,7 +194,8 @@ def new_assignment(
     lines: list[str] = []
     keep_staging = False
     try:
-        renderer(opts.type, staging, answers, templates_root or TEMPLATES_ROOT)
+        (renderer or render)(opts.type, staging, answers)
+        (staging / ANSWERS_FILE).unlink(missing_ok=True)
         if opts.task_file is not None:
             _place_task(staging, opts.task_file)
         files = sorted(p.relative_to(staging).as_posix() for p in staging.rglob("*") if p.is_file())

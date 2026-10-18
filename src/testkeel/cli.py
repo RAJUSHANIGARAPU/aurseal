@@ -65,7 +65,7 @@ def new_assignment(
     api_base_url: Annotated[str | None, typer.Option(help="API under test.")] = None,
     python: Annotated[str, typer.Option(help="3.11, 3.12 or 3.13.")] = "3.12",
     report: Annotated[str, typer.Option(help="html, allure or both.")] = "html",
-    ci: Annotated[str, typer.Option(help="github, gitlab or none.")] = "github",
+    ci: Annotated[str, typer.Option(help="github or none.")] = "github",
     docker: Annotated[bool, typer.Option("--docker/--no-docker")] = True,
     git: Annotated[bool, typer.Option("--git/--no-git", help="git init, no commit.")] = True,
     credit: Annotated[bool, typer.Option(help="One README footer line naming testkeel.")] = False,

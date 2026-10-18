@@ -17,6 +17,23 @@ from testkeel.assignment.slug import package_name, slugify
 from testkeel.cli import app
 
 TEMPLATE = Path(__file__).parent / "fixtures" / "template"
+
+
+def fixture_render(type_, destination, data):
+    """The packaged renderer's algorithm over the stand-in template: base, then overlay."""
+    from copier import run_copy
+
+    for layer in ("base", "overlay"):
+        run_copy(
+            str(TEMPLATE),
+            str(destination),
+            data={**data, "type": type_, "layer": layer},
+            defaults=True,
+            overwrite=True,
+            quiet=True,
+        )
+
+
 TERM = "zorblax"
 runner = CliRunner()
 
@@ -26,7 +43,7 @@ def env(tmp_path, monkeypatch) -> dict[str, str]:
     """An isolated home and cache, and the stand-in template."""
     home = tmp_path / "home"
     home.mkdir()
-    monkeypatch.setattr(scaffold, "TEMPLATES_ROOT", TEMPLATE)
+    monkeypatch.setattr(scaffold, "render", fixture_render)
     monkeypatch.chdir(tmp_path)
     return {"HOME": str(home), "XDG_CACHE_HOME": str(tmp_path / "cache"), "LEAK_DENYLIST": ""}
 
@@ -153,6 +170,7 @@ def test_dry_run_writes_nothing(env, tmp_path):
         (["--type", "web-ui", "--name", "!!!"], 2, "no letters"),
         (["--type", "web-ui", "--name", "x", "--target-url", "ftp://x"], 2, "http(s) URL"),
         (["--type", "web-ui", "--name", "x", "--python", "3.9"], 2, "--python"),
+        (["--type", "web-ui", "--name", "x", "--ci", "gitlab"], 2, "--ci"),
         (["--type", "web-ui", "--name", "x", "--task-file", "missing.md"], 2, "no such file"),
     ],
 )
@@ -198,7 +216,6 @@ def test_a_render_failure_cleans_up_staging(env, tmp_path, monkeypatch):
     def broken(*_args):
         raise RuntimeError("template exploded")
 
-    monkeypatch.setattr(scaffold, "render", broken)
     result = scaffold.new_assignment(
         scaffold.Options(type="strategy", name="Plan", git=False),
         staging_root=tmp_path / "cache" / "testkeel" / "staging",
