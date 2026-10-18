@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
+import json
 import os
 import re
 import shutil
@@ -27,16 +28,18 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from testkeel import leakgate
+from testkeel import __version__, leakgate
 from testkeel.assignment.slug import slugify
 from testkeel.assignment.types import AVAILABLE, BY_NAME
-from testkeel.leakgate.project import ProjectRules
+from testkeel.leakgate.project import PUBLIC_SOURCE, ProjectRules
 from testkeel.leakgate.scan import Finding
 
 OK, UNEXPECTED, USAGE, NOT_EMPTY, LEAK, SELF_CHECK, PREREQUISITE, INTERRUPTED = (
     0, 1, 2, 3, 4, 5, 6, 130,
 )  # fmt: skip
 ANSWERS_FILE = ".copier-answers.yml"
+#: The release tag ``copier update`` checks out from :data:`PUBLIC_SOURCE`.
+TEMPLATE_TAG = f"testkeel-v{__version__}"
 _URL_RE = re.compile(r"^https?://[^\s/]+[^\s]*$")
 #: The only index a generated lock file may name; user-level index settings are ignored.
 PYPI_SIMPLE = "https://pypi.org/simple"
@@ -80,6 +83,7 @@ class Options:
     git: bool = True
     credit: bool = False
     lock: bool = True
+    updatable: bool = False
     output_dir: Path | None = None
     dry_run: bool = False
     force: bool = False
@@ -148,6 +152,7 @@ def _validate(opts: Options) -> tuple[str, dict[str, Any], Path]:
         "docker": opts.docker,
         "ci": opts.ci,
         "credit": opts.credit,
+        "updatable": opts.updatable,
     }
     if kind.url_option:
         answers[kind.url_option] = url or kind.default_target
@@ -158,15 +163,28 @@ Renderer = Callable[[str, Path, Mapping[str, Any]], object]
 
 
 def render(type_: str, staging: Path, answers: Mapping[str, Any]) -> None:
-    """Render with the packaged templates (``testkeel.templates.render``).
-
-    The answers file is never kept: projects are not ``copier update``-able yet
-    (``updatable`` is always false), so it would only be a tool trace.
-    """
+    """Render with the packaged templates (``testkeel.templates.render``)."""
     # Imported on use: the templates (and copier) load only when a project is rendered.
     templates = importlib.import_module("testkeel.templates")
     templates.render(type_, staging, answers)
-    (staging / ANSWERS_FILE).unlink(missing_ok=True)
+
+
+def write_answers(staging: Path, type_: str, answers: Mapping[str, Any]) -> None:
+    """The ``--updatable`` answers file: the public repository at this release's tag.
+
+    Copier would record the local path of the installed templates (a home directory);
+    this records the public source instead, so ``copier update`` can fetch it later.
+    Values are written as JSON scalars, which are valid YAML.
+    """
+    lines = [
+        "# Answers for `copier update`; do not edit by hand.",
+        f"_commit: {TEMPLATE_TAG}",
+        f"_src_path: {PUBLIC_SOURCE}",
+    ]
+    lines += [
+        f"{key}: {json.dumps(value)}" for key, value in sorted({**answers, "type": type_}.items())
+    ]
+    (staging / ANSWERS_FILE).write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def _place_task(staging: Path, task_file: Path) -> None:
@@ -324,7 +342,10 @@ def new_assignment(
     keep_staging = False
     try:
         (renderer or render)(opts.type, staging, answers)
-        (staging / ANSWERS_FILE).unlink(missing_ok=True)
+        if opts.updatable:
+            write_answers(staging, opts.type, answers)
+        else:
+            (staging / ANSWERS_FILE).unlink(missing_ok=True)
         if opts.task_file is not None:
             _place_task(staging, opts.task_file)
         files = sorted(p.relative_to(staging).as_posix() for p in staging.rglob("*") if p.is_file())
@@ -350,6 +371,7 @@ def new_assignment(
             project=ProjectRules.for_project(
                 urls=[opts.target_url, opts.api_base_url, *_declared(answers)],
                 home=_home(env),
+                updatable=opts.updatable,
             ),
         )
         lines.extend(f"leak gate: {note}" for note in gate.notes)

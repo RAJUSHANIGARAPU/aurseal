@@ -42,3 +42,6 @@ ci:
 credit:
   type: bool
   default: false
+updatable:
+  type: bool
+  default: false
