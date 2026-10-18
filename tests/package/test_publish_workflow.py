@@ -18,9 +18,9 @@ from pathlib import Path
 import pytest
 import yaml
 
+from aurseal import __version__
+from aurseal.assignment.scaffold import TEMPLATE_TAG
 from gate.workflow_lint import DEFAULT_SHAPE, lint_workflow
-from testkeel import __version__
-from testkeel.assignment.scaffold import TEMPLATE_TAG
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS = ROOT / ".github" / "workflows"
@@ -185,7 +185,7 @@ def test_the_build_job_checks_builds_and_smoke_installs_in_order():
     ]
     assert [n for n in names if n in order] == order
     smoke = _step("build", "Smoke-install the wheel")["run"]
-    assert "testkeel-*.whl" in smoke and "list-types" in smoke
+    assert "aurseal-*.whl" in smoke and "list-types" in smoke
 
 
 # ------------------------------------------------------------ the checks, run for real

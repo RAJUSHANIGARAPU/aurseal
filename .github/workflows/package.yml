@@ -1,6 +1,6 @@
 name: Package
 
-# Lint, strict type check and build of the installable package (src/testkeel). Its tests
+# Lint, strict type check and build of the installable package (src/aurseal). Its tests
 # run in the offline job of tests.yml, where the CI-selection gate sees them; this
 # workflow only checks what that job cannot: the type check on the package's own Python,
 # the contents of the built wheel, and the generated-project checks that need each
@@ -11,7 +11,7 @@ on:
     branches: [main]
   pull_request:
     paths:
-      - "src/testkeel/**"
+      - "src/aurseal/**"
       - "tests/package/**"
       - "pyproject.toml"
       - "tools/wheel_check.py"
@@ -38,16 +38,16 @@ jobs:
       - name: Install the package and its tools
         run: |
           uv venv
-          # pytest: src/testkeel/pytest_plugin.py imports it, so the strict type check needs it
+          # pytest: src/aurseal/pytest_plugin.py imports it, so the strict type check needs it
           uv pip install -e . ruff==0.15.2 mypy==2.4.0 pytest==9.1.1
 
       - name: Lint
         run: |
-          uv run --no-sync ruff check src/testkeel
-          uv run --no-sync ruff format --check src/testkeel
+          uv run --no-sync ruff check src/aurseal
+          uv run --no-sync ruff format --check src/aurseal
 
       - name: Type check (strict)
-        run: uv run --no-sync mypy --strict src/testkeel
+        run: uv run --no-sync mypy --strict src/aurseal
 
       - name: Every action reference exists
         # Generated projects copy the template workflows; a ref that does not exist breaks them all.

@@ -18,7 +18,7 @@ import sys
 from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
 
-ROOTS = (".github/workflows", "src/testkeel/templates", "examples")
+ROOTS = (".github/workflows", "src/aurseal/templates", "examples")
 SUFFIXES = (".yml", ".yaml", ".jinja", ".part")
 USES = re.compile(
     r"uses:\s*['\"]?([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)(?:/[^@\s'\"]*)?@([A-Za-z0-9_.-]+)"
@@ -46,7 +46,7 @@ def api_fetch(token: str | None) -> Fetch:
     """Ask api.github.com over HTTPS; the host is fixed, so no other scheme or host is possible."""
 
     def fetch(api_path: str) -> bool | None:
-        headers = {"Accept": "application/vnd.github+json", "User-Agent": "testkeel-action-refs"}
+        headers = {"Accept": "application/vnd.github+json", "User-Agent": "aurseal-action-refs"}
         if token:
             headers["Authorization"] = f"Bearer {token}"
         connection = http.client.HTTPSConnection("api.github.com", timeout=20)

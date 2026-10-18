@@ -7,7 +7,7 @@ from pathlib import Path
 
 import yaml
 
-from testkeel import __version__
+from aurseal import __version__
 
 ROOT = Path(__file__).resolve().parents[2]
 CHANGELOG = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")

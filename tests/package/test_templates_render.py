@@ -1,6 +1,6 @@
 """Render every assignment template and check what comes out.
 
-Each case renders base + overlay through ``testkeel.templates.render`` into a temporary
+Each case renders base + overlay through ``aurseal.templates.render`` into a temporary
 directory, then checks the output the way a reviewer of a generated project would:
 the file tree matches the committed snapshot, no template syntax survived, nothing
 identifies the tool unless asked to, and the code lints, compiles and (for api-rest)
@@ -24,7 +24,7 @@ from pathlib import Path
 import pytest
 
 pytest.importorskip("copier", reason="copier is not installed")
-templates = pytest.importorskip("testkeel.templates", reason="testkeel is not importable")
+templates = pytest.importorskip("aurseal.templates", reason="aurseal is not importable")
 
 SNAPSHOT = Path(__file__).with_name("template_snapshots.json")
 UPDATE = os.environ.get("UPDATE_TEMPLATE_SNAPSHOTS") == "1"
@@ -180,13 +180,13 @@ def test_nothing_identifies_the_tool_or_a_person(rendered, name):
         assert not EMAIL.search(text), f"{relative} contains an e-mail address"
         assert "copier" not in text.lower(), relative
         if not credit:
-            assert "testkeel" not in text.lower(), relative
+            assert "aurseal" not in text.lower(), relative
 
 
 def test_credit_adds_one_footer_line_only_when_asked(rendered):
     readme = (rendered["api-rest-both-no-ci-py311"] / "README.md").read_text(encoding="utf-8")
-    assert len([line for line in readme.splitlines() if "testkeel" in line.lower()]) == 1
-    assert "testkeel" not in (rendered["api-rest"] / "README.md").read_text().lower()
+    assert len([line for line in readme.splitlines() if "aurseal" in line.lower()]) == 1
+    assert "aurseal" not in (rendered["api-rest"] / "README.md").read_text().lower()
 
 
 def test_updatable_writes_the_answers_file(tmp_path):

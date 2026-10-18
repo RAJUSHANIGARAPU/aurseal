@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from testkeel.importers import ReportError, registry
-from testkeel.model.v1 import Status
+from aurseal.importers import ReportError, registry
+from aurseal.model.v1 import Status
 
 FIXTURES = Path(__file__).parent / "fixtures"
 PYTEST_XML = FIXTURES / "junit-pytest.xml"
@@ -126,7 +126,7 @@ def test_malformed_input_is_a_report_error():
 
 
 def test_the_built_in_importers_are_registered_entry_points():
-    names = {ep.name for ep in entry_points(group="testkeel.importers")}
+    names = {ep.name for ep in entry_points(group="aurseal.importers")}
     assert {"junit", "playwright"} <= names
     assert set(registry.importers()) >= {"junit", "playwright"}
 

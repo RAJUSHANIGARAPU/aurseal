@@ -6,7 +6,7 @@ import re
 
 import pytest
 
-from testkeel.model.identity import (
+from aurseal.model.identity import (
     IDENTITY_RULES_VERSION,
     explicit_id,
     fingerprint,

@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from testkeel.importers import ReportError, registry
-from testkeel.model.v1 import Status
+from aurseal.importers import ReportError, registry
+from aurseal.model.v1 import Status
 
 NEWMAN = Path(__file__).parent / "fixtures" / "newman.json"
 
@@ -87,4 +87,4 @@ def test_a_collection_file_is_not_a_run_report():
 
 
 def test_the_importer_is_a_registered_entry_point():
-    assert "newman" in {ep.name for ep in entry_points(group="testkeel.importers")}
+    assert "newman" in {ep.name for ep in entry_points(group="aurseal.importers")}

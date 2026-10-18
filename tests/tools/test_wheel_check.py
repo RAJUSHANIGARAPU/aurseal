@@ -8,14 +8,14 @@ from pathlib import Path
 from tools.wheel_check import check, main
 
 CLEAN = [
-    "testkeel/__init__.py",
-    "testkeel/templates/.gitignore.jinja",
-    "testkeel-0.1.0.dist-info/METADATA",
+    "aurseal/__init__.py",
+    "aurseal/templates/.gitignore.jinja",
+    "aurseal-0.1.0.dist-info/METADATA",
 ]
 
 
 def _wheel(directory: Path, names: list[str], version: str = "0.1.0") -> Path:
-    path = directory / f"testkeel-{version}-py3-none-any.whl"
+    path = directory / f"aurseal-{version}-py3-none-any.whl"
     with zipfile.ZipFile(path, "w") as archive:
         for name in names:
             archive.writestr(name, "")
@@ -38,7 +38,7 @@ def test_a_file_outside_the_package_is_named(tmp_path, capsys):
 
 
 def test_no_wheel_or_two_wheels_is_a_failure_not_a_pass(tmp_path):
-    assert check(tmp_path) == [f"expected one testkeel wheel in {tmp_path}, found 0"]
+    assert check(tmp_path) == [f"expected one aurseal wheel in {tmp_path}, found 0"]
     _wheel(tmp_path, CLEAN)
     _wheel(tmp_path, CLEAN, version="0.2.0")
     assert "found 2" in check(tmp_path)[0]

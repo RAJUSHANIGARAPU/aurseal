@@ -1,6 +1,6 @@
 name: Publish
 
-# Builds the testkeel package and publishes it with PyPI trusted publishing: no token is
+# Builds the aurseal package and publishes it with PyPI trusted publishing: no token is
 # stored anywhere. A push of a testkeel-v<version> tag publishes to PyPI; a manual run
 # publishes the same build to TestPyPI and never to PyPI. Plain v* tags belong to
 # release.yml and do not match here. Why: docs/ci-decisions.md#package
@@ -45,7 +45,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      # The version is written once, in src/testkeel/__init__.py; the tag must name it.
+      # The version is written once, in src/aurseal/__init__.py; the tag must name it.
       - name: The tag names the package version
         if: github.event_name == 'push'
         env:
@@ -54,10 +54,10 @@ jobs:
           python3 - <<'PY'
           import os, re, sys
           from pathlib import Path
-          text = Path("src/testkeel/__init__.py").read_text(encoding="utf-8")
+          text = Path("src/aurseal/__init__.py").read_text(encoding="utf-8")
           match = re.search(r'^__version__ = "([^"]+)"$', text, re.MULTILINE)
           if not match:
-              sys.exit("no __version__ literal in src/testkeel/__init__.py")
+              sys.exit("no __version__ literal in src/aurseal/__init__.py")
           tag, expected = os.environ["TAG"], f"testkeel-v{match.group(1)}"
           print(f"tag {tag}, package version {match.group(1)}")
           if tag != expected:
@@ -78,10 +78,10 @@ jobs:
       - name: Smoke-install the wheel
         run: |
           uv venv --python 3.12 "$RUNNER_TEMP/smoke"
-          uv pip install --python "$RUNNER_TEMP/smoke" dist/testkeel-*.whl
+          uv pip install --python "$RUNNER_TEMP/smoke" dist/aurseal-*.whl
           cd "$RUNNER_TEMP"
-          "$RUNNER_TEMP/smoke/bin/testkeel" --version
-          "$RUNNER_TEMP/smoke/bin/testkeel" list-types
+          "$RUNNER_TEMP/smoke/bin/aurseal" --version
+          "$RUNNER_TEMP/smoke/bin/aurseal" list-types
 
       - name: Keep the distribution
         uses: actions/upload-artifact@v4
@@ -99,7 +99,7 @@ jobs:
     timeout-minutes: 10
     environment:
       name: pypi
-      url: https://pypi.org/project/testkeel/
+      url: https://pypi.org/project/aurseal/
     permissions:
       id-token: write
     steps:
@@ -119,7 +119,7 @@ jobs:
     timeout-minutes: 10
     environment:
       name: testpypi
-      url: https://test.pypi.org/project/testkeel/
+      url: https://test.pypi.org/project/aurseal/
     permissions:
       id-token: write
     steps:

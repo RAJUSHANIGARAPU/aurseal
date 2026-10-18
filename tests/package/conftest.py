@@ -1,4 +1,4 @@
-"""Tests of the installable ``testkeel`` package (``src/testkeel``).
+"""Tests of the installable ``aurseal`` package (``src/aurseal``).
 
 The package is installed with ``pip install -e .``. Without it this directory is not
 collected at all (one header line says so), so a checkout that only installed
@@ -18,11 +18,11 @@ def _importable(module: str) -> bool:
         return False
 
 
-MISSING = not _importable("testkeel")
+MISSING = not _importable("aurseal")
 collect_ignore_glob = ["*"] if MISSING else []
 
 
 def pytest_report_header(config):
     if MISSING:
-        return "package: not collected, testkeel is not installed (pip install -e .)"
+        return "package: not collected, aurseal is not installed (pip install -e .)"
     return None

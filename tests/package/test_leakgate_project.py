@@ -12,11 +12,11 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from testkeel.assignment.types import BY_NAME, TYPES
-from testkeel.cli import app
-from testkeel.leakgate import CLEAN, FINDINGS, ProjectRules, run
-from testkeel.leakgate.__main__ import main
-from testkeel.leakgate.project import ALLOW_HOSTS_PATH, PUBLIC_SOURCE, RULES
+from aurseal.assignment.types import BY_NAME, TYPES
+from aurseal.cli import app
+from aurseal.leakgate import CLEAN, FINDINGS, ProjectRules, run
+from aurseal.leakgate.__main__ import main
+from aurseal.leakgate.project import ALLOW_HOSTS_PATH, PUBLIC_SOURCE, RULES
 
 PRIVATE = "intranet.quuxcorp.io"
 runner = CliRunner()
@@ -99,6 +99,19 @@ def test_extra_hosts_come_from_the_flag_and_the_config_file(home):
     assert configured.content("a.md", f"https://{PRIVATE}/\n") == []
 
 
+def test_the_allow_hosts_file_under_the_previous_name_is_still_read(home):
+    previous = home / ".config" / "testkeel" / "allow-hosts.txt"
+    previous.parent.mkdir(parents=True)
+    previous.write_text(f"{PRIVATE}\n", "utf-8")
+    with pytest.warns(DeprecationWarning, match="move it to ~/.config/aurseal/allow-hosts.txt"):
+        rules = ProjectRules.for_project(home=home)
+    assert rules.content("a.md", f"https://{PRIVATE}/\n") == []
+    # The current file wins once it exists.
+    (home / ALLOW_HOSTS_PATH).parent.mkdir(parents=True)
+    (home / ALLOW_HOSTS_PATH).write_text("other.example.test\n", "utf-8")
+    assert ProjectRules.for_project(home=home).content("a.md", f"https://{PRIVATE}/\n")
+
+
 def test_a_host_finding_never_prints_the_host(tmp_path, home):
     outcome = _gate(tmp_path, home, {"docs/notes.md": f"x\nhttps://{PRIVATE}/a\n"})
     assert outcome.code == FINDINGS
@@ -131,6 +144,11 @@ def test_the_answers_file_is_allowed_for_an_updatable_project(tmp_path, home):
     assert _gate(tmp_path, home, files, ProjectRules()).code == FINDINGS
     public = {".copier-answers.yml": f"_commit: testkeel-v0.1.0\n_src_path: {PUBLIC_SOURCE}\n"}
     assert _gate(tmp_path, home, public, ProjectRules()).code == CLEAN
+    before_rename = {
+        ".copier-answers.yml": "_commit: testkeel-v0.1.0\n"
+        "_src_path: https://github.com/RAJUSHANIGARAPU/wiki_project\n"
+    }
+    assert _gate(tmp_path, home, before_rename, ProjectRules()).code == CLEAN
 
 
 # ------------------------------------------------------------------ L8 lock file index
@@ -163,7 +181,7 @@ def test_a_lock_file_naming_another_index_hits():
 
 
 def test_importing_the_tool_hits_with_the_line():
-    code = "import os\n\nfrom testkeel.model import v1\nimport testkeel_demo\nimport testkeel\n"
+    code = "import os\n\nfrom aurseal.model import v1\nimport aurseal_demo\nimport aurseal\n"
     assert ProjectRules().content("tests/test_a.py", code) == [
         (3, "standalone.import"),
         (5, "standalone.import"),
@@ -177,10 +195,10 @@ def test_a_file_that_does_not_parse_is_left_to_the_self_check():
 @pytest.mark.parametrize(
     ("name", "text", "line"),
     [
-        ("pyproject.toml", '[project]\ndependencies = [\n    "TestKeel>=0.1",\n]\n', 3),
-        ("pyproject.toml", '[dependency-groups]\ndev = ["testkeel[report]"]\n', 2),
-        ("requirements.txt", "pytest\ntestkeel==0.1.0\n", 2),
-        ("uv.lock", 'version = 1\n\n[[package]]\nname = "testkeel"\n', 4),
+        ("pyproject.toml", '[project]\ndependencies = [\n    "Aurseal>=0.1",\n]\n', 3),
+        ("pyproject.toml", '[dependency-groups]\ndev = ["aurseal[report]"]\n', 2),
+        ("requirements.txt", "pytest\naurseal==0.1.0\n", 2),
+        ("uv.lock", 'version = 1\n\n[[package]]\nname = "aurseal"\n', 4),
     ],
 )
 def test_depending_on_the_tool_hits(name, text, line):
@@ -188,7 +206,7 @@ def test_depending_on_the_tool_hits(name, text, line):
 
 
 def test_similar_names_and_comments_are_not_a_dependency():
-    text = '[project]\nname = "testkeel-demo"\ndependencies = ["testkeel_x"]\n# testkeel\n'
+    text = '[project]\nname = "aurseal-demo"\ndependencies = ["aurseal_x"]\n# aurseal\n'
     assert ProjectRules().content("pyproject.toml", text) == []
 
 
@@ -201,7 +219,7 @@ def test_the_task_brief_is_not_held_to_the_project_rules():
 TRACED = {
     ".claude/settings.json": "{}\n",
     "README.md": f"https://{PRIVATE}/\n",
-    "src/a.py": "import testkeel\n",
+    "src/a.py": "import aurseal\n",
 }
 
 
@@ -250,7 +268,7 @@ def test_assignment_check_applies_the_project_rules(tmp_path, home):
 
 
 def test_new_assignment_refuses_a_rendered_trace(tmp_path, home):
-    from testkeel.assignment import scaffold
+    from aurseal.assignment import scaffold
 
     def render(_type, destination, _answers):
         (destination / "README.md").write_text("# Shop\n", "utf-8")
@@ -284,7 +302,7 @@ PLACEHOLDER_URLS = {
 @pytest.mark.parametrize("extra", [{}, {"report": "both", "credit": True, "ci": "github"}])
 def test_the_packaged_templates_pass_the_project_rules(tmp_path, home, type_, extra):
     pytest.importorskip("copier", reason="copier is not installed")
-    from testkeel.templates import render
+    from aurseal.templates import render
 
     answers = {
         "project_name": "ACME Shop",

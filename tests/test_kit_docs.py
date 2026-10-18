@@ -10,10 +10,10 @@ from pathlib import Path
 
 import pytest
 
-pytest.importorskip("testkeel", reason="testkeel is not installed")
+pytest.importorskip("aurseal", reason="aurseal is not installed")
 typer_main = pytest.importorskip("typer.main")
 
-from testkeel.cli import app  # noqa: E402
+from aurseal.cli import app  # noqa: E402
 
 CLI_DOC = Path(__file__).resolve().parents[1] / "docs" / "kit" / "cli.md"
 

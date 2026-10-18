@@ -4,7 +4,7 @@
       "command": "python3",
       "args": ["tools/ci_reader.py"],
       "env": {
-        "CI_READER_REPO": "${CI_READER_REPO:-RAJUSHANIGARAPU/wiki_project}",
+        "CI_READER_REPO": "${CI_READER_REPO:-RAJUSHANIGARAPU/aurseal}",
         "GITHUB_TOKEN": "${GITHUB_TOKEN:-}"
       }
     }

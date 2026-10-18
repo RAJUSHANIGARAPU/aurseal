@@ -1,4 +1,4 @@
-"""The ``testkeel`` CLI: new-assignment, list-types and assignment check.
+"""The ``aurseal`` CLI: new-assignment, list-types and assignment check.
 
 Rendering uses a minimal stand-in template (``fixtures/template``) with the same layout as
 the real ones, so these tests do not depend on the real templates' content.
@@ -15,9 +15,9 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from testkeel.assignment import scaffold
-from testkeel.assignment.slug import package_name, slugify
-from testkeel.cli import app
+from aurseal.assignment import scaffold
+from aurseal.assignment.slug import package_name, slugify
+from aurseal.cli import app
 
 TEMPLATE = Path(__file__).parent / "fixtures" / "template"
 
@@ -63,7 +63,7 @@ def env(tmp_path, monkeypatch) -> dict[str, str]:
 
 
 def _staging(tmp_path: Path) -> list[Path]:
-    root = tmp_path / "cache" / "testkeel" / "staging"
+    root = tmp_path / "cache" / "aurseal" / "staging"
     return sorted(root.iterdir()) if root.is_dir() else []
 
 
@@ -120,8 +120,8 @@ def test_list_types_shows_every_type_available():
 
 
 def test_every_listed_type_has_a_template():
-    from testkeel import templates
-    from testkeel.assignment.types import TYPES
+    from aurseal import templates
+    from aurseal.assignment.types import TYPES
 
     assert [t.name for t in TYPES] == list(templates.TYPES)
 
@@ -249,7 +249,7 @@ def test_usage_errors_exit_2_and_write_nothing(env, tmp_path, args, code, messag
 
 
 def test_a_planned_type_is_refused(env, tmp_path, monkeypatch):
-    from testkeel.assignment import types
+    from aurseal.assignment import types
 
     planned = types.AssignmentType("perf-jmeter", types.PLANNED, "Load tests with JMeter")
     monkeypatch.setitem(scaffold.BY_NAME, planned.name, planned)
@@ -328,7 +328,7 @@ def test_a_render_failure_cleans_up_staging(env, tmp_path, monkeypatch):
 
     result = scaffold.new_assignment(
         scaffold.Options(type="strategy", name="Plan", git=False),
-        staging_root=tmp_path / "cache" / "testkeel" / "staging",
+        staging_root=tmp_path / "cache" / "aurseal" / "staging",
         environ=env,
         renderer=broken,
     )
@@ -336,7 +336,7 @@ def test_a_render_failure_cleans_up_staging(env, tmp_path, monkeypatch):
     assert "details in" in result.lines[0]
     assert _staging(tmp_path) == []
     assert not (tmp_path / "plan").exists()
-    logs = list((tmp_path / "cache" / "testkeel" / "logs").iterdir())
+    logs = list((tmp_path / "cache" / "aurseal" / "logs").iterdir())
     assert "template exploded" in logs[0].read_text("utf-8")
 
 
@@ -461,7 +461,7 @@ def _render_with(extra: dict[str, str]):
 def test_code_that_does_not_compile_fails_the_self_check(env, tmp_path):
     result = scaffold.new_assignment(
         scaffold.Options(type="web-ui", name="Shop", git=False, lock=False),
-        staging_root=tmp_path / "cache" / "testkeel" / "staging",
+        staging_root=tmp_path / "cache" / "aurseal" / "staging",
         environ=env,
         renderer=_render_with({"tests/test_broken.py": "def broken(:\n"}),
     )
@@ -478,7 +478,7 @@ def test_code_that_does_not_compile_fails_the_self_check(env, tmp_path):
 def test_lint_errors_fail_the_self_check(env, tmp_path):
     result = scaffold.new_assignment(
         scaffold.Options(type="web-ui", name="Shop", git=False, lock=False),
-        staging_root=tmp_path / "cache" / "testkeel" / "staging",
+        staging_root=tmp_path / "cache" / "aurseal" / "staging",
         environ=env,
         renderer=_render_with({"tests/test_lint.py": "import os\n"}),
     )
@@ -511,17 +511,15 @@ def test_projects_are_not_updatable_by_default(env, tmp_path):
 
 def test_updatable_records_the_public_source_at_the_release_tag(env, tmp_path, monkeypatch):
     yaml = pytest.importorskip("yaml")
-    from testkeel import __version__
-    from testkeel.leakgate.project import PUBLIC_SOURCE
+    from aurseal import __version__
+    from aurseal.leakgate.project import PUBLIC_SOURCE
 
     monkeypatch.setattr(scaffold, "render", REAL_RENDER)  # the packaged templates
     result = _new(env, "--type", "api-rest", "--name", "Booking API", "--updatable", "--no-lock")
     assert result.exit_code == 0, result.output
     text = (tmp_path / "booking-api" / ".copier-answers.yml").read_text("utf-8")
     answers = yaml.safe_load(text)
-    assert (
-        answers["_src_path"] == PUBLIC_SOURCE == "https://github.com/RAJUSHANIGARAPU/wiki_project"
-    )
+    assert answers["_src_path"] == PUBLIC_SOURCE == "https://github.com/RAJUSHANIGARAPU/aurseal"
     assert answers["_commit"] == f"testkeel-v{__version__}"
     assert answers["type"] == "api-rest"
     assert answers["project_slug"] == "booking-api"

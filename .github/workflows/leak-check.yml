@@ -108,7 +108,7 @@ jobs:
             args+=(--tree . --history)
           fi
           set +e
-          python -m testkeel.leakgate "${args[@]}"
+          python -m aurseal.leakgate "${args[@]}"
           code=$?
           set -e
           if [ "$code" -eq 3 ]; then

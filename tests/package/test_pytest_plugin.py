@@ -1,4 +1,4 @@
-"""The pytest plugin: inert by default, and the upload it writes with --testkeel-out."""
+"""The pytest plugin: inert by default, and the upload it writes with --aurseal-out."""
 
 from __future__ import annotations
 
@@ -6,10 +6,10 @@ import json
 
 import pytest
 
-from testkeel.importers import registry
-from testkeel.model.identity import fingerprint
-from testkeel.model.v1 import RunUpload, Status
-from testkeel.pytest_plugin import split_nodeid
+from aurseal.importers import registry
+from aurseal.model.identity import fingerprint
+from aurseal.model.v1 import RunUpload, Status
+from aurseal.pytest_plugin import split_nodeid
 
 pytest_plugins = ["pytester"]
 
@@ -88,7 +88,7 @@ def test_always_red():
 def _run(pytester, *args):
     pytester.makepyfile(test_shop=SUITE)
     out = pytester.path / "reports" / "upload.json"
-    result = pytester.runpytest("-p", "no:cacheprovider", f"--testkeel-out={out}", *args)
+    result = pytester.runpytest("-p", "no:cacheprovider", f"--aurseal-out={out}", *args)
     upload = RunUpload.model_validate_json(out.read_text(encoding="utf-8"))
     return result, out, {(r.suite, r.name, r.variant): r for r in upload.records}
 
@@ -98,17 +98,17 @@ def test_without_the_option_the_plugin_writes_nothing(pytester):
     result = pytester.runpytest("-p", "no:cacheprovider")
     result.assert_outcomes(passed=1)
     assert not [p for p in pytester.path.rglob("*.json")]
-    assert "testkeel upload" not in result.stdout.str()
+    assert "aurseal upload" not in result.stdout.str()
 
 
 def test_the_option_is_registered_and_documented_in_help(pytester):
     result = pytester.runpytest("--help")
-    result.stdout.fnmatch_lines(["*--testkeel-out=PATH*"])
+    result.stdout.fnmatch_lines(["*--aurseal-out=PATH*"])
 
 
 def test_statuses_reasons_and_attempts(pytester):
     result, out, records = _run(pytester)
-    result.stdout.fnmatch_lines([f"*testkeel upload: {out}*"])
+    result.stdout.fnmatch_lines([f"*aurseal upload: {out}*"])
     assert len(records) == 12
 
     assert records[("TestCart", "test_total", "EUR-10")].status is Status.PASSED
@@ -163,7 +163,7 @@ def test_explicit_ids_and_parameters(pytester):
 def test_the_upload_and_the_junit_xml_agree_on_identity(pytester):
     junit = pytester.path / "junit.xml"
     _, out, records = _run(pytester, f"--junitxml={junit}")
-    assert registry.detect(out.read_bytes()[:4096]).name == "testkeel"
+    assert registry.detect(out.read_bytes()[:4096]).name == "aurseal"
     from_upload = {r.identity: r.status for r in registry.parse_file(out)}
     assert from_upload == {r.identity: r.status for r in records.values()}
     from_junit = {r.identity: r.status for r in registry.parse_file(junit)}
@@ -192,7 +192,7 @@ def test_split_nodeid(nodeid, expected):
 
 
 def test_an_upload_of_another_major_is_refused(tmp_path):
-    from testkeel.importers import ReportError
+    from aurseal.importers import ReportError
 
     target = tmp_path / "upload.json"
     target.write_text('{"schema_version": "2.0", "records": []}', encoding="utf-8")

@@ -11,11 +11,11 @@ from pathlib import Path
 
 import pytest
 
-from testkeel.leakgate import CANNOT_RUN, CLEAN, FINDINGS, NOT_ASSESSED, run
-from testkeel.leakgate import denylist as deny
-from testkeel.leakgate.__main__ import main
-from testkeel.leakgate.normalise import line_tokens
-from testkeel.leakgate.pii import iban_valid, line_rules
+from aurseal.leakgate import CANNOT_RUN, CLEAN, FINDINGS, NOT_ASSESSED, run
+from aurseal.leakgate import denylist as deny
+from aurseal.leakgate.__main__ import main
+from aurseal.leakgate.normalise import line_tokens
+from aurseal.leakgate.pii import iban_valid, line_rules
 
 AT = "@"
 LIST = "term:quux corp\nterm:zorblax\nqual:frobnitz_server.billing\nre:wibble-\\d{3}\n"
@@ -103,7 +103,13 @@ def test_list_sources_and_precedence(tmp_path, home):
     assert legacy is not None and legacy.entries[0].kind == "re"
     assert "deprecated" in legacy.source
     (home / ".config" / "testkeel").mkdir(parents=True)
-    (home / ".config" / "testkeel" / "denylist.txt").write_text("zorblax\n", "utf-8")
+    (home / ".config" / "testkeel" / "denylist.txt").write_text("qual:zorb.ax\n", "utf-8")
+    with pytest.warns(DeprecationWarning, match="move it to ~/.config/aurseal/denylist.txt"):
+        previous = deny.load(environ={}, home=home)
+    assert previous is not None and previous.entries[0].kind == "qual"
+    assert previous.source == "~/.config/testkeel/denylist.txt (deprecated location)"
+    (home / ".config" / "aurseal").mkdir(parents=True)
+    (home / ".config" / "aurseal" / "denylist.txt").write_text("zorblax\n", "utf-8")
     current = deny.load(environ={}, home=home)
     assert current is not None and current.entries[0].kind == "term"
     from_env = deny.load(environ={deny.ENV_VAR: "qual:frobnitz_server.billing"}, home=home)

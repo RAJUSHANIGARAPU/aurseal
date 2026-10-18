@@ -1,0 +1,137 @@
+# One question file for every assignment type.
+#
+# A project is rendered in two passes into the same directory: `layer=base` renders
+# `_base/` (the common skeleton), then `layer=overlay` renders the type's own directory
+# over it, so a file the overlay ships wins. A composed type renders several overlay
+# directories in turn (`overlay`). `aurseal.templates.render` runs every pass.
+#
+# No `_tasks` and no Jinja extensions: rendering never needs `--trust`.
+
+_min_copier_version: "9.19"
+_subdirectory: "{{ '_base' if layer == 'base' else overlay }}"
+_templates_suffix: .jinja
+# The answers file is only written when the template ships
+# `{{ _copier_conf.answers_file }}.jinja`; `_base` ships it under `updatable` only.
+_answers_file: .copier-answers.yml
+
+type:
+  type: str
+  help: Assignment type
+  choices:
+    - web-ui
+    - api-rest
+    - api-graphql
+    - a11y
+    - strategy
+    - perf-k6
+    - perf-locust
+    - mobile
+    - fullstack
+
+layer:
+  type: str
+  help: Which pass is rendering (base skeleton, then the type overlay)
+  default: base
+  choices:
+    - base
+    - overlay
+  when: false
+
+overlay:
+  type: str
+  help: Overlay directory this pass renders (a composed type renders several in turn)
+  default: "{{ type }}"
+  when: false
+
+# The one place that says which types drive a browser: the skeleton reads this flag
+# (Playwright image, browsers target, shared memory) instead of naming types.
+browser:
+  type: bool
+  help: The project drives Chromium through Playwright
+  default: "{{ type in ['web-ui', 'a11y', 'fullstack'] }}"
+  when: false
+
+project_name:
+  type: str
+  help: Human-readable project name
+  validator: "{% if not project_name.strip() %}required{% endif %}"
+
+project_slug:
+  type: str
+  help: Directory and repository name
+  default: "{{ project_name | lower | replace(' ', '-') }}"
+  validator: >-
+    {% if not (project_slug | regex_search('^[a-z][a-z0-9-]*[a-z0-9]$')) %}lower-case letters, digits and dashes{% endif %}
+
+package_name:
+  type: str
+  help: Python import name
+  default: "{{ project_slug | replace('-', '_') }}"
+  when: false
+
+company:
+  type: str
+  help: Company the assignment is for (only used in the README)
+  default: ""
+
+task_summary:
+  type: str
+  help: One-paragraph summary of the task, in your own words
+  default: ""
+
+target_url:
+  type: str
+  help: Web application under test
+  default: "https://example.test"
+  when: "{{ type in ['web-ui', 'a11y', 'perf-k6', 'perf-locust', 'fullstack'] }}"
+  validator: >-
+    {% if not (target_url | regex_search('^https?://[^\\s/]+')) %}an http(s) URL{% endif %}
+
+api_base_url:
+  type: str
+  help: Base URL of the API under test
+  default: "https://api.example.test"
+  when: "{{ type in ['api-rest', 'api-graphql', 'fullstack'] }}"
+  validator: >-
+    {% if not (api_base_url | regex_search('^https?://[^\\s/]+')) %}an http(s) URL{% endif %}
+
+python_version:
+  type: str
+  help: Python version of the generated project
+  default: "3.12"
+  choices:
+    - "3.11"
+    - "3.12"
+    - "3.13"
+
+report:
+  type: str
+  help: Report format (html is self-contained; allure needs a Java runtime to render)
+  default: html
+  choices:
+    - html
+    - allure
+    - both
+
+docker:
+  type: bool
+  help: Add a Dockerfile and docker-compose.yml
+  default: true
+
+ci:
+  type: str
+  help: CI provider
+  default: github
+  choices:
+    - github
+    - none
+
+credit:
+  type: bool
+  help: Add a one-line credit to the README footer
+  default: false
+
+updatable:
+  type: bool
+  help: Write .copier-answers.yml so `copier update` works (records the template source)
+  default: false

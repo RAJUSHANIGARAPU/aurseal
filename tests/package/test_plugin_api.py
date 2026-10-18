@@ -8,8 +8,8 @@ from importlib.metadata import EntryPoint
 
 import pytest
 
-from testkeel.model.v1 import RunUpload
-from testkeel.plugin_api import v1
+from aurseal.model.v1 import RunUpload
+from aurseal.plugin_api import v1
 
 
 class _Reporter:
@@ -40,9 +40,9 @@ def fake_plugins(monkeypatch):
 
 def test_the_groups_are_named_after_the_package():
     assert (v1.IMPORTERS, v1.RESULT_TYPES, v1.REPORTERS) == (
-        "testkeel.importers",
-        "testkeel.result_types",
-        "testkeel.reporters",
+        "aurseal.importers",
+        "aurseal.result_types",
+        "aurseal.reporters",
     )
 
 
@@ -67,4 +67,4 @@ def test_a_plugin_that_fails_to_import_is_named(fake_plugins):
 
 def test_an_unknown_group_is_an_error():
     with pytest.raises(v1.PluginError, match="unknown plugin group"):
-        v1.discover("testkeel.nothing")
+        v1.discover("aurseal.nothing")

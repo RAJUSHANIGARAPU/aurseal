@@ -9,13 +9,13 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from testkeel import __version__
-from testkeel.cli import app
-from testkeel.importers import registry
-from testkeel.model.identity import fingerprint
-from testkeel.model.v1 import RunUpload, Status, TestRecord
-from testkeel.plugin_api.v1 import REPORTERS, discover
-from testkeel.reporting.html import HtmlReporter, render_html
+from aurseal import __version__
+from aurseal.cli import app
+from aurseal.importers import registry
+from aurseal.model.identity import fingerprint
+from aurseal.model.v1 import RunUpload, Status, TestRecord
+from aurseal.plugin_api.v1 import REPORTERS, discover
+from aurseal.reporting.html import HtmlReporter, render_html
 
 FIXTURES = Path(__file__).parent / "fixtures"
 GOLDEN = FIXTURES / "report.golden.html"
@@ -32,12 +32,12 @@ def _fixture_run() -> RunUpload:
 
 def _golden_text(html: str) -> str:
     # The version moves with every release; the golden file pins everything else.
-    return html.replace(f"by testkeel {__version__}<", "by testkeel VERSION<")
+    return html.replace(f"by aurseal {__version__}<", "by aurseal VERSION<")
 
 
 def test_the_rendered_report_matches_the_golden_file():
     html = _golden_text(render_html(_fixture_run(), title="ACME Shop", generated=WHEN))
-    if os.environ.get("TESTKEEL_UPDATE_GOLDEN") == "1":
+    if os.environ.get("AURSEAL_UPDATE_GOLDEN") == "1":
         GOLDEN.write_text(html, encoding="utf-8")
     assert html == GOLDEN.read_text(encoding="utf-8")
 

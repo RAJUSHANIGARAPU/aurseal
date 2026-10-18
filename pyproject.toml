@@ -11,15 +11,15 @@ ignore = []
 quote-style = "double"
 indent-style = "space"
 
-# ---------------------------------------------------------------- the testkeel package
-# Only src/testkeel is packaged; the framework modules at the repository root are not.
+# ---------------------------------------------------------------- the aurseal package
+# Only src/aurseal is packaged; the framework modules at the repository root are not.
 
 [build-system]
 requires = ["hatchling>=1.26"]
 build-backend = "hatchling.build"
 
 [project]
-name = "testkeel"
+name = "aurseal"
 dynamic = ["version"]
 description = "Scaffold, check and report on test automation projects"
 readme = "README.md"
@@ -37,50 +37,50 @@ dependencies = [
 ]
 
 [project.scripts]
-testkeel = "testkeel.cli:app"
+aurseal = "aurseal.cli:app"
 
-[project.entry-points."testkeel.importers"]
-cypress = "testkeel.importers.cypress:CypressImporter"
-junit = "testkeel.importers.junit:JUnitImporter"
-k6 = "testkeel.importers.k6:K6Importer"
-newman = "testkeel.importers.newman:NewmanImporter"
-playwright = "testkeel.importers.playwright:PlaywrightImporter"
-testkeel = "testkeel.importers.upload:UploadImporter"
+[project.entry-points."aurseal.importers"]
+cypress = "aurseal.importers.cypress:CypressImporter"
+junit = "aurseal.importers.junit:JUnitImporter"
+k6 = "aurseal.importers.k6:K6Importer"
+newman = "aurseal.importers.newman:NewmanImporter"
+playwright = "aurseal.importers.playwright:PlaywrightImporter"
+aurseal = "aurseal.importers.upload:UploadImporter"
 
-[project.entry-points."testkeel.result_types"]
-"perf.k6" = "testkeel.importers.k6:K6ResultType"
+[project.entry-points."aurseal.result_types"]
+"perf.k6" = "aurseal.importers.k6:K6ResultType"
 
 [project.entry-points.pytest11]
-# Inert unless --testkeel-out is given.
-testkeel = "testkeel.pytest_plugin"
+# Inert unless --aurseal-out is given.
+aurseal = "aurseal.pytest_plugin"
 
-[project.entry-points."testkeel.reporters"]
-html = "testkeel.reporting.html:HtmlReporter"
+[project.entry-points."aurseal.reporters"]
+html = "aurseal.reporting.html:HtmlReporter"
 
 [tool.hatch.version]
-path = "src/testkeel/__init__.py"
+path = "src/aurseal/__init__.py"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/testkeel"]
+packages = ["src/aurseal"]
 # Template files are package data, dotfiles (.gitignore.jinja, .pymarkdown.json) included.
 artifacts = [
-    "src/testkeel/templates/**/*.jinja",
-    "src/testkeel/templates/**/*.part",
-    "src/testkeel/templates/**/.*",
-    "src/testkeel/templates/**/copier.yml",
+    "src/aurseal/templates/**/*.jinja",
+    "src/aurseal/templates/**/*.part",
+    "src/aurseal/templates/**/.*",
+    "src/aurseal/templates/**/copier.yml",
 ]
 
 [tool.hatch.build.targets.sdist]
-only-include = ["src/testkeel", "LICENSE", "README.md", "pyproject.toml"]
+only-include = ["src/aurseal", "LICENSE", "README.md", "pyproject.toml"]
 
 [tool.mypy]
 python_version = "3.11"
 strict = true
 # The repository root has an __init__.py; without these the package would be read as
-# <root>.src.testkeel instead of testkeel.
+# <root>.src.aurseal instead of aurseal.
 mypy_path = "src"
 explicit_package_bases = true
 plugins = ["pydantic.mypy"]
 # Assignment templates are Copier sources, not importable modules; generated projects
 # run their own mypy.
-exclude = ["^src/testkeel/templates/"]
+exclude = ["^src/aurseal/templates/"]

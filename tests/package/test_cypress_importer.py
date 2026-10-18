@@ -8,9 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from testkeel.importers import ReportError, registry
-from testkeel.model.identity import fingerprint
-from testkeel.model.v1 import Status
+from aurseal.importers import ReportError, registry
+from aurseal.model.identity import fingerprint
+from aurseal.model.v1 import Status
 
 FIXTURES = Path(__file__).parent / "fixtures"
 MOCHAWESOME = FIXTURES / "cypress-mochawesome.json"
@@ -105,4 +105,4 @@ def test_malformed_and_unknown_input_is_a_report_error():
 
 
 def test_the_importer_is_a_registered_entry_point():
-    assert "cypress" in {ep.name for ep in entry_points(group="testkeel.importers")}
+    assert "cypress" in {ep.name for ep in entry_points(group="aurseal.importers")}

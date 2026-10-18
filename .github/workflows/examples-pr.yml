@@ -9,7 +9,7 @@ on:
   pull_request:
     paths:
       - "examples/**"
-      - "src/testkeel/templates/**"
+      - "src/aurseal/templates/**"
       - ".github/workflows/examples-pr.yml"
   workflow_dispatch:
 
