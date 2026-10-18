@@ -1,0 +1,8 @@
+# The local target of `make test-local`: Sauce Labs' sample-app-web, the source of the
+# public Sauce Demo shop, built from a pinned upstream commit (local/sample-app-web) and
+# served on localhost:8301, so a pull request never depends on the public site.
+services:
+  shop:
+    build: local/sample-app-web
+    ports:
+      - "127.0.0.1:8301:80"
