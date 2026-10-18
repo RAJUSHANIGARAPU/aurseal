@@ -58,8 +58,8 @@ example in the same commit, or the regeneration check fails.
 
 A new type needs an overlay under `src/testkeel/templates/<type>/`, an entry in
 `src/testkeel/assignment/types.py` (so `testkeel list-types` shows it), a render case in
-the template tests, and a section on the [Templates](templates.md) page. Until then it
-stays `planned`.
+the template tests, and a section on the [Templates](templates.md) page. Until all of
+them exist it stays `planned`, which `new-assignment` refuses.
 
 ## Commit messages and pull requests
 

@@ -32,13 +32,13 @@ Output today:
 ```text
 web-ui       available Browser UI tests with Playwright: page objects, components, offline tier (needs browser)
 api-rest     available REST API tests with httpx and pydantic: client, services, schema checks
+api-graphql  available GraphQL API tests with gql: operations, schema snapshot, offline tier
+a11y         available Accessibility checks with axe and Playwright: baseline, planted-violation controls (needs browser)
 strategy     available A test plan and strategy document set, no code
-api-graphql  planned   GraphQL API tests
-perf-k6      planned   Load tests with k6 (needs node)
-perf-locust  planned   Load tests with Locust
-a11y         planned   Accessibility checks with axe (needs browser)
-mobile       planned   Mobile app tests with Appium (needs android-sdk)
-fullstack    planned   web-ui and api-rest combined (needs browser)
+perf-k6      available Load tests with k6: smoke, load and stress profiles, SLO thresholds, target guard (needs k6)
+perf-locust  available Load tests with Locust: user classes, load shapes, SLO checks, target guard
+mobile       available Android app tests with Appium (UiAutomator2): screen objects, offline tier (needs android-sdk)
+fullstack    available web-ui and api-rest in one project: UI tests seeded through the API (needs browser)
 ```
 
 ## `testkeel new-assignment`
@@ -49,8 +49,8 @@ fullstack    planned   web-ui and api-rest combined (needs browser)
 | `--name` | text | | Project name (free text, slugged). |
 | `--company` | text | | Only rendered into the README. |
 | `--task-file` | path | | Task brief, copied to `.task/`. |
-| `--target-url` | text | | Web app under test. |
-| `--api-base-url` | text | | API under test. |
+| `--target-url` | text | per type | Web app under test. |
+| `--api-base-url` | text | per type | API under test. |
 | `--python` | text | `3.12` | 3.11, 3.12 or 3.13. |
 | `--report` | text | `html` | html, allure or both. |
 | `--ci` | text | `github` | github or none. |
@@ -63,6 +63,10 @@ fullstack    planned   web-ui and api-rest combined (needs browser)
 | `--dry-run` / `--no-dry-run` | flag | `--no-dry-run` | List what would be written. |
 | `--force` / `--no-force` | flag | `--no-force` | Write into a non-empty dir. |
 | `--non-interactive` / `--no-non-interactive` | flag | `--no-non-interactive` | Never prompt. |
+
+Which URL option each type takes, and its default, is in
+[Templates](templates.md#which-url-each-type-takes). An option the type does not take is a
+usage error, and `fullstack` needs both.
 
 What it does, in order, all inside a staging directory under `~/.cache/testkeel/`:
 
@@ -93,7 +97,7 @@ Exit codes:
 |---|---|
 | 0 | Created. |
 | 1 | Unexpected error. |
-| 2 | Usage error, including a `planned` type. |
+| 2 | Usage error, including a URL option the type does not take, a missing required URL, or a `planned` type. |
 | 3 | Output directory not empty (use `--force`). |
 | 4 | Leak gate failed; nothing was written. |
 | 5 | `uv lock` or the self-check failed; nothing was written. The failing step and the path of the kept staging directory are printed. |

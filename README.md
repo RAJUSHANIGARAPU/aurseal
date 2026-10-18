@@ -22,13 +22,17 @@ other types and options.
 
 ## See it working
 
-Two projects generated from the templates, each run nightly against a public practice
-target:
+Six projects generated from the templates, each run nightly against a public practice
+target (the load examples put load only on a local copy):
 
 | Example | Template | Live report | Source |
 |---|---|---|---|
 | Sauce Demo shop: sign-in, cart, checkout | `web-ui` | [report](https://rajushanigarapu.github.io/wiki_project/reports/web-ui-saucedemo/) | [examples/web-ui-saucedemo](examples/web-ui-saucedemo/README.md) |
 | Restful Booker API: auth, booking CRUD | `api-rest` | [report](https://rajushanigarapu.github.io/wiki_project/reports/api-rest-restful-booker/) | [examples/api-rest-restful-booker](examples/api-rest-restful-booker/README.md) |
+| Countries GraphQL API: lookups, schema drift | `api-graphql` | [report](https://rajushanigarapu.github.io/wiki_project/reports/graphql-countries/) | [examples/graphql-countries](examples/graphql-countries/README.md) |
+| W3C Before and After demo: WCAG 2.1 AA scans | `a11y` | [report](https://rajushanigarapu.github.io/wiki_project/reports/a11y-w3c-bad/) | [examples/a11y-w3c-bad](examples/a11y-w3c-bad/README.md) |
+| QuickPizza: smoke, load and stress with SLOs | `perf-k6` | build artifact | [examples/perf-k6-quickpizza](examples/perf-k6-quickpizza/README.md) |
+| QuickPizza: the same traffic in Locust | `perf-locust` | build artifact | [examples/perf-locust-quickpizza](examples/perf-locust-quickpizza/README.md) |
 
 Documentation: [rajushanigarapu.github.io/wiki_project](https://rajushanigarapu.github.io/wiki_project/).
 
@@ -36,8 +40,8 @@ Documentation: [rajushanigarapu.github.io/wiki_project](https://rajushanigarapu.
 
 | Part | What it does | Docs |
 |---|---|---|
-| `testkeel new-assignment` | Renders a project: page objects or an API client, offline tests that pass on the first run, test plan, ruff + strict mypy, Makefile, Dockerfile, CI with a published report | [CLI reference](https://rajushanigarapu.github.io/wiki_project/kit/cli/) |
-| Templates | `web-ui` (Playwright), `api-rest` (httpx + pydantic), `strategy` (documents); six more types planned | [Templates](https://rajushanigarapu.github.io/wiki_project/kit/templates/) |
+| `testkeel new-assignment` | Renders a project: page objects, an API client, load profiles or screen objects, offline tests that pass on the first run, test plan, ruff + strict mypy, Makefile, Dockerfile, CI with a published report | [CLI reference](https://rajushanigarapu.github.io/wiki_project/kit/cli/) |
+| Templates | Nine types: `web-ui` (Playwright), `api-rest` (httpx + pydantic), `api-graphql` (gql), `a11y` (axe-core), `perf-k6`, `perf-locust`, `mobile` (Appium), `fullstack` (UI + API), `strategy` (documents) | [Templates](https://rajushanigarapu.github.io/wiki_project/kit/templates/) |
 | Leak gate | Keeps listed private names and personal data out of generated projects and out of this repository; prints locations, never the matched text | [Leak gate](https://rajushanigarapu.github.io/wiki_project/kit/leak-gate/) |
 | Importers and report | JUnit XML and Playwright JSON into one result model with stable test identities; `testkeel report` renders a self-contained HTML summary | [CLI reference](https://rajushanigarapu.github.io/wiki_project/kit/cli/) |
 | Results platform | A versioned REST API over a results store, for one team's runs, verdicts and evidence (`qaplatform/`) | [Integration API](docs/integration_api.md) |
