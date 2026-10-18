@@ -1,0 +1,52 @@
+"""Live fixtures: one Appium session per test, and evidence kept when a test fails.
+
+Every test here skips until ``APP_APPIUM_URL`` is set, so a machine without an emulator
+runs the offline tier and reports these as skipped, not failed. They also skip under
+``pytest -n``: parallel sessions on one device would fail for reasons that are not bugs.
+"""
+
+from __future__ import annotations
+
+import os
+from collections.abc import Generator, Iterator
+
+import pytest
+from appium.webdriver.webdriver import WebDriver
+
+from {{ package_name }}.driver import create_driver
+from {{ package_name }}.settings import Settings
+
+PHASES = pytest.StashKey[dict[str, pytest.TestReport]]()
+
+
+@pytest.hookimpl(wrapper=True, tryfirst=True)
+def pytest_runtest_makereport(
+    item: pytest.Item,
+) -> Generator[None, pytest.TestReport, pytest.TestReport]:
+    report = yield
+    item.stash.setdefault(PHASES, {})[report.when] = report
+    return report
+
+
+@pytest.fixture(scope="session")
+def appium_settings(settings: Settings) -> Settings:
+    if "appium_url" not in settings.model_fields_set:
+        pytest.skip("live mobile tests need APP_APPIUM_URL; see 'Run it' in the README")
+    if int(os.environ.get("PYTEST_XDIST_WORKER_COUNT", "1")) > 1:
+        pytest.skip("one device runs one session at a time: run the live tests with `make live`")
+    return settings
+
+
+@pytest.fixture
+def driver(
+    appium_settings: Settings, request: pytest.FixtureRequest, artifact_dir
+) -> Iterator[WebDriver]:
+    session = create_driver(appium_settings)
+    try:
+        yield session
+        call = request.node.stash.get(PHASES, {}).get("call")
+        if call is not None and call.failed:
+            session.save_screenshot(str(artifact_dir / "screen.png"))
+            (artifact_dir / "page-source.xml").write_text(session.page_source, encoding="utf-8")
+    finally:
+        session.quit()

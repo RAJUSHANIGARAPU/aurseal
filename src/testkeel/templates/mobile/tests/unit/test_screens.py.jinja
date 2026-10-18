@@ -1,0 +1,118 @@
+"""The screen objects against a fake driver: which ids they use, and that they wait.
+
+When these fail, a screen object changed; when only the live tests fail, the app did.
+"""
+
+from __future__ import annotations
+
+from typing import cast
+
+import pytest
+from appium.webdriver.common.appiumby import AppiumBy
+from appium.webdriver.webdriver import WebDriver
+from selenium.common.exceptions import NoSuchElementException, TimeoutException
+
+from {{ package_name }}.screens import BaseScreen, HomeScreen, Locator, LoginScreen, TabBar
+from {{ package_name }}.screens.tab_bar import TABS
+
+pytestmark = pytest.mark.offline
+
+DOMAIN = "example.test"  # reserved (RFC 2606): never a real inbox
+EMAIL = f"tester@{DOMAIN}"
+SCREENS: list[type[BaseScreen]] = [HomeScreen, LoginScreen, TabBar]
+
+
+class FakeElement:
+    def __init__(self, displayed: bool = True) -> None:
+        self.displayed = displayed
+        self.text_entered: list[str] = []
+        self.taps = 0
+
+    def is_displayed(self) -> bool:
+        return self.displayed
+
+    def click(self) -> None:
+        self.taps += 1
+
+    def clear(self) -> None:
+        self.text_entered.clear()
+
+    def send_keys(self, text: str) -> None:
+        self.text_entered.append(text)
+
+
+class FakeDriver:
+    """Finds only the locators it was given; anything else is not on the screen."""
+
+    def __init__(self, *present: Locator, displayed: bool = True) -> None:
+        self.elements = {locator: FakeElement(displayed) for locator in present}
+
+    def find_element(self, by: str, value: str) -> FakeElement:
+        try:
+            return self.elements[(by, value)]
+        except KeyError:
+            raise NoSuchElementException(value) from None
+
+
+def as_driver(fake: FakeDriver) -> WebDriver:
+    return cast(WebDriver, fake)
+
+
+def declared_locators() -> list[Locator]:
+    found = [
+        value
+        for kind in SCREENS
+        for value in vars(kind).values()
+        if isinstance(value, tuple) and len(value) == 2
+    ]
+    return found + [TabBar.tab(name) for name in TABS] + [TabBar.screen_for(n) for n in TABS]
+
+
+@pytest.mark.parametrize("locator", declared_locators(), ids=lambda locator: locator[1])
+def test_every_declared_locator_is_an_accessibility_id(locator):
+    assert locator[0] == AppiumBy.ACCESSIBILITY_ID
+
+
+def test_the_one_text_fallback_is_the_inline_error_the_app_gives_no_id():
+    by, selector = LoginScreen.error('say "hi"')
+    assert by == AppiumBy.ANDROID_UIAUTOMATOR
+    assert selector == 'new UiSelector().textContains("say \\"hi\\"")'
+
+
+def test_sign_in_fills_both_fields_and_taps_login():
+    fake = FakeDriver(
+        LoginScreen.login_form, LoginScreen.email, LoginScreen.password, LoginScreen.submit
+    )
+    LoginScreen(as_driver(fake), timeout_s=0).sign_in(EMAIL, "long-enough-1")
+
+    assert fake.elements[LoginScreen.email].text_entered == [EMAIL]
+    assert fake.elements[LoginScreen.password].text_entered == ["long-enough-1"]
+    assert fake.elements[LoginScreen.login_form].taps == 1
+    assert fake.elements[LoginScreen.submit].taps == 1
+
+
+def test_a_screen_is_showing_once_its_marker_is_visible():
+    assert HomeScreen(as_driver(FakeDriver(HomeScreen.marker)), timeout_s=0).is_showing()
+
+
+@pytest.mark.parametrize(
+    "fake",
+    [
+        pytest.param(FakeDriver(), id="marker-absent"),
+        pytest.param(FakeDriver(HomeScreen.marker, displayed=False), id="marker-hidden"),
+    ],
+)
+def test_a_screen_is_not_showing_when_its_marker_is_absent_or_hidden(fake):
+    assert not HomeScreen(as_driver(fake), timeout_s=0).is_showing()
+
+
+def test_a_wait_that_runs_out_names_what_it_waited_for():
+    with pytest.raises(TimeoutException, match="input-email"):
+        LoginScreen(as_driver(FakeDriver()), timeout_s=0).element(LoginScreen.email)
+
+
+def test_opening_a_tab_taps_it_by_accessibility_id():
+    fake = FakeDriver(TabBar.tab("Login"))
+    TabBar(as_driver(fake), timeout_s=0).open("Login")
+
+    assert fake.elements[TabBar.tab("Login")].taps == 1

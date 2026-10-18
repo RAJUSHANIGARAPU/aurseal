@@ -1,0 +1,4 @@
+# Apps are downloaded (`make app`), never committed.
+*.apk
+*.part
+*.zip

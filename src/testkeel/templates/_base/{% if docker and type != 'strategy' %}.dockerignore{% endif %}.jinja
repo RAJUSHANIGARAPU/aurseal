@@ -8,3 +8,7 @@ test-results
 .mypy_cache
 .ruff_cache
 **/__pycache__
+{%- if type == 'mobile' %}
+# The app under test is downloaded, never part of the image
+apps/*.apk
+{%- endif %}

@@ -51,3 +51,4 @@ docker-test: ## run the suite in the container
 
 clean: ## remove reports and caches
 	rm -rf reports test-results .pytest_cache .mypy_cache .ruff_cache
+{%- include '_partials/' ~ type ~ '/makefile-targets.part' ignore missing %}

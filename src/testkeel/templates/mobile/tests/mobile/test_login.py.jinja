@@ -1,0 +1,25 @@
+"""Live checks of the login form's validation."""
+
+from __future__ import annotations
+
+import pytest
+
+from {{ package_name }}.screens import LoginScreen, TabBar
+
+pytestmark = pytest.mark.regression
+
+DOMAIN = "example.test"  # reserved (RFC 2606): never a real inbox
+VALID_EMAIL = f"tester@{DOMAIN}"
+
+
+@pytest.mark.parametrize(
+    ("email", "password", "error"),
+    [
+        pytest.param("not-an-email", "long-enough-1", "valid email address", id="bad-email"),
+        pytest.param(VALID_EMAIL, "short", "at least 8 characters", id="short-password"),
+    ],
+)
+def test_invalid_login_shows_inline_error(driver, settings, email, password, error):
+    TabBar(driver, settings.timeout_s).open("Login")
+    login = LoginScreen(driver, settings.timeout_s).sign_in(email, password)
+    assert login.shows_error(error)

@@ -1,0 +1,8 @@
+apps/           where `make app` puts the app under test (not committed)
+src/{{ package_name }}/
+  driver/       capabilities from settings, driver factory
+  screens/      one class per screen; methods are user actions
+  settings.py   APP_* environment settings
+tests/
+  mobile/       live tests: need Appium and a device, skipped otherwise
+  unit/         offline tests: capabilities, screen objects on a fake driver

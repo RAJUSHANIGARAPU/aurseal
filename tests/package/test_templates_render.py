@@ -63,6 +63,11 @@ CASES = {
         "perf-locust",
         {"report": "both", "docker": False, "python_version": "3.13"},
     ),
+    "mobile": ("mobile", {}),
+    "mobile-allure-no-docker-no-ci": (
+        "mobile",
+        {"report": "allure", "docker": False, "ci": "none"},
+    ),
 }
 CODE_CASES = [name for name, (type_, _) in CASES.items() if type_ != "strategy"]
 BROWSER_TYPES = {"web-ui", "a11y"}
@@ -187,7 +192,7 @@ def test_updatable_writes_the_answers_file(tmp_path):
 
 def test_render_refuses_an_unknown_type_or_answer(tmp_path):
     with pytest.raises(ValueError, match="unknown assignment type"):
-        templates.render("mobile", tmp_path, COMMON)
+        templates.render("desktop", tmp_path, COMMON)
     with pytest.raises(ValueError, match="unknown template answers: colour"):
         templates.render("web-ui", tmp_path, {**COMMON, "colour": "blue"})
 
@@ -265,6 +270,8 @@ def test_rendered_code_type_checks(rendered, name):
         pytest.skip("gql is not installed")
     if CASES[name][0] == "perf-locust" and not _importable("locust"):
         pytest.skip("locust is not installed")
+    if CASES[name][0] == "mobile" and not _importable("appium"):
+        pytest.skip("Appium-Python-Client is not installed")
     result = _run([sys.executable, "-m", "mypy"], rendered[name])
     assert result.returncode == 0, result.stdout + result.stderr
 
@@ -376,6 +383,32 @@ def test_load_profiles_are_guarded_and_ci_runs_only_the_smoke(rendered, name):
         text = workflow.read_text(encoding="utf-8")
         profiles = set(re.findall(r"(?:k6/scenarios|profiles)/(\w+)\.(?:js|conf)", text))
         assert profiles == {"smoke"}
+
+
+@pytest.mark.skipif(
+    not _importable("appium", "pydantic_settings"),
+    reason="the mobile project's dependencies are not installed",
+)
+@pytest.mark.parametrize("name", [n for n in CODE_CASES if CASES[n][0] == "mobile"])
+def test_mobile_offline_tests_pass_without_a_device(rendered, name):
+    result = _run(
+        [sys.executable, "-m", "pytest", "-m", "offline", "-p", "no:cacheprovider",
+         "-o", "addopts=-ra --strict-markers"],
+        rendered[name],
+    )  # fmt: skip
+    assert result.returncode == 0, result.stdout[-3000:] + result.stderr[-2000:]
+    assert re.search(r"\b\d{2,} passed\b", result.stdout), result.stdout[-1000:]
+
+
+def test_mobile_live_tests_skip_without_an_appium_url(rendered):
+    result = _run(
+        [sys.executable, "-m", "pytest", "tests/mobile", "--collect-only", "-q",
+         "-p", "no:cacheprovider", "-o", "addopts="],
+        rendered["mobile"],
+    )  # fmt: skip
+    if result.returncode != 0 and not _importable("appium"):
+        pytest.skip("Appium-Python-Client is not installed")
+    assert result.returncode == 0, result.stdout[-3000:] + result.stderr[-2000:]
 
 
 # ------------------------------------------------------------------ the examples

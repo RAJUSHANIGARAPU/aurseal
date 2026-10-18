@@ -1,0 +1,7 @@
+# The live tests are skipped until APP_APPIUM_URL is set: uncomment it once `make appium`
+# is running and an emulator or device is attached.
+# APP_APPIUM_URL=http://127.0.0.1:4723
+APP_APP_PATH=apps/android.wdio.native.app.v2.2.0.apk
+APP_AVD=
+APP_PLATFORM_VERSION=
+APP_NEW_COMMAND_TIMEOUT_S=120
