@@ -71,6 +71,7 @@ nav:
       - Quickstart: kit/quickstart.md
       - CLI reference: kit/cli.md
       - Templates: kit/templates.md
+      - Importers: kit/importers.md
       - Examples: kit/examples.md
       - Leak gate: kit/leak-gate.md
       - Contributing: kit/contributing.md

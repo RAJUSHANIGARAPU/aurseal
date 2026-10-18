@@ -42,6 +42,11 @@ testkeel = "testkeel.cli:app"
 [project.entry-points."testkeel.importers"]
 junit = "testkeel.importers.junit:JUnitImporter"
 playwright = "testkeel.importers.playwright:PlaywrightImporter"
+testkeel = "testkeel.importers.upload:UploadImporter"
+
+[project.entry-points.pytest11]
+# Inert unless --testkeel-out is given.
+testkeel = "testkeel.pytest_plugin"
 
 [project.entry-points."testkeel.reporters"]
 html = "testkeel.reporting.html:HtmlReporter"
