@@ -43,6 +43,14 @@ overlay:
   default: "{{ type }}"
   when: false
 
+# The one place that says which types drive a browser: the skeleton reads this flag
+# (Playwright image, browsers target, shared memory) instead of naming types.
+browser:
+  type: bool
+  help: The project drives Chromium through Playwright
+  default: "{{ type in ['web-ui', 'a11y', 'fullstack'] }}"
+  when: false
+
 project_name:
   type: str
   help: Human-readable project name
