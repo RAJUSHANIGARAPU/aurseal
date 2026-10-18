@@ -14,6 +14,7 @@ on:
       - "src/testkeel/**"
       - "tests/package/**"
       - "pyproject.toml"
+      - "tools/wheel_check.py"
       - ".github/workflows/package.yml"
   workflow_dispatch:
 
@@ -51,16 +52,7 @@ jobs:
         run: uv build --out-dir dist
 
       - name: The wheel contains only the package
-        run: |
-          uv run --no-sync python - <<'PY'
-          import pathlib, sys, zipfile
-          wheel = next(pathlib.Path("dist").glob("testkeel-*.whl"))
-          names = zipfile.ZipFile(wheel).namelist()
-          stray = [n for n in names if not n.startswith(("testkeel/", "testkeel-"))]
-          print(f"{wheel.name}: {len(names)} entries")
-          if stray:
-              sys.exit(f"files outside testkeel/ in the wheel: {stray}")
-          PY
+        run: uv run --no-sync python -m tools.wheel_check dist
 
   generated-projects:
     name: Generated projects (all dependencies)
