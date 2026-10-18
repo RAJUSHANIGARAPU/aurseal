@@ -25,6 +25,15 @@ Prerequisites: [uv](https://docs.astral.sh/uv/) and `make`. Or, with only Docker
 The live tests run against <https://www.w3.org/WAI/demos/bad/> every night, never on a pull
 request: a third-party outage is not a defect in this code.
 
+`make test-local` is what a pull request runs, and it is **not** a scan of the demo. The
+demo's pages come under the W3C document licence, which allows unmodified copies with a
+notice and no derivatives; that is not a clear enough grant to vendor a whole site for a
+test server without asking, so they are not copied here. Instead nginx on `localhost:8304` answers the demo's page paths with this
+example's own fixtures ([local/nginx.conf](local/nginx.conf)), and the suite runs without
+`test_before_after.py`, which asserts on the demo itself. It proves the scanner, the
+baseline and the report work over HTTP; only the nightly run judges the demo.
+Prerequisites: Docker, uv and GNU make.
+
 ## Decisions and trade-offs
 
 | Decision | Alternatives considered | Why | Cost accepted |
@@ -84,8 +93,8 @@ first items under "What I would do next". In a real assignment, record them here
 1. A keyboard-only walkthrough of the survey and the navigation, recorded as a Playwright
    test, and a screen reader spot check of the tickets table.
 2. Scan page states: the home page with the navigation focused by keyboard.
-3. Confirm the demo's licence; if it allows copying, vendor both versions as fixtures so
-   pull requests scan the real pages offline.
+3. Ask W3C whether unmodified copies of the demo may be served from this repository; if
+   so, the local lane could scan the real pages instead of the fixtures.
 
 ## Project layout
 

@@ -19,6 +19,12 @@ Prerequisites: [uv](https://docs.astral.sh/uv/) and `make`. Or, with only Docker
 with no network. The live tests run against <https://www.saucedemo.com> every night, never
 on a pull request: a third-party outage is not a defect in this code.
 
+`make test-local` runs the whole suite against Sauce Labs' `sample-app-web`, the source of
+the public shop, built from a pinned commit ([local/sample-app-web](local/sample-app-web/Dockerfile))
+and served on `localhost:8301`; this is what a pull request runs. The local server sends a
+Content-Security-Policy that keeps the browser on its own origin, so the app's web fonts
+and error reporting are blocked rather than fetched. Prerequisites: Docker, uv and GNU make.
+
 ## Decisions and trade-offs
 
 | Decision | Alternatives considered | Why | Cost accepted |
@@ -69,9 +75,7 @@ price, and checkout arithmetic up to the order confirmation.
 ## What I would do next
 
 1. Cover `problem_user` and `error_user`: they are the site's own regression targets.
-2. Run the suite against a local build of the site on every pull request, so changes to the
-   tests are checked without depending on the public host.
-3. Add Firefox and WebKit once the Chromium suite has been stable for a month.
+2. Add Firefox and WebKit once the Chromium suite has been stable for a month.
 
 ## Project layout
 
