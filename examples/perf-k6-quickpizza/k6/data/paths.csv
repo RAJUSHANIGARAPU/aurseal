@@ -1,0 +1,4 @@
+name,path,expected_status
+home,/,200
+quotes,/api/quotes,200
+names,/api/names,200

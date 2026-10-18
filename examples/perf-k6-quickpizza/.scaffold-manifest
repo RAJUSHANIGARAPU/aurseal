@@ -1,0 +1,35 @@
+# Files below are exactly what the template renders for the answers in this header.
+# CI re-renders the template and fails if any of them differ; every other file in
+# this directory is written by hand for this example.
+# type: perf-k6
+# project_name: QuickPizza k6
+# project_slug: perf-k6-quickpizza
+# target_url: https://quickpizza.grafana.com
+# company:
+# task_summary: Smoke, load and stress profiles for the QuickPizza demo API, with SLOs as code.
+.dockerignore
+.editorconfig
+.env.example
+.github/workflows/ci.yml
+.gitignore
+.pre-commit-config.yaml
+.python-version
+Dockerfile
+Makefile
+k6/lib/checks.js
+k6/lib/config.js
+k6/lib/guard.js
+k6/lib/summary.js
+k6/thresholds.js
+pyproject.toml
+src/perf_k6_quickpizza/__init__.py
+src/perf_k6_quickpizza/guard.py
+src/perf_k6_quickpizza/log.py
+src/perf_k6_quickpizza/settings.py
+src/perf_k6_quickpizza/slo.py
+tests/__init__.py
+tests/conftest.py
+tests/unit/__init__.py
+tests/unit/test_guard.py
+tests/unit/test_settings.py
+tests/unit/test_slo.py

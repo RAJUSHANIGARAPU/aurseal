@@ -1,0 +1,76 @@
+"""The SLO file k6 turns into thresholds, and the scenarios that use it."""
+
+from __future__ import annotations
+
+import json
+import re
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+from perf_k6_quickpizza.slo import PROFILES, SLO_FILE, load_budgets
+
+pytestmark = pytest.mark.offline
+
+SCENARIOS = SLO_FILE.parent / "scenarios"
+
+
+def _write(tmp_path: Path, budgets: dict[str, Any]) -> Path:
+    path = tmp_path / "slo.json"
+    path.write_text(json.dumps(budgets), encoding="utf-8")
+    return path
+
+
+def _valid() -> dict[str, Any]:
+    budgets: dict[str, Any] = json.loads(SLO_FILE.read_text(encoding="utf-8"))
+    return budgets
+
+
+def test_the_committed_slo_file_has_a_budget_for_every_profile():
+    assert set(load_budgets()) == set(PROFILES)
+
+
+def test_stress_stops_once_its_error_budget_is_spent():
+    assert load_budgets()["stress"].abort_on_fail
+
+
+def test_load_budget_is_no_looser_than_stress():
+    budgets = load_budgets()
+    assert budgets["load"].p95_ms <= budgets["stress"].p95_ms
+
+
+@pytest.mark.parametrize(
+    ("profile", "change", "message"),
+    [
+        pytest.param("load", {"p95_ms": 0}, "greater than 0", id="zero-latency-budget"),
+        pytest.param("load", {"error_rate": 0.2}, "less than or equal", id="error-rate-over-5pct"),
+        pytest.param("smoke", {"p59_ms": 500}, "Extra inputs", id="typo-in-a-key"),
+        pytest.param("stress", {"delay_abort_eval": "soon"}, "pattern", id="bad-duration"),
+    ],
+)
+def test_a_meaningless_budget_is_rejected(tmp_path, profile, change, message):
+    budgets = _valid()
+    budgets[profile] = {**budgets[profile], **change}
+    with pytest.raises(ValueError, match=message):
+        load_budgets(_write(tmp_path, budgets))
+
+
+def test_a_missing_profile_is_rejected(tmp_path):
+    budgets = _valid()
+    del budgets["load"]
+    with pytest.raises(ValueError, match="missing profiles"):
+        load_budgets(_write(tmp_path, budgets))
+
+
+@pytest.mark.parametrize("profile", PROFILES)
+def test_each_scenario_takes_its_thresholds_from_the_slo_file(profile):
+    script = (SCENARIOS / f"{profile}.js").read_text(encoding="utf-8")
+    assert f"thresholdsFor('{profile}')" in script
+    assert f"summaryFor('{profile}')" in script
+    assert f"targetFor('{profile}')" in script
+
+
+def test_checks_never_decide_pass_or_fail():
+    for script in SCENARIOS.glob("*.js"):
+        assert not re.search(r"\bchecks\s*:", script.read_text(encoding="utf-8")), script.name

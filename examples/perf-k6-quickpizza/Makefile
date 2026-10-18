@@ -1,0 +1,57 @@
+.DEFAULT_GOAL := help
+.PHONY: help install lint fmt typecheck test-offline test smoke load stress report check clean docker-smoke
+
+# The target of every profile; override per run: `make load APP_TARGET_URL=http://localhost:3333`.
+APP_TARGET_URL ?= https://quickpizza.grafana.com
+K6 ?= k6
+PYTEST := uv run pytest
+GUARD := PYTHONPATH=src uv run python -m perf_k6_quickpizza.guard
+K6_RUN := $(K6) run -e TARGET_URL=$(APP_TARGET_URL)
+
+help: ## list the targets
+	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-14s %s\n", $$1, $$2}'
+
+install: ## create .venv from uv.lock (k6 itself: https://grafana.com/docs/k6/latest/set-up/install-k6/)
+	uv sync
+
+lint: ## ruff lint + format check
+	uv run ruff check .
+	uv run ruff format --check .
+
+fmt: ## apply ruff fixes and formatting
+	uv run ruff check --fix .
+	uv run ruff format .
+
+typecheck: ## mypy, strict on src/
+	uv run mypy
+
+test-offline: ## SLO file, target guard and settings: no network
+	$(PYTEST) -m offline
+
+test: test-offline smoke ## offline checks, then the smoke profile
+
+smoke: ## 1 VU for 30 s against APP_TARGET_URL; non-zero exit when an SLO is breached
+	@mkdir -p reports
+	$(K6_RUN) k6/scenarios/smoke.js
+
+load: ## constant arrival rate; refuses a non-local target unless ALLOW_REMOTE_LOAD=1
+	$(GUARD) load "$(APP_TARGET_URL)"
+	@mkdir -p reports
+	$(K6_RUN) k6/scenarios/load.js
+
+stress: ## ramp until the error budget is spent; same guard as load
+	$(GUARD) stress "$(APP_TARGET_URL)"
+	@mkdir -p reports
+	$(K6_RUN) k6/scenarios/stress.js
+
+report: ## list the summaries written so far
+	@ls reports/k6-*-summary.html 2>/dev/null || echo "no summary yet: run make smoke"
+
+check: lint typecheck test-offline ## everything CI checks before the smoke run
+
+docker-smoke: ## the smoke profile in the k6 container (no local k6 needed)
+	@mkdir -p reports
+	docker compose run --rm --build k6
+
+clean: ## remove reports and caches
+	rm -rf reports .pytest_cache .mypy_cache .ruff_cache

@@ -1,0 +1,4 @@
+name,max_calories_per_slice,must_be_vegetarian,min_toppings,max_toppings
+anything,1000,false,2,5
+vegetarian,800,true,2,4
+light,500,false,1,3
