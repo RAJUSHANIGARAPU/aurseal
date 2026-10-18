@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Swag Labs (offline fixture)</title></head>
+<body>
+<!-- The sign-in markup of the live site, reduced to what the page objects touch. -->
+<div data-test="login-container">
+  <form id="login">
+    <input data-test="username" placeholder="Username">
+    <input data-test="password" placeholder="Password" type="password">
+    <input data-test="login-button" type="submit" value="Login">
+  </form>
+  <div id="error-slot"></div>
+</div>
+<script>
+  const USERS = {standard_user: 0, performance_glitch_user: 1500, locked_out_user: -1};
+  document.getElementById("login").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const user = document.querySelector("[data-test=username]").value;
+    const password = document.querySelector("[data-test=password]").value;
+    let message = "";
+    if (!user) message = "Epic sadface: Username is required";
+    else if (!password) message = "Epic sadface: Password is required";
+    else if (!(user in USERS) || password !== "secret_sauce")
+      message = "Epic sadface: Username and password do not match any user in this service";
+    else if (USERS[user] < 0) message = "Epic sadface: Sorry, this user has been locked out.";
+    if (message) {
+      document.getElementById("error-slot").innerHTML = `<h3 data-test="error">${message}</h3>`;
+      return;
+    }
+    setTimeout(() => {
+      document.body.innerHTML = '<span data-test="title">Products</span>';
+    }, USERS[user]);
+  });
+</script>
+</body>
+</html>
