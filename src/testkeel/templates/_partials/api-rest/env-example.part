@@ -1,0 +1,2 @@
+APP_API_BASE_URL={{ api_base_url }}
+APP_MAX_RETRIES=2

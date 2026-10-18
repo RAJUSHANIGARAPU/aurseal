@@ -1,0 +1,18 @@
+  test:
+    needs: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          python-version: "{{ python_version }}"
+      - run: uv sync --locked
+      - name: Tests
+        run: uv run pytest -n auto -o log_cli=true
+      - uses: actions/upload-artifact@v7
+        if: {% raw %}${{ !cancelled() }}{% endraw %}
+        with:
+          name: reports
+          path: reports/
+          retention-days: 7

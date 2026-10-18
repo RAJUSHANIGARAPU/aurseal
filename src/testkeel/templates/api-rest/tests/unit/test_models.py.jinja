@@ -1,0 +1,47 @@
+"""Negative input matrix, generated from the model so a new field is covered automatically."""
+
+from __future__ import annotations
+
+from typing import Any
+
+import pytest
+from pydantic import ValidationError
+
+from {{ package_name }}.models import NewItem
+
+pytestmark = pytest.mark.offline
+
+VALID: dict[str, Any] = {"name": "Kettle", "price": 24.5, "tags": ["kitchen"]}
+WRONG_TYPE: dict[Any, Any] = {str: 123, float: "cheap", list[str]: "kitchen"}
+REQUIRED = [name for name, field in NewItem.model_fields.items() if field.is_required()]
+
+
+def test_the_valid_payload_is_accepted():
+    assert NewItem.model_validate(VALID).name == "Kettle"
+
+
+@pytest.mark.parametrize("field", REQUIRED)
+def test_a_missing_required_field_is_rejected(field):
+    payload = {key: value for key, value in VALID.items() if key != field}
+    with pytest.raises(ValidationError, match=field):
+        NewItem.model_validate(payload)
+
+
+@pytest.mark.parametrize("field", list(NewItem.model_fields))
+def test_a_value_of_the_wrong_type_is_rejected(field):
+    wrong = WRONG_TYPE[NewItem.model_fields[field].annotation]
+    with pytest.raises(ValidationError, match=field):
+        NewItem.model_validate({**VALID, field: wrong})
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        pytest.param("name", "", id="empty-name"),
+        pytest.param("price", -0.01, id="negative-price"),
+        pytest.param("surprise", 1, id="unknown-field"),
+    ],
+)
+def test_a_value_outside_the_rules_is_rejected(field, value):
+    with pytest.raises(ValidationError):
+        NewItem.model_validate({**VALID, field: value})

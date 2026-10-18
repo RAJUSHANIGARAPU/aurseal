@@ -1,0 +1,5 @@
+| Client, then services, then tests _(confirm)_ | Raw `httpx` calls in tests | Transport concerns (timeouts, retries, logging) live once; tests read as behaviour | One more layer between a test and the wire |
+| Pydantic models and a JSON Schema contract _(confirm)_ | Asserting on raw dicts | Models give typed access; the schema catches drift the model would coerce away | Two descriptions of one payload to keep in step |
+| Retries only for GET, with backoff _(confirm)_ | Retry every request; no retries | Repeating a GET is safe; repeating a POST can create a duplicate | A failed write surfaces at once instead of being retried |
+| Each test creates and owns its data _(confirm)_ | Shared seed data | Tests can run in any order and in parallel on a shared environment | More requests per test |
+| Offline tier on `httpx.MockTransport` _(confirm)_ | A mock server; `respx` | No extra dependency or process, and the client is tested exactly as it runs | Mocked responses can drift from the real API: the live tests cover that |

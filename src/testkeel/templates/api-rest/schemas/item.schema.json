@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Item",
+  "type": "object",
+  "required": ["id", "name", "price"],
+  "properties": {
+    "id": {"type": "integer"},
+    "name": {"type": "string", "minLength": 1},
+    "price": {"type": "number", "minimum": 0},
+    "tags": {"type": "array", "items": {"type": "string"}}
+  },
+  "additionalProperties": true
+}
