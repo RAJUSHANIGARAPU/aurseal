@@ -49,6 +49,12 @@ jobs:
       - name: Type check (strict)
         run: uv run --no-sync mypy --strict src/testkeel
 
+      - name: Every action reference exists
+        # Generated projects copy the template workflows; a ref that does not exist breaks them all.
+        run: python3 -m tools.action_refs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
       - name: Build the wheel and sdist
         run: uv build --out-dir dist
 
