@@ -1,0 +1,44 @@
+# Minimal stand-in for the real templates, same layout: one question file, two passes.
+_min_copier_version: "9.19"
+_subdirectory: "{{ '_base' if layer == 'base' else type }}"
+_templates_suffix: .jinja
+_answers_file: .copier-answers.yml
+
+type:
+  type: str
+  choices: [web-ui, api-rest, strategy]
+layer:
+  type: str
+  default: base
+  when: false
+project_name:
+  type: str
+project_slug:
+  type: str
+company:
+  type: str
+  default: ""
+task_summary:
+  type: str
+  default: ""
+target_url:
+  type: str
+  default: "https://example.test"
+api_base_url:
+  type: str
+  default: "https://api.example.test"
+python_version:
+  type: str
+  default: "3.12"
+report:
+  type: str
+  default: html
+docker:
+  type: bool
+  default: true
+ci:
+  type: str
+  default: github
+credit:
+  type: bool
+  default: false
