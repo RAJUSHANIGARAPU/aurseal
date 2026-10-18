@@ -34,7 +34,7 @@ jobs:
         working-directory: examples/web-ui-saucedemo
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.2.0
       - run: uv sync --locked
       - name: Live suite
         id: live
@@ -60,7 +60,7 @@ jobs:
         working-directory: examples/api-rest-restful-booker
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.2.0
       - run: uv sync --locked
       - name: Live suite
         id: live
@@ -86,7 +86,7 @@ jobs:
         working-directory: examples/graphql-countries
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.2.0
       - run: uv sync --locked
       - name: Live suite
         id: live
@@ -116,7 +116,7 @@ jobs:
         working-directory: examples/a11y-w3c-bad
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.2.0
       - run: uv sync --locked
       - name: Live suite
         id: live
@@ -152,7 +152,7 @@ jobs:
       - uses: grafana/setup-k6-action@v1
         with:
           k6-version: "2.3.0"
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.2.0
       - run: uv sync --locked
       - name: Live smoke
         id: live
@@ -193,7 +193,7 @@ jobs:
         working-directory: examples/perf-locust-quickpizza
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.2.0
       - run: uv sync --locked
       - name: Wait for quickpizza-local
         run: |
