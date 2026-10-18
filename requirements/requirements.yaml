@@ -1,0 +1,33 @@
+# Product requirements for the in-repo demo service. Reviewed like code: add, retitle or
+# retire a requirement in a pull request. Tests link to these ids with
+# @pytest.mark.requirement("REQ-n"); see docs/features/requirements-linking.md.
+requirements:
+  - id: REQ-1
+    title: A customer can be created and read back unchanged
+    priority: must
+    labels: [customers]
+  - id: REQ-2
+    title: A subscription can be created for an existing customer
+    priority: must
+    labels: [subscriptions]
+  - id: REQ-3
+    title: A cancellation refunds the unused part of the paid period
+    priority: must
+    labels: [subscriptions, billing]
+  - id: REQ-4
+    title: Every invoice total equals the sum of its lines
+    priority: must
+    labels: [billing]
+  - id: REQ-5
+    title: A changed subscription produces a document describing the change
+    priority: should
+    labels: [documents]
+  - id: REQ-6
+    title: Search finds a customer by name
+    priority: could
+    labels: [search]
+  - id: REQ-7
+    title: A quote is calculated from the selected plan
+    priority: should
+    labels: [plans]
+    status: retired

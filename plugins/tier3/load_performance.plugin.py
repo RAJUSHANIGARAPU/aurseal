@@ -1,76 +1,45 @@
-"""Load performance plugin — generates a k6 script for real routes and runs it.
+"""Load performance plugin — a thin adapter over ``checks.load`` (k6 with thresholds).
 
-Two things used to make this plugin's ``pass`` meaningless.
+The engine does the work; this file builds its inputs from the context and maps the
+outcome. What the plugin guarantees:
 
-An empty route list was replaced with ``["http://localhost"]``, so a run that
-had been told nothing about the product load-tested a placeholder and reported
-health. Nothing downstream could tell that apart from ten VUs against the real
-service. There is no honest verdict available without routes, so the plugin now
-says so: ``unknown``.
+* no routes, or only routes k6 cannot fetch ⇒ ``unknown`` (no target is ever invented);
+* no profile, or a profile without thresholds ⇒ ``unknown``: k6 only fails on a crossed
+  threshold, so a run with none could only ever pass;
+* k6 absent, cut short, exiting with a non-threshold code, or leaving no summary ⇒
+  ``unknown``;
+* a crossed threshold ⇒ ``fail``, naming the threshold from the parsed summary;
+* every threshold held on a run that made requests ⇒ ``pass``;
+* dry run ⇒ ``skip`` with the rendered script path; k6 is not started.
 
-The script it executed was model-generated JavaScript, written straight to disk
-and handed to ``k6 run`` with no check beyond "the reply was not empty". There
-is no JavaScript parser in this process, so there was no check available — the
-only thing standing between an outage message and a subprocess was the prose
-sniffing that ``api.llm.base`` exists to abolish. The model path is therefore
-gone: the executed script is generated deterministically from the routes. A
-load test is a measurement, and a measurement whose instrument cannot be
-inspected is not evidence.
-
-What is left can genuinely fail, which makes this the one tier-3 plugin with a
-``fail`` to return: k6 exits non-zero when a check or a threshold is breached,
-and that is a real finding about the product, not about the harness.
+The executed script is rendered deterministically from the routes and the profile, with
+every value JSON-encoded; no model writes code that a subprocess then runs.
 """
 
 from __future__ import annotations
 
-import shutil
-import subprocess
 import sys
 from pathlib import Path
 
-from plugins._base_plugin import BasePlugin, PluginPriority, PluginResult, PluginStatus
+from checks._outcome import CheckOutcome
+from checks._sink import REPO_ROOT, JsonlSink
+from checks.load import k6
+from checks.load.profile import LoadProfile, ProfileError
+from checks.load.runner import DEFAULT_TIMEOUT_S, K6Runner, run_load, usable_routes
+from plugins._base_plugin import BasePlugin, PluginPriority, PluginResult
+from plugins._check_adapter import plugin_result
 
-_OUT_DIR = Path("ai_generated_tests/load")
-_SCRIPT_NAME = "load_test.js"
-_RUN_TIMEOUT_S = 120
-
-_K6_TEMPLATE = """import http from 'k6/http';
-import {{ check, sleep }} from 'k6';
-
-export const options = {{
-  vus: 10,
-  duration: '30s',
-}};
-
-export default function () {{
-  const routes = {routes};
-  routes.forEach(url => {{
-    const res = http.get(url);
-    check(res, {{ 'status is 200': (r) => r.status === 200 }});
-  }});
-  sleep(1);
-}}
-"""
+_OUT_DIR = REPO_ROOT / "reports" / "load"
 
 
-def _usable_routes(raw: object) -> tuple[list[str], list[str]]:
-    """Split the supplied routes into ones k6 can fetch and ones it cannot.
-
-    Rejected entries are returned rather than dropped: "you gave me four routes
-    and none of them had a scheme" is actionable, and "no routes" is not.
-    """
-    if not isinstance(raw, list | tuple):
-        return [], []
-    usable: list[str] = []
-    rejected: list[str] = []
-    for entry in raw:
-        candidate = entry.strip() if isinstance(entry, str) else ""
-        if candidate.startswith(("http://", "https://")) and len(candidate) > len("https://"):
-            usable.append(candidate)
-        else:
-            rejected.append(repr(entry))
-    return usable, rejected
+def _profile(raw: object) -> LoadProfile:
+    if isinstance(raw, LoadProfile):
+        return raw
+    if isinstance(raw, dict):
+        return LoadProfile.from_dict(raw)
+    if isinstance(raw, str | Path):
+        return LoadProfile.from_json(raw)
+    raise ProfileError("no load profile was supplied: there are no thresholds to judge")
 
 
 class LoadPerformancePlugin(BasePlugin):
@@ -78,91 +47,42 @@ class LoadPerformancePlugin(BasePlugin):
     priority = PluginPriority.NORMAL
     trigger_conditions = ["pre_deploy", "manual"]
 
-    def _write_script(self, routes: list[str], out_dir: Path) -> str:
-        out_dir.mkdir(parents=True, exist_ok=True)
-        routes_json = "[" + ", ".join(f'"{r}"' for r in routes) + "]"
-        out_file = out_dir / _SCRIPT_NAME
-        out_file.write_text(_K6_TEMPLATE.format(routes=routes_json), encoding="utf-8")
-        return str(out_file)
-
     def run(self, context: dict) -> PluginResult:
-        routes, rejected = _usable_routes(context.get("routes"))
-
+        routes, rejected = usable_routes(context.get("routes"))
         if not routes:
-            return PluginResult(
-                status=PluginStatus.UNKNOWN.value,
-                findings=[
-                    {
-                        "reason": "no usable routes were supplied — nothing was load tested",
-                        "rejected_routes": rejected,
-                    }
-                ],
-                dry_run=bool(context.get("dry_run")),
+            return plugin_result(
+                CheckOutcome.unknown(
+                    k6.KIND,
+                    "no usable routes were supplied: nothing was load tested",
+                    findings=[{"rejected_routes": rejected}],
+                )
             )
-
-        script_path = self._write_script(routes, Path(context.get("out_dir") or _OUT_DIR))
-        base_finding = {"script_path": script_path, "routes": routes}
-        if rejected:
-            base_finding["rejected_routes"] = rejected
-
-        if context.get("dry_run"):
-            return PluginResult(
-                status=PluginStatus.PASS.value,
-                findings=[base_finding],
-                dry_run=True,
-            )
-
-        if shutil.which("k6") is None:
-            # Not a SKIP. Nobody declared this run exempt from load testing; the
-            # tool it needs is simply absent, so the question was asked and went
-            # unanswered.
-            return PluginResult(
-                status=PluginStatus.UNKNOWN.value,
-                findings=[{**base_finding, "reason": "k6 is not installed — no load was applied"}],
-            )
-
         try:
-            proc = subprocess.run(
-                ["k6", "run", script_path],
-                capture_output=True,
-                text=True,
-                timeout=_RUN_TIMEOUT_S,
-            )
-        except subprocess.TimeoutExpired:
-            # The load test was cut off part-way. It neither passed nor found a
-            # breach — it produced no measurement at all.
-            return PluginResult(
-                status=PluginStatus.UNKNOWN.value,
-                findings=[
-                    {
-                        **base_finding,
-                        "reason": f"k6 did not finish within {_RUN_TIMEOUT_S}s",
-                    }
-                ],
-            )
-        except OSError as exc:
-            return PluginResult(
-                status=PluginStatus.ERROR.value,
-                findings=[{**base_finding, "error": f"{type(exc).__name__}: {exc}"}],
+            profile = _profile(context.get("profile"))
+        except ProfileError as exc:
+            return plugin_result(CheckOutcome.unknown(k6.KIND, f"profile refused: {exc}"))
+
+        out_dir = Path(context.get("out_dir") or _OUT_DIR)
+        if context.get("dry_run"):
+            out_dir.mkdir(parents=True, exist_ok=True)
+            script = out_dir / "load_test.js"
+            script.write_text(k6.render_script(routes, profile), encoding="utf-8")
+            return plugin_result(
+                CheckOutcome.skipped(
+                    k6.KIND, "dry run: script rendered, k6 not started", evidence=[script]
+                ),
+                script_path=str(script),
             )
 
-        output = (proc.stdout + proc.stderr)[-500:]
-        if proc.returncode == 0:
-            return PluginResult(
-                status=PluginStatus.PASS.value,
-                findings=[{**base_finding, "exit_code": 0, "output": output}],
-            )
-        return PluginResult(
-            status=PluginStatus.FAIL.value,
-            findings=[
-                {
-                    **base_finding,
-                    "exit_code": proc.returncode,
-                    "output": output,
-                    "reason": "k6 reported failed checks or breached thresholds",
-                }
-            ],
-        )
+        runner = K6Runner(context.get("k6_bin"), int(context.get("timeout_s", DEFAULT_TIMEOUT_S)))
+        sink = context.get("metric_sink")
+        if sink is None and context.get("record_metrics"):
+            sink = JsonlSink()
+        outcome = run_load(routes, profile, out_dir, runner=runner, sink=sink)
+        extra = {"routes": routes}
+        if rejected:
+            extra["rejected_routes"] = rejected
+        return plugin_result(outcome, **extra)
 
 
 if __name__ == "__main__":
@@ -171,11 +91,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--route", action="append", default=[], help="repeatable target URL")
+    parser.add_argument("--profile", default=None, help="load profile JSON (thresholds)")
     args = parser.parse_args()
-    ctx: dict = {"routes": args.route}
+    ctx: dict = {"routes": args.route, "profile": args.profile}
     plugin = LoadPerformancePlugin()
     result = plugin.dry_run(ctx) if args.dry_run else plugin.execute(ctx)
     print(f"status={result.status} findings={result.findings}")
-    # `unknown` exits non-zero: the old exit code treated "learned nothing" as
-    # success, which is the same lie the status vocabulary was changed to stop.
-    sys.exit(0 if result.status in (PluginStatus.PASS.value, PluginStatus.WARN.value) else 1)
+    sys.exit(0 if result.status in ("pass", "skip") else 1)

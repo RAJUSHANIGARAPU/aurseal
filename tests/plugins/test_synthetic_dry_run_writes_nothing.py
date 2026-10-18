@@ -1,33 +1,28 @@
 """
 A dry run that has already written the file is not a dry run.
 
-``synthetic_data_edge`` created ``ai_generated_tests/synthetic/`` and wrote the
-profiles four lines *above* its ``if is_dry:`` branch, then returned a preview
-describing what it would do. Every sibling plugin guards the write; this one
-performed it and reported it as a plan.
-
-Its generated test was ``assert profile is not None`` over a parametrised list
-of dicts — twenty green tests named after edge cases that had never been sent
-anywhere. And when Faker was missing the fallback produced
-``profile_0 … profile_19``, with none of the long names, RTL overrides or
-zero-width characters the plugin exists to produce, reported identically to a
-good run.
+``synthetic_data_edge`` once created ``ai_generated_tests/synthetic/`` and wrote
+its profiles above its ``if is_dry:`` branch, then returned a preview describing
+what it would do. It also generated a Playwright test whose body was a skip:
+twenty test ids over records that were never sent anywhere. The plugin now
+probes a target with the records instead, and writes no test stub at all.
 """
 
 from __future__ import annotations
 
 import json
-import sys
 
 import pytest
 
 from tests.plugins._tier4 import load
+from tests.plugins.test_synthetic_honest_status import PROFILE, FakeHttp
 
 
 @pytest.fixture
 def workspace(tmp_path, monkeypatch):
     """The output path is cwd-relative, so chdir is what isolates the run."""
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("METRICS_DIR", str(tmp_path / "metrics"))
     return tmp_path
 
 
@@ -39,11 +34,16 @@ def _output(workspace):
     return workspace / "ai_generated_tests" / "synthetic"
 
 
+def _context(**extra):
+    return {"profile": PROFILE, "target": "http://127.0.0.1:9", "http": FakeHttp(), **extra}
+
+
 class TestADryRunTouchesNothing:
     def test_it_writes_no_files(self, workspace):
-        result = _plugin().dry_run({})
+        result = _plugin().dry_run(_context())
 
         assert not _output(workspace).exists()
+        assert not (workspace / "metrics").exists()
         assert result.dry_run is True
 
     def test_it_does_not_overwrite_an_existing_profiles_file(self, workspace):
@@ -51,54 +51,37 @@ class TestADryRunTouchesNothing:
         out.mkdir(parents=True)
         (out / "synthetic_profiles.json").write_text('["kept"]', encoding="utf-8")
 
-        _plugin().dry_run({})
+        _plugin().dry_run(_context())
 
         assert (out / "synthetic_profiles.json").read_text() == '["kept"]'
 
     def test_it_is_scored_neither_way(self, workspace):
-        assert _plugin().dry_run({}).status == "skip"
+        assert _plugin().dry_run(_context()).status == "skip"
 
 
-class TestTheGeneratedStubCannotBeMistakenForCoverage:
-    def test_it_skips_instead_of_asserting_not_none(self, workspace):
-        _plugin().run({})
+class TestNoStubIsWritten:
+    def test_a_real_run_writes_no_test_file(self, workspace):
+        _plugin().run(_context())
 
-        body = (_output(workspace) / "playwright_tests" / "test_synthetic_profiles.py").read_text()
-        assert "assert profile is not None" not in body
-        assert "pytest.skip" in body
+        assert not (_output(workspace) / "playwright_tests").exists()
+        assert not list(workspace.rglob("test_*.py"))
 
 
-class TestItStillGenerates:
+class TestItStillProbesTheExtremes:
     """Positive controls: a plugin that wrote nothing at all would pass every
     dry-run test above."""
 
-    def test_a_real_run_writes_the_profiles(self, workspace):
-        result = _plugin().run({})
+    def test_a_real_run_writes_records_and_verdicts(self, workspace):
+        result = _plugin().run(_context())
 
-        profiles = json.loads((_output(workspace) / "synthetic_profiles.json").read_text())
-        assert len(profiles) == 20
-        assert result.findings[0]["profiles_generated"] == 20
+        records = json.loads((_output(workspace) / "synthetic_profiles.json").read_text())
+        assert len(records) == result.findings[0]["probed"] > 0
+        assert {r["mode"] for r in records} == {"valid", "boundary", "invalid"}
 
-    def test_the_profiles_are_still_extreme(self, workspace):
-        _plugin().run({})
+    def test_the_records_are_still_extreme(self, workspace):
+        _plugin().run(_context())
 
-        profiles = json.loads((_output(workspace) / "synthetic_profiles.json").read_text())
-        names = [p.get("name", "") for p in profiles]
+        records = json.loads((_output(workspace) / "synthetic_profiles.json").read_text())
+        names = [r["values"].get("name", "") for r in records]
         assert "A" * 256 in names
-        assert any("‮" in name for name in names), "the RTL override profile is gone"
-
-    def test_a_real_run_is_scored_neither_way(self, workspace):
-        """Writing fixtures is not a verdict about the product."""
-        assert _plugin().run({}).status == "skip"
-
-
-class TestADegradedGeneratorSaysSo:
-    def test_a_missing_faker_reaches_no_verdict(self, workspace, monkeypatch):
-        """The fallback profiles carry no edge cases, and used to report the
-        same ``profiles_generated: 20`` as a good run."""
-        monkeypatch.setitem(sys.modules, "faker", None)
-
-        result = _plugin().run({})
-
-        assert result.status == "unknown"
-        assert result.findings[0]["faker_available"] is False
+        assert any("‮" in str(name) for name in names), "the RTL override record is gone"

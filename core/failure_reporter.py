@@ -11,8 +11,15 @@ Bundle schema:
   "stackTrace":     "...",
   "screenshot":     "<base64 PNG>",
   "consoleErrors":  ["TypeError: Cannot read properties of null"],
-  "failedRequests": ["POST /api/auth/login → 401"]
+  "failedRequests": ["POST /api/auth/login → 401"],
+  "context":        {"runId": "...", "deployedVersion": "...", "trace": "..."}
 }
+
+The stack trace is taken from the exception itself. ``traceback.format_exc()``
+only knows about an exception currently being handled, and the bundle is written
+from a report hook long after the test's ``except`` is gone, so it used to record
+``NoneType: None`` for every failure. The trace is capped at ``MAX_STACK_CHARS``
+from the end, where the frames that failed are.
 """
 
 import base64
@@ -20,6 +27,18 @@ import json
 import traceback
 from datetime import datetime, timezone
 from pathlib import Path
+
+from core.logger import logger
+
+MAX_STACK_CHARS = 4000
+
+
+def format_stack(error: BaseException) -> str:
+    """The exception's own traceback, keeping the last ``MAX_STACK_CHARS`` characters."""
+    text = "".join(traceback.format_exception(type(error), error, error.__traceback__))
+    if len(text) <= MAX_STACK_CHARS:
+        return text
+    return "...[truncated]\n" + text[-MAX_STACK_CHARS:]
 
 
 def write_failure_bundle(
@@ -30,6 +49,8 @@ def write_failure_bundle(
     failed_requests: list[str],
     output_dir: str = "reports/failures",
     dom_snapshot: str = "",
+    page_errors: list[str] | None = None,
+    context: dict[str, str] | None = None,
 ) -> Path | None:
     safe_name = "".join(c if c.isalnum() or c in "_-" else "_" for c in test_name)
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -43,16 +64,19 @@ def write_failure_bundle(
             "test": test_name,
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "error": str(error),
-            "stackTrace": traceback.format_exc(),
+            "errorType": type(error).__name__,
+            "stackTrace": format_stack(error),
             "screenshot": base64.b64encode(screenshot_bytes).decode() if screenshot_bytes else "",
             "consoleErrors": console_errors,
+            "pageErrors": page_errors or [],
             "failedRequests": failed_requests,
             "domSnapshot": dom_snapshot,
+            "context": context or {},
         }
 
         out_file.write_text(json.dumps(bundle, indent=2), encoding="utf-8")
         return out_file
 
     except Exception as exc:  # noqa: BLE001
-        print(f"[failure_reporter] Could not write bundle for '{test_name}': {exc}")
+        logger.warning("[failure_reporter] Could not write bundle for '%s': %s", test_name, exc)
         return None

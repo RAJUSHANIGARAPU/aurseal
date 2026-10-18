@@ -288,3 +288,99 @@ class TestTheCliRespectsMaxTokens:
             "api.llm.claude_client.subprocess.run", _CliRecorder(stdout="y" * 5_000)
         )
         assert len(ClaudeLLMClient(api_key="").complete(PROMPT, max_tokens=2048)) == 5_000
+
+
+class TestExplicitTransport:
+    """AI_TRANSPORT=auto|api|cli|none, and none never touches anything."""
+
+    @staticmethod
+    def _forbid_network(monkeypatch):
+        def boom(*_a, **_k):
+            raise AssertionError("the network was touched")
+
+        monkeypatch.setattr("api.llm.claude_client.requests.post", boom)
+
+    def test_none_returns_a_named_failure_without_network_or_subprocess(self, monkeypatch, cli):
+        from api.llm.claude_client import TRANSPORT_DISABLED
+
+        self._forbid_network(monkeypatch)
+        monkeypatch.setenv("AI_TRANSPORT", "none")
+        client = ClaudeLLMClient(api_key=KEY)
+        result = client.complete_result(PROMPT)
+        assert result.failure.kind == TRANSPORT_DISABLED
+        assert client.complete(PROMPT) == ""
+        assert cli.calls == []
+
+    def test_cli_is_used_even_with_a_key(self, monkeypatch, cli):
+        self._forbid_network(monkeypatch)
+        client = ClaudeLLMClient(api_key=KEY, transport="cli")
+        assert client.complete(PROMPT) == "cli answer"
+        assert len(cli.calls) == 1
+
+    def test_cli_transport_without_a_cli_says_so(self, monkeypatch):
+        monkeypatch.delenv("AI_CLI_PATH", raising=False)
+        monkeypatch.setattr("api.llm.claude_client.shutil.which", lambda _: None)
+        result = ClaudeLLMClient(api_key=KEY, transport="cli").complete_result(PROMPT)
+        assert result.failure.kind == base.CLI_MISSING
+
+    def test_api_transport_never_falls_back(self, monkeypatch, cli):
+        _api(monkeypatch, raises=requests.ConnectionError("name resolution failed"))
+        result = ClaudeLLMClient(api_key=KEY, transport="api").complete_result(PROMPT)
+        assert result.failure.kind == base.CONNECTION
+        assert cli.calls == []
+
+    def test_api_transport_without_a_key(self, monkeypatch, cli):
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        self._forbid_network(monkeypatch)
+        result = ClaudeLLMClient(api_key="", transport="api").complete_result(PROMPT)
+        assert result.failure.kind == base.NO_CREDENTIALS
+        assert cli.calls == []
+
+    def test_api_transport_returns_text(self, monkeypatch, cli):
+        _api(monkeypatch, response=_FakeResponse(payload={"content": [{"text": "fine"}]}))
+        assert ClaudeLLMClient(api_key=KEY, transport="api").complete(PROMPT) == "fine"
+
+    @pytest.mark.parametrize(
+        ("raw", "expected"), [(None, "auto"), ("", "auto"), (" CLI ", "cli"), ("None", "none")]
+    )
+    def test_select_transport(self, raw, expected):
+        from api.llm.claude_client import select_transport
+
+        environ = {} if raw is None else {"AI_TRANSPORT": raw}
+        assert select_transport(None, environ).value == expected
+
+    def test_explicit_beats_the_environment_and_typos_fail(self):
+        from api.llm.claude_client import Transport, select_transport
+
+        assert select_transport("api", {"AI_TRANSPORT": "none"}) is Transport.API
+        with pytest.raises(ValueError, match="AI_TRANSPORT='nnoe'"):
+            select_transport(None, {"AI_TRANSPORT": "nnoe"})
+
+    def test_effective_transport_resolves_auto(self, monkeypatch):
+        from api.llm.claude_client import Transport
+
+        monkeypatch.delenv("AI_TRANSPORT", raising=False)
+        monkeypatch.delenv("AI_CLI_PATH", raising=False)
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        assert ClaudeLLMClient(api_key=KEY).effective_transport() is Transport.API
+        monkeypatch.setattr("api.llm.claude_client.shutil.which", lambda _: "/usr/bin/claude")
+        assert ClaudeLLMClient(api_key="").effective_transport() is Transport.CLI
+        monkeypatch.setattr("api.llm.claude_client.shutil.which", lambda _: None)
+        assert ClaudeLLMClient(api_key="").effective_transport() is Transport.NONE
+        assert ClaudeLLMClient(api_key=KEY, transport="none").effective_transport() is (
+            Transport.NONE
+        )
+
+    def test_cli_path_override(self, monkeypatch, tmp_path):
+        exe = tmp_path / "my-claude"
+        exe.write_text("#!/bin/sh\n")
+        exe.chmod(0o755)
+        recorder = _CliRecorder()
+        monkeypatch.setattr("api.llm.claude_client.subprocess.run", recorder)
+        monkeypatch.setattr("api.llm.claude_client.shutil.which", lambda _: None)
+        monkeypatch.setenv("AI_CLI_PATH", str(exe))
+        assert ClaudeLLMClient(api_key="", transport="cli").complete(PROMPT) == "cli answer"
+        assert recorder.calls[0]["argv"] == [str(exe), "-p"]
+        monkeypatch.setenv("AI_CLI_PATH", str(tmp_path / "missing"))
+        result = ClaudeLLMClient(api_key="", transport="cli").complete_result(PROMPT)
+        assert result.failure.kind == base.CLI_MISSING

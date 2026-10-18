@@ -28,6 +28,19 @@ Everything else fails fast and says so:
   same odds and holds a worker for two minutes.
 * **malformed 200** — the call succeeded and was billed. Our parser is wrong, or
   the schema moved. Repeating it changes nothing.
+
+The transport can also be chosen outright with ``AI_TRANSPORT`` (or the
+``transport=`` argument), which ``select_transport`` resolves:
+
+* ``auto`` (default) — the behaviour above: API with a key, else the CLI;
+* ``api`` — the API only; no key is ``no_credentials`` and an unreachable host
+  is ``connection``, never a CLI subprocess;
+* ``cli`` — the CLI only, even when a key is set (a local run on a subscription);
+* ``none`` — no model at all: every call returns the named failure
+  ``transport_disabled`` without touching the network or spawning anything. CI
+  sets this so an AI helper can never bill or hang a pipeline.
+
+``AI_CLI_PATH`` points at a ``claude`` executable that is not on ``PATH``.
 """
 
 from __future__ import annotations
@@ -36,6 +49,8 @@ import logging
 import os
 import shutil
 import subprocess
+from collections.abc import Mapping
+from enum import Enum
 
 import requests
 
@@ -61,6 +76,48 @@ _MODEL = "claude-sonnet-4-6"
 _API_URL = "https://api.anthropic.com/v1/messages"
 _CLI_TIMEOUT_S = 120
 
+TRANSPORT_VARIABLE = "AI_TRANSPORT"
+CLI_PATH_VARIABLE = "AI_CLI_PATH"
+TRANSPORT_DISABLED = "transport_disabled"  # AI_TRANSPORT=none: nothing was attempted
+
+
+class Transport(str, Enum):
+    AUTO = "auto"
+    API = "api"
+    CLI = "cli"
+    NONE = "none"
+
+
+def select_transport(
+    explicit: str | Transport | None = None, environ: Mapping[str, str] | None = None
+) -> Transport:
+    """
+    The configured transport: ``explicit``, else ``AI_TRANSPORT``, else ``auto``.
+
+    An unknown value raises rather than quietly meaning ``auto`` — a typo in a CI
+    variable meant to switch AI off must not switch it on.
+    """
+    environ = os.environ if environ is None else environ
+    raw = explicit if explicit is not None else environ.get(TRANSPORT_VARIABLE, "")
+    if isinstance(raw, Transport):
+        return raw
+    text = (raw or "").strip().lower() or Transport.AUTO.value
+    try:
+        return Transport(text)
+    except ValueError:
+        raise ValueError(
+            f"{TRANSPORT_VARIABLE}={raw!r} is not one of {[t.value for t in Transport]}"
+        ) from None
+
+
+def _cli_executable(environ: Mapping[str, str] | None = None) -> str | None:
+    environ = os.environ if environ is None else environ
+    override = (environ.get(CLI_PATH_VARIABLE) or "").strip()
+    if override:
+        return override if os.access(override, os.X_OK) else None
+    return "claude" if shutil.which("claude") else None
+
+
 # The CLI takes no token cap, so a caller asking for 20 tokens could get an
 # essay — which then lands in the cost governor's cache and in reports. Four
 # characters per token is the usual rough conversion; capping the bytes keeps
@@ -70,13 +127,16 @@ _CHARS_PER_TOKEN = 4
 
 def _call_claude_cli(prompt: str, max_tokens: int) -> Completion:
     """Call Claude via the `claude -p` CLI."""
-    if not shutil.which("claude"):
-        return Completion.failed(CLI_MISSING, "`claude` is not on PATH")
+    executable = _cli_executable()
+    if executable is None:
+        return Completion.failed(
+            CLI_MISSING, f"`claude` is not on PATH and {CLI_PATH_VARIABLE} is not executable"
+        )
     try:
         result = subprocess.run(
             # The prompt goes on stdin, never in argv. Healer prompts carry page
             # DOM and argv is world-readable through `ps` on a shared runner.
-            ["claude", "-p"],
+            [executable, "-p"],
             input=prompt,
             capture_output=True,
             text=True,
@@ -133,9 +193,23 @@ class ClaudeLLMClient(BaseLLMClient):
          other failure classes deliberately do not fall back.
     """
 
-    def __init__(self, api_key: str | None = None, model: str = _MODEL) -> None:
+    def __init__(
+        self,
+        api_key: str | None = None,
+        model: str = _MODEL,
+        transport: str | Transport | None = None,
+    ) -> None:
         self.api_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
         self.model = model
+        self.transport = select_transport(transport)
+
+    def effective_transport(self) -> Transport:
+        """What a call would use now: ``auto`` resolved against the key and the CLI."""
+        if self.transport is not Transport.AUTO:
+            return self.transport
+        if self.api_key:
+            return Transport.API
+        return Transport.CLI if _cli_executable() else Transport.NONE
 
     def complete(self, prompt: str, max_tokens: int = 2048) -> str:
         """Send prompt to Claude and return the response text, empty on failure."""
@@ -143,6 +217,22 @@ class ClaudeLLMClient(BaseLLMClient):
 
     def complete_result(self, prompt: str, max_tokens: int = 2048) -> Completion:
         """Send prompt to Claude and return the text or a named failure."""
+        if self.transport is Transport.NONE:
+            return Completion.failed(TRANSPORT_DISABLED, f"{TRANSPORT_VARIABLE}=none")
+        if self.transport is Transport.CLI:
+            return _call_claude_cli(prompt, max_tokens)
+        if self.transport is Transport.API:
+            if not self.api_key:
+                return Completion.failed(
+                    NO_CREDENTIALS, f"{TRANSPORT_VARIABLE}=api and no ANTHROPIC_API_KEY"
+                )
+            result = self._call_api(prompt, max_tokens)
+            if not result.ok:
+                log.error(
+                    "anthropic API call failed (%s) — api transport, no fallback", result.failure
+                )
+            return result
+
         if not self.api_key:
             log.debug("no ANTHROPIC_API_KEY; using the claude CLI")
             return self._cli_or_no_credentials(prompt, max_tokens)

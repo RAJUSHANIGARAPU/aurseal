@@ -15,6 +15,9 @@ directory bought 35 points having driven no browser.
 
 Every "reports no verdict" test here is paired with a control proving the plugin
 still returns ``pass`` on a green suite and ``fail`` on a real one.
+
+``api_contract`` no longer runs a pytest suite at all — it runs the contract gate;
+its status rules live in ``test_api_contract_honest_status.py``.
 """
 
 from __future__ import annotations
@@ -32,11 +35,6 @@ SUITE = "def test_ok():\n    assert True\n"
 @pytest.fixture
 def e2e():
     return load("e2e_playwright").E2EPlaywrightPlugin()
-
-
-@pytest.fixture
-def api_contract():
-    return load("api_contract").ApiContractPlugin()
 
 
 @pytest.fixture
@@ -131,83 +129,5 @@ class TestE2EIsAnchoredToTheRepository:
 
     def test_a_dry_run_verifies_nothing_and_says_so(self, e2e, suite_dir):
         result = e2e.run({"ui_tests_dir": str(suite_dir), "dry_run": True})
-
-        assert result.status == "skip"
-
-
-class TestApiContractDoesNotInventContractBreaks:
-    def test_a_missing_test_path_is_unknown(self, api_contract, tmp_path, monkeypatch):
-        """A relative default plus a wrong cwd gave pytest exit 4, and that was
-        published as a broken API contract."""
-        FakePytest(returncode=4).install(monkeypatch)
-
-        result = api_contract.run({"contract_test_path": str(tmp_path / "nope")})
-
-        assert result.status == "unknown"
-
-    def test_an_empty_test_path_is_unknown(self, api_contract, tmp_path, monkeypatch):
-        empty = tmp_path / "empty"
-        empty.mkdir()
-        FakePytest(returncode=5).install(monkeypatch)
-
-        result = api_contract.run({"contract_test_path": str(empty)})
-
-        assert result.status == "unknown"
-
-    def test_collecting_no_tests_is_unknown(self, api_contract, suite_dir, monkeypatch):
-        FakePytest(returncode=5).install(monkeypatch)
-
-        result = api_contract.run({"contract_test_path": str(suite_dir)})
-
-        assert result.status == "unknown"
-
-    def test_a_usage_error_is_the_harness_not_the_contract(
-        self, api_contract, suite_dir, monkeypatch
-    ):
-        FakePytest(returncode=4).install(monkeypatch)
-
-        result = api_contract.run({"contract_test_path": str(suite_dir)})
-
-        assert result.status == "error"
-
-    def test_a_timeout_reaches_no_verdict(self, api_contract, suite_dir, monkeypatch):
-        FakePytest(raises=subprocess.TimeoutExpired(cmd="pytest", timeout=120)).install(monkeypatch)
-
-        result = api_contract.run({"contract_test_path": str(suite_dir)})
-
-        assert result.status == "unknown"
-
-
-class TestApiContractStillReportsRealResults:
-    """Positive controls: the plugin must keep both verdicts it is for."""
-
-    def test_a_green_contract_suite_is_a_pass(self, api_contract, suite_dir, monkeypatch):
-        FakePytest(returncode=0).install(monkeypatch)
-
-        result = api_contract.run({"contract_test_path": str(suite_dir)})
-
-        assert result.status == "pass"
-        assert result.findings[0]["test_files"] == 1
-
-    def test_a_broken_contract_is_still_a_fail(self, api_contract, suite_dir, monkeypatch):
-        FakePytest(returncode=1).install(monkeypatch)
-
-        result = api_contract.run({"contract_test_path": str(suite_dir)})
-
-        assert result.status == "fail"
-
-    def test_the_default_test_path_does_not_move_with_the_cwd(
-        self, api_contract, tmp_path, monkeypatch
-    ):
-        monkeypatch.chdir(tmp_path)
-        fake = FakePytest(returncode=0).install(monkeypatch)
-
-        result = api_contract.run({})
-
-        assert result.status == "pass"
-        assert fake.target == str(REPO_ROOT / "tests" / "contract_testing")
-
-    def test_a_dry_run_verifies_nothing_and_says_so(self, api_contract, suite_dir):
-        result = api_contract.run({"contract_test_path": str(suite_dir), "dry_run": True})
 
         assert result.status == "skip"

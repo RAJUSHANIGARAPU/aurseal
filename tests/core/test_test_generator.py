@@ -21,6 +21,7 @@ import pytest
 
 from core.ai.test_generator import TestGenerator as Generator
 from tests.core._fake_claude import GENERATED, FakeClaude, write_trace
+from traceability.review import unmark_draft
 
 SPEC = """---
 seed: false
@@ -82,7 +83,7 @@ class TestTraceGenerationSucceeds:
     def test_the_generated_code_is_returned(self, workdir, generator, monkeypatch):
         write_trace(workdir)
         FakeClaude().install(monkeypatch)
-        assert generator.generate_from_trace(page_name="wiki_search") == GENERATED
+        assert unmark_draft(generator.generate_from_trace(page_name="wiki_search")) == GENERATED
 
     def test_the_page_name_reaches_the_prompt(self, workdir, generator, monkeypatch):
         write_trace(workdir)
@@ -127,7 +128,7 @@ class TestSpecGenerationReadsTheSpec:
 
     def test_the_generated_code_is_returned(self, generator, spec, monkeypatch):
         FakeClaude().install(monkeypatch)
-        assert generator.generate_from_spec(spec) == GENERATED
+        assert unmark_draft(generator.generate_from_spec(spec)) == GENERATED
 
     def test_the_spec_body_reaches_the_prompt(self, generator, spec, monkeypatch):
         fake = FakeClaude().install(monkeypatch)
@@ -160,4 +161,4 @@ class TestPageObjectGeneration:
         """Positive control for the assertion above."""
         FakeClaude().install(monkeypatch)
         out = generator.generate_page_object("Search", "/w/index.php", "search page")
-        assert out == GENERATED
+        assert unmark_draft(out) == GENERATED

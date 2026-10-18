@@ -1,12 +1,30 @@
-"""Mutation testing plugin — runs mutmut on targeted source module."""
+"""Mutation testing plugin — a thin adapter over ``checks.mutation`` (mutmut 3.x).
+
+The old plugin called mutmut with 2.x flags (``--paths-to-mutate``,
+``--disable-mutation-types``) that mutmut 3 does not have, took the first integer on any
+line mentioning "survived" as the survivor count, reported survivors as ``warn`` (which
+counts as passing), a missing mutmut as ``skip`` and a dry run as ``pass``. Now:
+
+* scope and per-package thresholds come from ``checks/mutation/mutation.toml``; mutmut 3 is
+  configured through a generated ``[tool.mutmut]`` table in an isolated copy of the repo;
+* counts come from mutmut's per-mutant listing, cross-checked with its own totals;
+* every selected package at or above its threshold ⇒ ``pass``; any below ⇒ ``fail`` naming
+  the package and surviving mutants;
+* mutmut missing, its run failing, nothing generated, mutants left unchecked ⇒ ``unknown``;
+* a bad configuration ⇒ ``error``; dry run ⇒ ``skip`` (nothing started).
+"""
 
 from __future__ import annotations
 
-import subprocess
 import sys
 
+from checks._outcome import CheckOutcome
+from checks._sink import JsonlSink
+from checks.mutation import runner
+from checks.mutation.config import DEFAULT_CONFIG, MutationConfig
+from checks.mutation.judge import KIND
 from plugins._base_plugin import BasePlugin, PluginPriority, PluginResult
-from plugins.cost_governor import CostGovernor
+from plugins._check_adapter import plugin_result
 
 
 class MutationTestingPlugin(BasePlugin):
@@ -15,78 +33,21 @@ class MutationTestingPlugin(BasePlugin):
     trigger_conditions = ["test_change", "manual"]
 
     def run(self, context: dict) -> PluginResult:
-        target = context.get("target_module", "core/")
-        governor = context.get("cost_governor") or CostGovernor()  # noqa: F841
-
-        if context.get("dry_run"):
-            try:
-                proc = subprocess.run(
-                    [
-                        "mutmut",
-                        "run",
-                        "--no-progress",
-                        "--simple-output",
-                        f"--paths-to-mutate={target}",
-                        "--disable-mutation-types=all",
-                    ],
-                    capture_output=True,
-                    text=True,
-                    timeout=60,
-                )
-                return PluginResult(
-                    status="pass",
-                    findings=[{"target": target, "dry_run_output": proc.stdout[:500]}],
-                    dry_run=True,
-                )
-            except FileNotFoundError:
-                return PluginResult(
-                    status="pass",
-                    findings=[{"target": target, "mutmut": "not installed"}],
-                    dry_run=True,
-                )
-            except Exception as exc:  # noqa: BLE001
-                return PluginResult(
-                    status="pass",
-                    findings=[{"target": target, "error": str(exc)}],
-                    dry_run=True,
-                )
-
         try:
-            proc = subprocess.run(
-                ["mutmut", "run", "--paths-to-mutate", target],
-                capture_output=True,
-                text=True,
-                timeout=600,
+            config = MutationConfig.from_pyproject(context.get("config") or DEFAULT_CONFIG)
+            scopes = config.select(context.get("packages"))
+        except ValueError as exc:
+            return plugin_result(CheckOutcome.error(KIND, f"configuration rejected: {exc}"))
+        packages = [s.name for s in scopes]
+        if context.get("dry_run"):
+            return plugin_result(
+                CheckOutcome.skipped(KIND, "dry run: mutmut not started"), packages=packages
             )
-            output = (proc.stdout + proc.stderr).strip()
-
-            # Parse surviving mutants count
-            surviving = 0
-            for line in output.split("\n"):
-                if "survived" in line.lower():
-                    parts = line.split()
-                    for p in parts:
-                        if p.isdigit():
-                            surviving = int(p)
-                            break
-
-            status = "pass" if surviving == 0 else "warn"
-            return PluginResult(
-                status=status,
-                findings=[
-                    {
-                        "target": target,
-                        "surviving_mutants": surviving,
-                        "output": output[-500:],
-                    }
-                ],
-            )
-        except FileNotFoundError:
-            return PluginResult(status="skip", findings=[{"mutmut": "not installed"}])
-        except subprocess.TimeoutExpired:
-            return PluginResult(status="error", findings=[{"error": "mutmut timed out"}])
-        except Exception as exc:  # noqa: BLE001
-            return PluginResult(status="error", findings=[{"error": str(exc)}])
+        sink = context.get("metric_sink")
+        if sink is None and context.get("record_metrics"):
+            sink = JsonlSink()
+        outcome = runner.run_mutation(config, packages, sink=sink)
+        return plugin_result(outcome, packages=packages)
 
 
 if __name__ == "__main__":
@@ -94,9 +55,10 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--package", action="append", default=None)
     args = parser.parse_args()
-    ctx: dict = {"target_module": "core/"}
+    ctx: dict = {"packages": args.package}
     plugin = MutationTestingPlugin()
     result = plugin.dry_run(ctx) if args.dry_run else plugin.execute(ctx)
     print(f"status={result.status} findings={result.findings}")
-    sys.exit(0 if result.status in ("pass", "skip", "warn") else 1)
+    sys.exit(0 if result.status in ("pass", "skip") else 1)

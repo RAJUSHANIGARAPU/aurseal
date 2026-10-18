@@ -44,6 +44,8 @@ from pathlib import Path
 
 import yaml
 
+from gate.browsers import strip_browser_param
+
 # Flags that change how a run executes but not which tests it selects.
 # `-n auto` distributes across workers; `--reruns` retries failures; the
 # reporting flags only decide what gets written. None of them alter the set of
@@ -53,9 +55,30 @@ _EXECUTION_ONLY_FLAGS: frozenset[str] = frozenset(
 )
 
 # Same, but these consume a following value (`-n auto`, `--reruns 2`).
+# The shard options split one selection across machines: the union of the
+# shards is the unsharded selection, which is what the gate must replay.
 _EXECUTION_ONLY_FLAGS_WITH_VALUE: frozenset[str] = frozenset(
-    {"-n", "--numprocesses", "--reruns", "--reruns-delay", "--alluredir", "--tb"}
+    {
+        "-n",
+        "--numprocesses",
+        "--reruns",
+        "--reruns-delay",
+        "--alluredir",
+        "--tb",
+        "--shard",
+        "--shard-durations",
+        "--shard-dir",
+        # Which engine a browser test runs on. A matrix leg selects the same tests as
+        # the default engine; its node ids differ only in the engine parameter.
+        "--browser",
+        "--browser-channel",
+    }
 )
+
+# Plugins that only change how the selection is executed. `-p <name>` naming one
+# of these is dropped together with its options; any other `-p` is kept, since a
+# plugin can change collection.
+_EXECUTION_ONLY_PLUGINS: frozenset[str] = frozenset({"gate.pytest_shard"})
 
 # pytest exits 5 when a selection matches nothing. That is a legitimate answer
 # to "what does this invocation select?" — the answer is "nothing" — and it is
@@ -158,9 +181,15 @@ def strip_execution_only_flags(args: tuple[str, ...] | list[str]) -> list[str]:
     kept: list[str] = []
     skip_next = False
 
-    for arg in args:
+    for index, arg in enumerate(args):
         if skip_next:
             skip_next = False
+            continue
+
+        if arg == "-p" and index + 1 < len(args) and args[index + 1] in _EXECUTION_ONLY_PLUGINS:
+            skip_next = True
+            continue
+        if arg.startswith("-p") and arg[2:].lstrip("=") in _EXECUTION_ONLY_PLUGINS:
             continue
 
         name = arg.split("=", 1)[0]
@@ -287,6 +316,17 @@ class SelectionReport:
         return "\n".join(lines)
 
 
+def match_covered(everything: set[str], selected: set[str]) -> set[str]:
+    """The collected ids a selection covers, treating engine variants as one test.
+
+    ``test_x[firefox]`` selected by a matrix leg covers ``test_x[chromium]`` in the
+    default collection: same test, different engine.
+    """
+    direct = selected & everything
+    by_identity = {strip_browser_param(nid) for nid in selected}
+    return direct | {nid for nid in everything if strip_browser_param(nid) in by_identity}
+
+
 def analyse(workflow_path: str | Path, rootdir: str | Path) -> SelectionReport:
     """Compare everything collectable against everything CI selects."""
     everything = collect_node_ids([], rootdir)
@@ -300,6 +340,6 @@ def analyse(workflow_path: str | Path, rootdir: str | Path) -> SelectionReport:
         all_tests=frozenset(everything),
         # A workflow can name a path that no longer exists, or select a test
         # outside the current collection; intersecting keeps the ratio honest.
-        covered=frozenset(covered & everything),
+        covered=frozenset(match_covered(everything, covered)),
         invocations=tuple(invocations),
     )

@@ -1,28 +1,38 @@
 """
-Synthetic data edge plugin — generates extreme profiles and a stub to feed them.
+Synthetic data edge plugin — sends boundary and invalid records to a target and judges them.
 
-Three things this had to stop doing.
+This plugin used to write twenty edge-case profiles and a generated Playwright
+test whose body was ``pytest.skip``: fixtures that were never sent anywhere,
+and a run that could not reach a verdict. It now does the work the fixtures
+existed for. The engine lives in :mod:`test_data.synthetic`; this file only
+builds inputs from ``context`` and maps the outcome to a status.
 
-**A dry run wrote files.** ``_PROFILES_FILE.write_text(...)`` sat four lines
-above the ``if is_dry:`` branch, so ``--dry-run`` created
-``ai_generated_tests/synthetic/`` and overwrote the profiles on disk before
-returning its "nothing was changed" preview. Every sibling plugin guards this;
-this one did the write first and then reported it as a plan.
+Context:
 
-**Its generated test asserted nothing.** ``assert profile is not None`` over a
-parametrised list of dicts is true twenty times out of twenty. Twenty green
-tests appeared, named after edge cases nobody had sent anywhere. The stub now
-skips, which is the truthful state of a test that has no target yet.
+* ``profile`` — a constraint profile (path, dict or ``Profile``). Required.
+* ``target`` — base URL of the system under test. Required; no default is ever
+  invented.
+* ``endpoint`` — path to POST records to (default: the profile's ``endpoint``).
+* ``seed`` (default 0), ``valid_n`` (default 5) — reproducibility and volume.
+* ``http`` — an object with ``post(path, json=)``; default ``HttpEngine(target)``.
 
-**A missing Faker was invisible.** The ``except ImportError`` fallback produces
-``profile_0 … profile_19`` — no long names, no RTL override, no zero-width
-characters, none of the extremes this plugin exists to produce — and the result
-said ``profiles_generated: 20`` exactly as it does on the good path. That case
-is now ``unknown`` and says why.
+Status:
 
-The run itself returns ``skip``: writing fixtures is not a verdict about the
-health of the product, and the old ``pass`` put it into the score as though it
-were.
+=================================================  =========
+situation                                          status
+=================================================  =========
+dry run                                            skip (``dry_run=True``), nothing written
+no profile, no target, no endpoint                 unknown
+Faker not installed                                unknown (the extremes would be thin)
+no records generated                               unknown
+target unreachable for any record                  unknown
+any 5xx, or an invalid record accepted, or a
+valid record rejected                              fail
+every record answered as its label says            pass
+=================================================  =========
+
+A real run writes ``synthetic_profiles.json`` (records and verdicts, for people)
+and one ``metric_synthetic_probe`` row per record.
 """
 
 from __future__ import annotations
@@ -35,77 +45,21 @@ from plugins._base_plugin import BasePlugin, PluginPriority, PluginResult, Plugi
 
 _OUT_DIR = Path("ai_generated_tests/synthetic")
 _PROFILES_FILE = _OUT_DIR / "synthetic_profiles.json"
-
-_ZWS = "​"  # zero-width space
-_EXTREME_NAMES = [
-    "A" * 256,
-    "محمد عبدالله",  # Arabic
-    "יוסף כהן",  # Hebrew
-    f"Test{_ZWS}User",
-    "Test\U0001f600User",  # emoji in name
-]
-
-_TEST_TEMPLATE = '''"""Playwright stubs for synthetic edge-case profiles, generated.
-
-The generated body is a skip, not an assertion. A stub with no target must not
-report twenty green tests over profiles that were never sent anywhere.
-"""
-from __future__ import annotations
-
-import json
-from pathlib import Path
-
-import pytest
-from playwright.sync_api import Page
-
-_PROFILES = json.loads(Path({profiles_file!r}).read_text(encoding="utf-8"))
+_TABLE = "metric_synthetic_probe"
 
 
-@pytest.mark.parametrize("profile", _PROFILES)
-def test_synthetic_profile(page: Page, profile: dict) -> None:
-    """Fill the form with an extreme profile — not implemented."""
-    pytest.skip("TODO: navigate to the form and fill it with profile data")
-'''
+def _unknown(reason: str, **extra) -> PluginResult:
+    return PluginResult(status=PluginStatus.UNKNOWN.value, findings=[{"reason": reason, **extra}])
 
 
-def _generate_profiles() -> tuple[list[dict], bool]:
-    """Twenty profiles, and whether Faker was there to make them extreme."""
-    try:
-        from faker import Faker
-    except ImportError:
-        return (
-            [{"name": f"profile_{i}", "age": i, "email": f"test{i}@test.com"} for i in range(20)],
-            False,
-        )
+def _load_profile(raw):
+    from test_data.synthetic.profile import Profile
 
-    fake = Faker()
-    profiles: list[dict] = [
-        {"name": name, "email": fake.email(), "age": 0, "notes": _ZWS * 10}
-        for name in _EXTREME_NAMES
-    ]
-    profiles.extend(
-        [
-            {"name": fake.name(), "age": 2**53, "email": "a@b.c"},  # MAX_SAFE_INTEGER
-            {"name": fake.name(), "age": -1, "email": ""},
-            {"name": "", "age": 0, "email": "not-an-email"},
-            {"name": fake.name(), "email": "x" * 300 + "@test.com", "age": 150},
-            {
-                "name": "‮‮reversed",  # RTL override
-                "email": fake.email(),
-                "age": fake.random_int(0, 120),
-            },
-        ]
-    )
-    while len(profiles) < 20:
-        profiles.append(
-            {
-                "name": fake.name(),
-                "email": fake.email(),
-                "age": fake.random_int(0, 120),
-                "notes": fake.text(max_nb_chars=50),
-            }
-        )
-    return profiles[:20], True
+    if isinstance(raw, Profile):
+        return raw
+    if isinstance(raw, dict):
+        return Profile.from_dict(raw)
+    return Profile.from_json(raw)
 
 
 class SyntheticDataEdgePlugin(BasePlugin):
@@ -114,61 +68,80 @@ class SyntheticDataEdgePlugin(BasePlugin):
     trigger_conditions = ["manual"]
 
     def run(self, context: dict) -> PluginResult:
-        is_dry = context.get("dry_run", False)
-
-        profiles, faker_available = _generate_profiles()
-        descriptions = [f"name={p.get('name', '')[:30]!r}" for p in profiles]
-
-        if is_dry:
-            # Before any write. A dry run that has already replaced the profiles
-            # file is not a dry run, whatever it returns.
+        if context.get("dry_run", False):
+            # Before anything is generated or written.
             return PluginResult(
                 status=PluginStatus.SKIP.value,
                 findings=[
                     {
-                        "profiles_generated": len(profiles),
+                        "would_probe": context.get("target") or "(no target)",
+                        "profile": str(context.get("profile") or "(no profile)"),
                         "profiles_file": str(_PROFILES_FILE),
-                        "faker_available": faker_available,
-                        "sample_descriptions": descriptions[:5],
                     }
                 ],
                 dry_run=True,
             )
 
+        if not context.get("profile"):
+            return _unknown("no constraint profile given (context['profile'])")
+        target = context.get("target")
+        if not target:
+            return _unknown("no target given (context['target']); none is invented")
+
+        from test_data.synthetic.generator import SyntheticGenerator
+        from test_data.synthetic.probe import FAIL, UNREACHABLE, probe, summarise
+
+        profile = _load_profile(context["profile"])
+        endpoint = context.get("endpoint") or profile.endpoint
+        if not endpoint:
+            return _unknown("no endpoint: set context['endpoint'] or the profile's 'endpoint'")
+
+        generator = SyntheticGenerator(int(context.get("seed", 0)))
+        if not generator.faker_available:
+            return _unknown(
+                "faker is not installed; the generated values would be thin stand-ins, "
+                "so this run would not exercise what it exists to exercise",
+                faker_available=False,
+            )
+
+        records = generator.generate(profile, int(context.get("valid_n", 5)), "valid")
+        for mode in ("boundary", "invalid"):
+            records += generator.generate(profile, len(generator.cases(profile, mode)), mode)
+        if not records:
+            return _unknown("the profile produced no records")
+
+        http = context.get("http")
+        if http is None:
+            from api.clients.http_engine import HttpEngine
+
+            http = HttpEngine(target, max_retries=0)
+        results = probe(endpoint, http, records)
+        summary = summarise(results)
+        findings = {"target": target, "endpoint": endpoint, "profile": profile.entity, **summary}
+
         _OUT_DIR.mkdir(parents=True, exist_ok=True)
         _PROFILES_FILE.write_text(
-            json.dumps(profiles, indent=2, ensure_ascii=False), encoding="utf-8"
+            json.dumps(
+                [{**r.record.to_dict(), "status": r.status, "verdict": r.verdict} for r in results],
+                indent=2,
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
         )
+        findings["profiles_file"] = str(_PROFILES_FILE)
 
-        test_dir = _OUT_DIR / "playwright_tests"
-        test_dir.mkdir(parents=True, exist_ok=True)
-        test_file = test_dir / "test_synthetic_profiles.py"
-        test_file.write_text(
-            _TEST_TEMPLATE.format(profiles_file=str(_PROFILES_FILE)), encoding="utf-8"
-        )
+        from checks._sink import write_metrics
 
-        findings = {
-            "profiles_generated": len(profiles),
-            "profiles_file": str(_PROFILES_FILE),
-            "test_script": str(test_file),
-            "faker_available": faker_available,
-            "profile_descriptions": descriptions,
-        }
+        problem = write_metrics(_TABLE, [r.metric_row(profile.entity) for r in results])
+        if problem:
+            findings["metrics"] = problem
 
-        if not faker_available:
-            findings["reason"] = (
-                "faker is not installed; the fallback profiles carry no edge cases, so "
-                "this run produced fixtures that do not exercise what it exists to exercise"
-            )
+        if any(r.verdict == UNREACHABLE for r in results):
+            findings["reason"] = "the target did not answer every record; no verdict"
             return PluginResult(status=PluginStatus.UNKNOWN.value, findings=[findings])
-
-        # Writing fixtures is not a verdict about the product. SKIP keeps it out
-        # of the health score instead of filling the score with a file write.
-        findings["reason"] = (
-            f"wrote {len(profiles)} edge-case profiles and a parametrised stub; "
-            "nothing was exercised, so this run carries no verdict"
-        )
-        return PluginResult(status=PluginStatus.SKIP.value, findings=[findings])
+        if any(r.verdict == FAIL for r in results):
+            return PluginResult(status=PluginStatus.FAIL.value, findings=[findings])
+        return PluginResult(status=PluginStatus.PASS.value, findings=[findings])
 
 
 if __name__ == "__main__":
@@ -176,8 +149,21 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--profile")
+    parser.add_argument("--target")
+    parser.add_argument("--endpoint")
+    parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args()
-    ctx: dict = {}
+    ctx: dict = {
+        k: v
+        for k, v in {
+            "profile": args.profile,
+            "target": args.target,
+            "endpoint": args.endpoint,
+            "seed": args.seed,
+        }.items()
+        if v is not None
+    }
     plugin = SyntheticDataEdgePlugin()
     result = plugin.dry_run(ctx) if args.dry_run else plugin.execute(ctx)
     print(f"status={result.status} findings={result.findings}")

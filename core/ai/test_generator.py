@@ -2,10 +2,48 @@
 
 import json
 import os
+import re
 import zipfile
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import requests
+
+SECTION_PAGE = "PAGE_OBJECT"
+SECTION_TEST = "TEST"
+SECTION_LOCATORS = "LOCATORS"
+_SECTION = re.compile(r"===([A-Z_]+)_START===\s*\n(.*?)\n?===\1_END===", re.DOTALL)
+
+
+def _as_draft(code: str | None, generator: str, source: str) -> str | None:
+    """Generated tests start as drafts: a reviewed PR removes the marker to approve them."""
+    if not code:
+        return code
+    from traceability.review import mark_draft
+
+    return mark_draft(code, generator, source)
+
+
+@dataclass(frozen=True)
+class GeneratedFiles:
+    """A page object, a test module and (from a recording) a locator registry."""
+
+    page_object: str
+    test: str
+    locators: dict = field(default_factory=dict)
+
+
+def split_sections(text: str | None) -> dict[str, str]:
+    """``===NAME_START=== ... ===NAME_END===`` blocks of a completion, by name.
+
+    A block may be wrapped in a Markdown fence; the fence is removed.
+    """
+    out = {}
+    for name, body in _SECTION.findall(text or ""):
+        body = body.strip()
+        fenced = re.fullmatch(r"```[a-zA-Z]*\n(.*?)\n?```", body, re.DOTALL)
+        out[name] = (fenced.group(1) if fenced else body).strip() + "\n"
+    return out
 
 
 class TestGenerator:
@@ -82,7 +120,7 @@ OUTPUT REQUIREMENTS:
 
 Return ONLY the complete Python file. No explanation. No markdown fences."""
 
-        return self._call_claude(prompt, max_tokens=4096)
+        return _as_draft(self._call_claude(prompt, max_tokens=4096), "trace", str(trace_path))
 
     def generate_from_spec(self, spec_path: Path, page_name: str = "") -> str | None:
         """Generate a complete pytest test file from a spec markdown file.
@@ -142,7 +180,7 @@ OUTPUT REQUIREMENTS:
 
 Return ONLY the complete Python file. No explanation. No markdown fences."""
 
-        return self._call_claude(prompt, max_tokens=4096)
+        return _as_draft(self._call_claude(prompt, max_tokens=4096), "spec", str(spec_path))
 
     def generate_page_object(
         self, page_name: str, page_url: str, page_description: str
@@ -178,6 +216,138 @@ FRAMEWORK:
 Return ONLY the complete Python file. No explanation. No markdown fences."""
 
         return self._call_claude(prompt, max_tokens=2048)
+
+    def generate_from_workflow(self, spec_path: Path, page_name: str) -> GeneratedFiles | None:
+        """A page object plus a pytest module from a workflow spec (``generators.spec_writer``).
+
+        Returns None when the spec cannot be read, there is no API key, the call fails, or
+        the completion does not carry both sections, so the caller writes nothing.
+        """
+        spec_path = Path(spec_path)
+        try:
+            spec = spec_path.read_text()
+        except OSError as e:
+            print(f"Spec not readable: {spec_path} ({e})")
+            return None
+        if not spec.strip():
+            print(f"Spec is empty: {spec_path}")
+            return None
+        if not self.api_key:
+            print(f"ANTHROPIC_API_KEY not set — cannot generate from {spec_path}")
+            return None
+        from core.locator_strategy import priority_prompt
+
+        class_name = "".join(part.title() for part in re.split(r"[^A-Za-z0-9]+", page_name) if part)
+        prompt = f"""You are a senior Playwright Python test automation engineer.
+
+Generate a page object and a pytest module for the workflow described in this spec.
+
+SPEC FILE: {spec_path.name}
+ENTITY: {page_name}
+
+SPEC CONTENTS:
+{spec}
+
+KNOWN PATTERNS (from docs/ai_learnings.md):
+{self._read_learnings()}
+
+FRAMEWORK CONTEXT:
+- Page object: class {class_name}Page(BasePage) from core/base_page.py, one method per action
+  in the spec; buttons are found by their [data-action="<action>"] attribute and the status by
+  [data-state="<state>"]
+- Selector priority: {priority_prompt()} (never CSS classes)
+- Tests: one test per "## Scenario" section, named after it; tags become @pytest.mark markers
+- Assertions with expect() from playwright.sync_api; never time.sleep()
+
+OUTPUT FORMAT — exactly two blocks, nothing else:
+==={SECTION_PAGE}_START===
+<the complete page object module>
+==={SECTION_PAGE}_END===
+==={SECTION_TEST}_START===
+<the complete pytest module>
+==={SECTION_TEST}_END==="""
+        sections = split_sections(self._call_claude(prompt, max_tokens=8192))
+        if SECTION_PAGE not in sections or SECTION_TEST not in sections:
+            print("The completion did not carry a page object and a test module")
+            return None
+        return GeneratedFiles(
+            sections[SECTION_PAGE], _as_draft(sections[SECTION_TEST], "workflow", str(spec_path))
+        )
+
+    def from_recording(self, recording_path: Path, name: str) -> GeneratedFiles | None:
+        """A page object, a pytest module and a locator registry from a codegen recording.
+
+        ``recording_path`` is a ``playwright codegen`` script (Python or TypeScript). The
+        prompt carries the project's selector priority; the returned locator registry is
+        checked entry by entry with ``core.locator_strategy.shape_error`` and an invalid
+        one makes the whole generation fail (None), so nothing half-usable is written.
+        """
+        recording_path = Path(recording_path)
+        try:
+            recording = recording_path.read_text()
+        except OSError as e:
+            print(f"Recording not readable: {recording_path} ({e})")
+            return None
+        if not recording.strip():
+            print(f"Recording is empty: {recording_path}")
+            return None
+        if not self.api_key:
+            print(f"ANTHROPIC_API_KEY not set — cannot convert {recording_path}")
+            return None
+        from core.locator_strategy import priority_prompt, shape_error
+
+        class_name = "".join(part.title() for part in re.split(r"[^A-Za-z0-9]+", name) if part)
+        prompt = f"""You are a senior Playwright Python test automation engineer.
+
+Convert this Playwright codegen recording into a page object, a pytest test and a JSON
+locator registry for this framework.
+
+RECORDING ({recording_path.suffix or "script"}): {recording_path.name}
+NAME: {name}
+
+{recording}
+
+KNOWN PATTERNS (from docs/ai_learnings.md):
+{self._read_learnings()}
+
+RULES:
+- Page object: class {class_name}Page(BasePage) from core/base_page.py; every element is looked
+  up by key through self.resolve_locator(key), never with an inline selector
+- Locator registry: a JSON object {{"<key>": {{"type": ..., ...}}}} using these types, best first:
+  {priority_prompt()}
+  shapes: {{"type": "data", "attribute": "data-action", "value": "save"}},
+  {{"type": "testid", "value": "save-button"}}, {{"type": "role", "role": "button", "name": "Save"}}
+- Test: pytest + playwright-pytest, assertions with expect(), never time.sleep()
+
+OUTPUT FORMAT — exactly three blocks, nothing else:
+==={SECTION_PAGE}_START===
+<page object module>
+==={SECTION_PAGE}_END===
+==={SECTION_TEST}_START===
+<pytest module>
+==={SECTION_TEST}_END===
+==={SECTION_LOCATORS}_START===
+<JSON locator registry>
+==={SECTION_LOCATORS}_END==="""
+        sections = split_sections(self._call_claude(prompt, max_tokens=8192))
+        missing = [s for s in (SECTION_PAGE, SECTION_TEST, SECTION_LOCATORS) if s not in sections]
+        if missing:
+            print(f"The completion is missing {missing}")
+            return None
+        try:
+            locators = json.loads(sections[SECTION_LOCATORS])
+        except ValueError as e:
+            print(f"The locator registry is not JSON: {e}")
+            return None
+        if not isinstance(locators, dict) or not locators:
+            print("The locator registry is empty or not an object")
+            return None
+        problems = {k: shape_error(v) for k, v in locators.items() if shape_error(v)}
+        if problems:
+            print(f"Locator entries cannot be rendered: {problems}")
+            return None
+        test = _as_draft(sections[SECTION_TEST], "recording", str(recording_path))
+        return GeneratedFiles(sections[SECTION_PAGE], test, locators)
 
     def _extract_actions(self, trace_path: Path) -> list:
         actions = []

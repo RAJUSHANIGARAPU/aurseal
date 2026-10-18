@@ -2,7 +2,6 @@
 
 import json
 import os
-import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import requests
@@ -19,21 +18,23 @@ class LogAnalyzer:
         return list(Path(reports_dir).glob("**/*.xml"))
 
     def parse_failures(self, xml_path: Path) -> list[dict]:
+        """Failures and errors of a JUnit file, read with the results store's safe parser."""
+        from results.io.junit import iter_testcases
+
         failures = []
         try:
-            tree = ET.parse(xml_path)
-            for tc in tree.iter("testcase"):
-                for child in tc:
-                    if child.tag in ("failure", "error"):
-                        failures.append(
-                            {
-                                "test": tc.attrib.get("name", ""),
-                                "classname": tc.attrib.get("classname", ""),
-                                "type": child.attrib.get("type", child.tag),
-                                "message": child.attrib.get("message", ""),
-                                "text": (child.text or "")[:2000],
-                            }
-                        )
+            for tc in iter_testcases(Path(xml_path)):
+                if tc.outcome in ("failed", "error"):
+                    failures.append(
+                        {
+                            "test": tc.name,
+                            "classname": tc.classname,
+                            "type": tc.failure_type
+                            or ("failure" if tc.outcome == "failed" else "error"),
+                            "message": tc.message or "",
+                            "text": (tc.text or "")[:2000],
+                        }
+                    )
         except Exception as e:
             failures.append({"error": str(e), "file": str(xml_path)})
         return failures
