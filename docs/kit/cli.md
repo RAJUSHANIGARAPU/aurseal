@@ -116,6 +116,11 @@ Usage: testkeel assignment check [OPTIONS] [PATH]
 |---|---|
 | `--json` | Machine-readable findings. |
 | `--strict` / `--no-strict` | A missing denylist fails (default `--no-strict`). |
+| `--allow-host` | A host the project may name, such as its target (repeatable). |
+
+It runs the same rules as `new-assignment`, including the
+[project rules](leak-gate.md#project-rules). The project's own target is not known to the
+check, so name it with `--allow-host` or in `~/.config/testkeel/allow-hosts.txt`.
 
 Exit codes: 0 clean, 2 cannot run, 4 findings.
 

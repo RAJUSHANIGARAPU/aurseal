@@ -22,7 +22,7 @@ import sys
 import tempfile
 import time
 import traceback
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -30,6 +30,7 @@ from typing import Any
 from testkeel import leakgate
 from testkeel.assignment.slug import slugify
 from testkeel.assignment.types import AVAILABLE, BY_NAME
+from testkeel.leakgate.project import ProjectRules
 from testkeel.leakgate.scan import Finding
 
 OK, UNEXPECTED, USAGE, NOT_EMPTY, LEAK, SELF_CHECK, PREREQUISITE, INTERRUPTED = (
@@ -320,6 +321,10 @@ def new_assignment(
             texts=[("name", opts.name), ("slug", slug)],
             missing_list="warn",
             environ=env,
+            project=ProjectRules.for_project(
+                urls=[opts.target_url, opts.api_base_url, *_declared(answers)],
+                home=_home(env),
+            ),
         )
         lines.extend(f"leak gate: {note}" for note in gate.notes)
         if gate.code not in (leakgate.CLEAN,):
@@ -370,11 +375,32 @@ def _step_failed(lines: list[str], failed: StepFailed, staging: Path) -> list[st
     ]
 
 
-def check(path: Path, strict: bool = False, environ: Mapping[str, str] | None = None) -> Result:
-    """``assignment check``: the leak gate over an existing project (0 / 4 / 2)."""
+def _declared(answers: Mapping[str, Any]) -> list[str]:
+    return [str(answers[key]) for key in ("target_url", "api_base_url") if answers.get(key)]
+
+
+def _home(env: Mapping[str, str]) -> Path | None:
+    return Path(env["HOME"]) if env.get("HOME") else None
+
+
+def check(
+    path: Path,
+    strict: bool = False,
+    environ: Mapping[str, str] | None = None,
+    allow_hosts: Sequence[str] = (),
+) -> Result:
+    """``assignment check``: the leak gate over an existing project (0 / 4 / 2).
+
+    The project rules run too. The project's own target host is not known here, so it
+    comes from ``allow_hosts`` (``--allow-host``) or ``~/.config/testkeel/allow-hosts.txt``.
+    """
     if not path.is_dir():
         return Result(USAGE, [f"error: {path} is not a directory"])
-    gate = leakgate.run(trees=[path], missing_list="fail" if strict else "warn", environ=environ)
+    env = dict(os.environ if environ is None else environ)
+    rules = ProjectRules.for_project(extra_hosts=allow_hosts, home=_home(env))
+    gate = leakgate.run(
+        trees=[path], missing_list="fail" if strict else "warn", environ=env, project=rules
+    )
     lines = [f"leak gate: {note}" for note in gate.notes]
     if gate.code == leakgate.CANNOT_RUN:
         return Result(USAGE, [*lines, f"leak gate: cannot run: {gate.error}"])

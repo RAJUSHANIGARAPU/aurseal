@@ -114,9 +114,13 @@ def assignment_check(
     path: Annotated[Path, typer.Argument(help="Project directory.")] = Path("."),
     as_json: Annotated[bool, typer.Option("--json", help="Machine-readable findings.")] = False,
     strict: Annotated[bool, typer.Option(help="A missing denylist fails.")] = False,
+    allow_host: Annotated[
+        list[str] | None,
+        typer.Option("--allow-host", help="A host the project may name (repeatable)."),
+    ] = None,
 ) -> None:
     """Run the leak gate over an existing project (0 clean, 4 findings, 2 cannot run)."""
-    result = scaffold.check(path, strict=strict)
+    result = scaffold.check(path, strict=strict, allow_hosts=allow_host or ())
     if as_json:
         findings = [
             {"location": f.location, "line": f.line, "rule": f.rule, "entry": f.entry}

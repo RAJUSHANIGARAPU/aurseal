@@ -6,8 +6,8 @@ three places:
 
 | Where | Command | What it scans |
 |---|---|---|
-| Every generated project, before it is written | `testkeel new-assignment` | the rendered tree, the project name and its slug |
-| A project you have edited since | `testkeel assignment check [PATH]` | the project tree |
+| Every generated project, before it is written | `testkeel new-assignment` | the rendered tree, the project name and its slug; with the [project rules](#project-rules) |
+| A project you have edited since | `testkeel assignment check [PATH]` | the project tree; with the project rules |
 | This repository's CI | `python -m testkeel.leakgate scan` | the tree, pull request title and body, commit messages and added lines |
 
 ## What it checks
@@ -25,6 +25,25 @@ catches the usual spellings of a name.
 | `pii.iban` | an IBAN whose length fits its country and whose mod-97 check passes | strings that only look like one |
 | `pii.phone` | an international (`+`) number of 8 to 15 digits, or a 10-digit Dutch national number | versions, hashes, timestamps, ids, lock files |
 | `pii.home` | a home directory path that names a user, or the scanning machine's own home directory | placeholder user names |
+
+### Project rules
+
+A generated project is held to more than that. These rules run in `new-assignment` and
+`assignment check`, never in the repository scan (`python -m testkeel.leakgate scan`),
+because a repository may legitimately link anywhere, keep editor config or import
+`testkeel`:
+
+| Rule | Finds |
+|---|---|
+| `host.unlisted` | a URL, or a container image registry, whose host is not the declared `--target-url` / `--api-base-url` (or a subdomain of it), a reserved or private name (`localhost`, `*.test`, `example.com`, private IP addresses, single-label service names), a public demo target (`saucedemo.com`, `restful-booker.herokuapp.com`, `reqres.in`, ...) or a standard tooling host (`pypi.org`, `github.com`, `mcr.microsoft.com`, `ghcr.io`, `playwright.dev`, ...) |
+| `trace.tool` | assistant or editor config: `.claude/`, `.cursor*`, `CLAUDE.md`, `AGENTS.md`; and `.copier-answers.yml` unless the project was made with `--updatable` (or the file names this repository as its source) |
+| `lock.index` | a URL in `uv.lock` that is not `pypi.org` or `files.pythonhosted.org` |
+| `standalone.import` | a Python file that imports `testkeel` |
+| `standalone.dependency` | `testkeel` as a dependency in `pyproject.toml`, a `requirements*.txt` file or `uv.lock` |
+
+A host you need beyond the target goes on its own line in
+`~/.config/testkeel/allow-hosts.txt` (or `--allow-host` for `assignment check`). The
+task brief in `.task/` is git-ignored, so the project rules skip it.
 
 ## What it prints
 
