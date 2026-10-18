@@ -173,9 +173,46 @@ jobs:
           path: examples/perf-k6-quickpizza/reports/
           retention-days: 7
 
+  # Locust never runs against a public host: the load profile runs against
+  # quickpizza-local on the runner only.
+  perf-locust-quickpizza:
+    name: perf-locust-quickpizza (local load)
+    if: github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    services:
+      quickpizza:
+        image: ghcr.io/grafana/quickpizza-local:0.15.31
+        ports:
+          - 3333:3333
+    outputs:
+      outcome: ${{ steps.local.outcome }}
+    defaults:
+      run:
+        working-directory: examples/perf-locust-quickpizza
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v10
+      - run: uv sync --locked
+      - name: Wait for quickpizza-local
+        run: |
+          for _ in $(seq 30); do curl -fsS http://localhost:3333/ready && exit 0; sleep 2; done
+          exit 1
+      - name: Local load
+        id: local
+        continue-on-error: true
+        run: make load APP_TARGET_URL=http://localhost:3333
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: example-perf-locust-quickpizza
+          path: examples/perf-locust-quickpizza/reports/
+          retention-days: 7
+
   drift-issues:
     name: One issue per failing example
-    needs: [web-ui-saucedemo, api-rest-restful-booker, graphql-countries, a11y-w3c-bad, perf-k6-quickpizza]
+    needs: [web-ui-saucedemo, api-rest-restful-booker, graphql-countries, a11y-w3c-bad, perf-k6-quickpizza, perf-locust-quickpizza]
     if: always() && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -193,6 +230,7 @@ jobs:
             graphql-countries=${{ needs.graphql-countries.outputs.outcome }}
             a11y-w3c-bad=${{ needs.a11y-w3c-bad.outputs.outcome }}
             perf-k6-quickpizza=${{ needs.perf-k6-quickpizza.outputs.outcome }}
+            perf-locust-quickpizza=${{ needs.perf-locust-quickpizza.outputs.outcome }}
         run: |
           for pair in $OUTCOMES; do
             example="${pair%%=*}"

@@ -1,0 +1,35 @@
+"""The settings layer: defaults, environment overrides and rejected values."""
+
+from __future__ import annotations
+
+import pytest
+from pydantic import ValidationError
+
+from perf_locust_quickpizza.settings import Settings
+
+pytestmark = pytest.mark.offline
+
+
+def test_defaults_load_without_any_environment(monkeypatch):
+    monkeypatch.chdir("/")  # no .env in the working directory
+    settings = Settings()
+    assert settings.target_url.startswith(("http://", "https://"))
+    assert not settings.target_url.endswith("/")
+
+
+def test_environment_variable_overrides_the_default(monkeypatch):
+    monkeypatch.setenv("APP_TARGET_URL", "http://localhost:3333/")
+    assert Settings().target_url == "http://localhost:3333"
+
+
+@pytest.mark.parametrize(
+    ("variable", "value"),
+    [
+        pytest.param("APP_TIMEOUT_S", "0", id="timeout-must-be-positive"),
+        pytest.param("APP_TARGET_URL", "ftp://example.test", id="url-must-be-http"),
+    ],
+)
+def test_invalid_value_is_rejected(monkeypatch, variable, value):
+    monkeypatch.setenv(variable, value)
+    with pytest.raises(ValidationError):
+        Settings()

@@ -1,0 +1,38 @@
+# Files below are exactly what the template renders for the answers in this header.
+# CI re-renders the template and fails if any of them differ; every other file in
+# this directory is written by hand for this example.
+# type: perf-locust
+# project_name: QuickPizza Locust
+# project_slug: perf-locust-quickpizza
+# target_url: https://quickpizza.grafana.com
+# company:
+# task_summary: The QuickPizza load profiles in Locust, held to the same SLOs as the k6 example.
+.dockerignore
+.editorconfig
+.env.example
+.github/workflows/ci.yml
+.gitignore
+.pre-commit-config.yaml
+.python-version
+Dockerfile
+Makefile
+locustfiles/api_user.py
+locustfiles/stress.py
+profiles/load.conf
+profiles/smoke.conf
+profiles/stress.conf
+pyproject.toml
+src/perf_locust_quickpizza/__init__.py
+src/perf_locust_quickpizza/guard.py
+src/perf_locust_quickpizza/log.py
+src/perf_locust_quickpizza/settings.py
+src/perf_locust_quickpizza/shapes.py
+src/perf_locust_quickpizza/slo.py
+tests/__init__.py
+tests/conftest.py
+tests/unit/__init__.py
+tests/unit/conftest.py
+tests/unit/test_guard.py
+tests/unit/test_settings.py
+tests/unit/test_shapes.py
+tests/unit/test_slo.py

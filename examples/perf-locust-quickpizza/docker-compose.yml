@@ -1,0 +1,43 @@
+# Everything local: QuickPizza itself, one Locust master and WORKERS workers, so load and
+# stress never leave this machine.
+#   docker compose up -d quickpizza                 # the target, on localhost:3333
+#   make docker-load PROFILE=load WORKERS=2         # a distributed run against it
+x-locust: &locust
+  build: .
+  depends_on:
+    - quickpizza
+  env_file:
+    - path: .env
+      required: false
+  environment:
+    PYTHONPATH: /app/src
+    # The Compose service name: a single-label host the target guard treats as local.
+    APP_TARGET_URL: ${APP_TARGET_URL:-http://quickpizza:3333}
+    ALLOW_REMOTE_LOAD: ${ALLOW_REMOTE_LOAD:-}
+    PROFILE: ${PROFILE:-smoke}
+    WORKERS: ${WORKERS:-2}
+
+services:
+  quickpizza:
+    # Pinned: numbers are only comparable between runs of the same version.
+    image: ghcr.io/grafana/quickpizza-local:0.15.31
+    ports:
+      - "3333:3333"
+
+  master:
+    <<: *locust
+    # The guard runs first, so a load profile cannot reach a remote host from here either.
+    command:
+      - sh
+      - -c
+      - >-
+        python -m perf_locust_quickpizza.guard "$$PROFILE" "$$APP_TARGET_URL" &&
+        locust --config "profiles/$$PROFILE.conf" --master --expect-workers "$$WORKERS"
+        --host "$$APP_TARGET_URL" &&
+        python -m perf_locust_quickpizza.slo "$$PROFILE"
+    volumes:
+      - ./reports:/app/reports
+
+  worker:
+    <<: *locust
+    command: ["locust", "-f", "locustfiles/api_user.py", "--worker", "--master-host", "master"]
