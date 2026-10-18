@@ -35,6 +35,12 @@ KEY = "sk-ant-test"
 PROMPT = "classify this drift"
 
 
+@pytest.fixture(autouse=True)
+def _no_ambient_transport(monkeypatch):
+    """CI pins AI_TRANSPORT=none for the whole job; each test here picks its own transport."""
+    monkeypatch.delenv("AI_TRANSPORT", raising=False)
+
+
 class _FakeResponse:
     def __init__(self, status_code: int = 200, payload=None):
         self.status_code = status_code
