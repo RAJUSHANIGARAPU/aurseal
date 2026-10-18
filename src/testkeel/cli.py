@@ -1,9 +1,9 @@
 """testkeel: scaffold take-home test assignments, check them for leaks, report on results.
 
 Exit codes. new-assignment: 0 created, 1 unexpected error, 2 usage error (also a planned
-type), 3 output dir not empty, 4 leak gate failed, 6 missing prerequisite, 130
-interrupted. assignment check: 0 clean, 2 cannot run, 4 findings. report: 0 written, 2
-usage, 3 unreadable input or zero tests found.
+type), 3 output dir not empty, 4 leak gate failed, 5 lock or self-check failed, 6 missing
+prerequisite, 130 interrupted. assignment check: 0 clean, 2 cannot run, 4 findings.
+report: 0 written, 2 usage, 3 unreadable input or zero tests found.
 """
 
 from __future__ import annotations
@@ -69,6 +69,7 @@ def new_assignment(
     docker: Annotated[bool, typer.Option("--docker/--no-docker")] = True,
     git: Annotated[bool, typer.Option("--git/--no-git", help="git init, no commit.")] = True,
     credit: Annotated[bool, typer.Option(help="One README footer line naming testkeel.")] = False,
+    lock: Annotated[bool, typer.Option("--lock/--no-lock", help="Run uv lock (PyPI only).")] = True,
     output_dir: Annotated[Path | None, typer.Option(help="Default: ./<slug>.")] = None,
     dry_run: Annotated[bool, typer.Option(help="List what would be written.")] = False,
     force: Annotated[bool, typer.Option(help="Write into a non-empty dir.")] = False,
@@ -97,6 +98,7 @@ def new_assignment(
             ci=ci,
             git=git,
             credit=credit,
+            lock=lock,
             output_dir=output_dir,
             dry_run=dry_run,
             force=force,

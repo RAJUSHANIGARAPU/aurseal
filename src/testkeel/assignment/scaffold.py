@@ -1,21 +1,24 @@
-"""``new-assignment``: validate, render into a staging dir, leak-gate it, then move it.
+"""``new-assignment``: validate, render into a staging dir, lock, leak-gate, self-check, move.
 
-Nothing reaches the output directory before the staged tree passes the leak gate. On a
-leak-gate failure the staged tree is kept (its path is printed) so the finding can be
-inspected; on any other failure the staging dir is removed.
+Nothing reaches the output directory before the staged tree is locked, passes the leak
+gate and passes its self-check. On a leak-gate or self-check failure the staged tree is
+kept (its path is printed) so the finding can be inspected; on any other failure the
+staging dir is removed.
 
 Exit codes: 0 created, 1 unexpected error (traceback written to a log file), 2 usage
-error, 3 output dir not empty without ``--force``, 4 leak gate failed, 6 missing
-prerequisite, 130 interrupted.
+error, 3 output dir not empty without ``--force``, 4 leak gate failed, 5 lock or
+self-check failed, 6 missing prerequisite, 130 interrupted.
 """
 
 from __future__ import annotations
 
 import importlib
+import importlib.util
 import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 import traceback
@@ -29,9 +32,20 @@ from testkeel.assignment.slug import slugify
 from testkeel.assignment.types import AVAILABLE, BY_NAME
 from testkeel.leakgate.scan import Finding
 
-OK, UNEXPECTED, USAGE, NOT_EMPTY, LEAK, PREREQUISITE, INTERRUPTED = 0, 1, 2, 3, 4, 6, 130
+OK, UNEXPECTED, USAGE, NOT_EMPTY, LEAK, SELF_CHECK, PREREQUISITE, INTERRUPTED = (
+    0, 1, 2, 3, 4, 5, 6, 130,
+)  # fmt: skip
 ANSWERS_FILE = ".copier-answers.yml"
 _URL_RE = re.compile(r"^https?://[^\s/]+[^\s]*$")
+#: The only index a generated lock file may name; user-level index settings are ignored.
+PYPI_SIMPLE = "https://pypi.org/simple"
+# Environment variables that would point uv at another index.
+_INDEX_VARS = (
+    "UV_INDEX", "UV_INDEX_URL", "UV_DEFAULT_INDEX", "UV_EXTRA_INDEX_URL", "UV_FIND_LINKS",
+    "UV_CONFIG_FILE",
+)  # fmt: skip
+_SKIP_DIRS = {".git", ".venv", "venv", "node_modules", "__pycache__", ".mypy_cache"}
+_OUTPUT_LINES = 20
 
 
 class Abort(Exception):
@@ -39,6 +53,15 @@ class Abort(Exception):
         super().__init__(message)
         self.code = code
         self.message = message
+
+
+class StepFailed(Exception):
+    """A pipeline step (lock, compile, lint) failed on the staged tree: exit 5."""
+
+    def __init__(self, step: str, detail: list[str]) -> None:
+        super().__init__(step)
+        self.step = step
+        self.detail = detail
 
 
 @dataclass
@@ -55,6 +78,7 @@ class Options:
     ci: str = "github"
     git: bool = True
     credit: bool = False
+    lock: bool = True
     output_dir: Path | None = None
     dry_run: bool = False
     force: bool = False
@@ -155,6 +179,84 @@ def _place_task(staging: Path, task_file: Path) -> None:
                           + ".task/\n", "utf-8")  # fmt: skip
 
 
+def _tail(text: str) -> list[str]:
+    lines = [line for line in text.splitlines() if line.strip()]
+    return lines[-_OUTPUT_LINES:]
+
+
+def lock(staging: Path, environ: Mapping[str, str]) -> str:
+    """``uv lock`` in the staged tree against PyPI only; returns a one-line note.
+
+    The default index is forced to PyPI and uv's config files and index variables are
+    ignored, so a private registry from the user's machine never lands in ``uv.lock``.
+    Raises :class:`StepFailed` when uv runs and fails.
+    """
+    if not (staging / "pyproject.toml").is_file():
+        return "lock: nothing to lock (no pyproject.toml)"
+    env = {**os.environ, **environ}
+    uv = shutil.which("uv", path=env.get("PATH"))
+    if uv is None:
+        return "lock: skipped, uv is not on PATH; run `uv lock` in the project before you push"
+    for name in _INDEX_VARS:
+        env.pop(name, None)
+    command = [uv, "lock", "--no-config", "--default-index", PYPI_SIMPLE, "--quiet"]
+    result = subprocess.run(
+        command, cwd=staging, env=env, capture_output=True, text=True, errors="replace"
+    )
+    if result.returncode != 0:
+        raise StepFailed(
+            f"uv lock (exit {result.returncode}); --no-lock skips it",
+            _tail(result.stderr or result.stdout),
+        )
+    return "lock: uv.lock written (index: PyPI)"
+
+
+def _python_files(root: Path) -> list[Path]:
+    found: list[Path] = []
+    for directory, dirs, files in os.walk(root):
+        dirs[:] = sorted(d for d in dirs if d not in _SKIP_DIRS)
+        found.extend(Path(directory) / name for name in files if name.endswith(".py"))
+    return sorted(found)
+
+
+def _ruff_command() -> list[str] | None:
+    if importlib.util.find_spec("ruff") is not None:
+        return [sys.executable, "-m", "ruff"]
+    found = shutil.which("ruff")
+    return [found] if found else None
+
+
+def self_check(staging: Path) -> list[str]:
+    """Every ``.py`` file compiles, and ``ruff check`` passes when ruff is available.
+
+    Nothing is written into the staged tree (no bytecode, no ruff cache). Returns notes;
+    raises :class:`StepFailed` with the failing step and its output.
+    """
+    files = _python_files(staging)
+    for path in files:
+        relative = path.relative_to(staging).as_posix()
+        try:
+            compile(path.read_bytes(), relative, "exec", dont_inherit=True)
+        except (SyntaxError, ValueError) as exc:
+            where = f"{relative}:{getattr(exc, 'lineno', None) or 1}"
+            raise StepFailed("compile", [f"{where}: {exc.__class__.__name__}: {exc}"]) from None
+    if not files:
+        return []
+    ruff = _ruff_command()
+    if ruff is None:
+        return ["self-check: ruff is not available; lint skipped (compile only)"]
+    result = subprocess.run(
+        [*ruff, "check", "--no-cache", "--output-format", "concise", "."],
+        cwd=staging,
+        capture_output=True,
+        text=True,
+        errors="replace",
+    )
+    if result.returncode != 0:
+        raise StepFailed("ruff check", _tail(result.stdout + result.stderr))
+    return []
+
+
 def _move(staging: Path, output: Path) -> None:
     if not output.exists():
         shutil.move(str(staging), str(output))
@@ -204,6 +306,15 @@ def new_assignment(
             lines.extend(f"  {name}" for name in files)
             lines.append("answers: " + ", ".join(f"{k}={v!r}" for k, v in sorted(answers.items())))
             return Result(OK, lines)
+        if opts.lock:
+            try:
+                lines.append(lock(staging, env))
+            except StepFailed as failed:
+                keep_staging = True
+                return Result(SELF_CHECK, _step_failed(lines, failed, staging), staging=staging)
+        else:
+            lines.append("lock: skipped (--no-lock); run `uv lock` before you push")
+        files = sorted(p.relative_to(staging).as_posix() for p in staging.rglob("*") if p.is_file())
         gate = leakgate.run(
             trees=[staging],
             texts=[("name", opts.name), ("slug", slug)],
@@ -221,6 +332,11 @@ def new_assignment(
                 f"project is kept for inspection in {staging}"
             )
             return Result(LEAK, lines, gate.findings, staging)
+        try:
+            lines.extend(self_check(staging))
+        except StepFailed as failed:
+            keep_staging = True
+            return Result(SELF_CHECK, _step_failed(lines, failed, staging), staging=staging)
         _move(staging, output)
         if opts.git and not (output / ".git").exists():
             _git_init(output, lines)
@@ -228,7 +344,7 @@ def new_assignment(
         lines.insert(
             0,
             f"Created {slug} ({opts.type}) in {took:.1f} s; leak gate: 0 findings; "
-            f"{len(files)} files in {output}",
+            f"self-check: green; {len(files)} files in {output}",
         )
         lines += ["", "Next:", f"  cd {output}", "  $EDITOR README.md"]
         return Result(OK, lines, output=output)
@@ -242,6 +358,16 @@ def new_assignment(
     finally:
         if not keep_staging:
             shutil.rmtree(staging, ignore_errors=True)
+
+
+def _step_failed(lines: list[str], failed: StepFailed, staging: Path) -> list[str]:
+    return [
+        *lines,
+        f"self-check failed at {failed.step}:",
+        *(f"  {line}" for line in failed.detail),
+        "nothing was written to the output directory; the rendered project is kept for "
+        f"inspection in {staging}",
+    ]
 
 
 def check(path: Path, strict: bool = False, environ: Mapping[str, str] | None = None) -> Result:
