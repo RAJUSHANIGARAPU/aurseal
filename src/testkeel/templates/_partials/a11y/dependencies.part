@@ -1,0 +1,5 @@
+    # Exact: the CI container and the Dockerfile use the same version.
+    "playwright==1.58.0",
+    "pytest-playwright>=0.7",
+    # Supplies the axe-core build the scanner injects; uv.lock pins its version.
+    "axe-playwright-python>=0.1.8",

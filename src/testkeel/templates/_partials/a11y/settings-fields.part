@@ -1,0 +1,13 @@
+    base_url: str = Field(
+        default="{{ target_url }}",
+        description="Web application under test",
+    )
+    expect_timeout_ms: int = Field(default=5_000, gt=0, description="Web-first assertion timeout")
+    wcag_tags: str = Field(
+        default="wcag2a,wcag2aa,wcag21a,wcag21aa",
+        description="Comma-separated axe rule tags to run (WCAG 2.1 AA by default)",
+    )
+    axe_script: str = Field(
+        default="",
+        description="Path to a pinned axe.min.js; empty uses the build axe-playwright-python ships",
+    )

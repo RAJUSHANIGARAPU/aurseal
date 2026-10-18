@@ -20,6 +20,7 @@ type:
     - web-ui
     - api-rest
     - api-graphql
+    - a11y
     - strategy
 
 layer:
@@ -63,7 +64,7 @@ target_url:
   type: str
   help: Web application under test
   default: "https://example.test"
-  when: "{{ type == 'web-ui' }}"
+  when: "{{ type in ['web-ui', 'a11y'] }}"
   validator: >-
     {% if not (target_url | regex_search('^https?://[^\\s/]+')) %}an http(s) URL{% endif %}
 

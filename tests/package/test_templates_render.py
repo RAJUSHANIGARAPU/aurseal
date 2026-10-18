@@ -49,10 +49,13 @@ CASES = {
         "api-graphql",
         {"report": "allure", "docker": False, "python_version": "3.13"},
     ),
+    "a11y": ("a11y", {}),
+    "a11y-both-no-ci": ("a11y", {"report": "both", "ci": "none"}),
     "strategy": ("strategy", {}),
     "strategy-no-ci": ("strategy", {"ci": "none"}),
 }
 CODE_CASES = [name for name, (type_, _) in CASES.items() if type_ != "strategy"]
+BROWSER_TYPES = {"web-ui", "a11y"}
 
 # Template syntax that must never reach a generated file. `${{` is a GitHub Actions
 # expression, not Jinja, so it is the one legitimate double brace.
@@ -100,6 +103,18 @@ def _run(args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
 
 def _importable(*modules: str) -> bool:
     return all(importlib.util.find_spec(m) is not None for m in modules)
+
+
+def _has_chromium() -> bool:
+    if not _importable("playwright"):
+        return False
+    from playwright.sync_api import sync_playwright
+
+    try:
+        with sync_playwright() as playwright:
+            return Path(playwright.chromium.executable_path).is_file()
+    except Exception:
+        return False
 
 
 def _has_jsonschema_stubs() -> bool:
@@ -185,7 +200,7 @@ def test_strategy_ships_documents_only(rendered):
 # ------------------------------------------------------------------ the rules baked in
 
 
-@pytest.mark.parametrize("name", [n for n in CODE_CASES if CASES[n][0] == "web-ui"])
+@pytest.mark.parametrize("name", [n for n in CODE_CASES if CASES[n][0] in BROWSER_TYPES])
 def test_playwright_image_matches_the_pinned_client(rendered, name):
     project = rendered[name]
     pin = re.search(r'"playwright==([\d.]+)"', (project / "pyproject.toml").read_text())
@@ -279,6 +294,31 @@ def test_api_graphql_operations_and_snapshot_ship_together(rendered):
     assert (project / "schema.graphql").is_file()
     queries = list((project / "src" / "acme_shop" / "operations").glob("*.graphql"))
     assert queries, "the template must ship at least one operation file"
+
+
+@pytest.mark.skipif(
+    not _importable("axe_playwright_python", "pytest_playwright", "pydantic_settings")
+    or not _has_chromium(),
+    reason="the a11y project's dependencies or Chromium are not installed",
+)
+@pytest.mark.parametrize("name", [n for n in CODE_CASES if CASES[n][0] == "a11y"])
+def test_a11y_offline_tests_pass_without_network(rendered, name):
+    # The planted-violation fixtures are the positive control: they must be found offline.
+    result = _run(
+        [sys.executable, "-m", "pytest", "-m", "offline", "-p", "no:cacheprovider",
+         "-o", "addopts=-ra --strict-markers"],
+        rendered[name],
+    )  # fmt: skip
+    assert result.returncode == 0, result.stdout[-3000:] + result.stderr[-2000:]
+    assert re.search(r"\b\d{2,} passed\b", result.stdout), result.stdout[-1000:]
+
+
+def test_a11y_ships_an_empty_baseline_and_both_fixtures(rendered):
+    project = rendered["a11y"]
+    baseline = json.loads((project / "a11y-baseline.json").read_text(encoding="utf-8"))
+    assert baseline["violations"] == []
+    for name in ("before.html", "after.html"):
+        assert (project / "tests" / "fixtures" / "static" / name).is_file(), name
 
 
 # ------------------------------------------------------------------ the examples
