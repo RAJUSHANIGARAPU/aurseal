@@ -15,7 +15,7 @@ def _write(root: Path, rel: str, text: str) -> None:
 
 def test_references_cover_workflows_templates_and_examples(tmp_path: Path) -> None:
     _write(tmp_path, ".github/workflows/ci.yml", "steps:\n  - uses: actions/checkout@v4\n")
-    part = "src/testkeel/templates/x/ci-test-job.part"
+    part = "src/aurseal/templates/x/ci-test-job.part"
     _write(tmp_path, part, "- uses: acme/setup-thing@v2.1.0\n")
     _write(tmp_path, "examples/e/.github/workflows/ci.yml", "uses: 'acme/tools/sub/dir@main'\n")
     _write(tmp_path, ".github/workflows/local.yml", "uses: ./.github/actions/local\n")

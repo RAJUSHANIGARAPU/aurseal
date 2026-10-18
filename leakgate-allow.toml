@@ -1,4 +1,4 @@
-# Personal-data false positives for `python -m testkeel.leakgate` (rule + path + reason).
+# Personal-data false positives for `python -m aurseal.leakgate` (rule + path + reason).
 # Denylist rules cannot be allowlisted here; fix those in the private list.
 
 [[allow]]

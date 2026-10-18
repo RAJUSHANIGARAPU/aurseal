@@ -8,10 +8,10 @@ from pathlib import Path
 
 import pytest
 
-from testkeel.importers import ReportError, registry
-from testkeel.importers.k6 import SCHEMA_REF, K6Payload, K6ResultType
-from testkeel.model.v1 import RunUpload, Status
-from testkeel.plugin_api.v1 import RESULT_TYPES, ResultType, discover
+from aurseal.importers import ReportError, registry
+from aurseal.importers.k6 import SCHEMA_REF, K6Payload, K6ResultType
+from aurseal.model.v1 import RunUpload, Status
+from aurseal.plugin_api.v1 import RESULT_TYPES, ResultType, discover
 
 FIXTURES = Path(__file__).parent / "fixtures"
 HANDLE_SUMMARY = FIXTURES / "k6-summary.json"
@@ -92,7 +92,7 @@ def test_the_result_type_is_a_registered_plugin():
     assert {"metric", "threshold", "ok", "values"} <= set(schema["required"]) | set(
         schema["properties"]
     )
-    assert "k6" in {ep.name for ep in entry_points(group="testkeel.importers")}
+    assert "k6" in {ep.name for ep in entry_points(group="aurseal.importers")}
     with pytest.raises(ValueError):
         K6ResultType().validate({"metric": "x"})
 

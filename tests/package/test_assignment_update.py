@@ -1,4 +1,4 @@
-"""``testkeel assignment update`` end to end against a local template repository.
+"""``aurseal assignment update`` end to end against a local template repository.
 
 The fixture builds a git repository holding this installation's templates, tags it as the
 installed release, changes the templates in a second tagged commit, and serves both tags
@@ -16,12 +16,12 @@ import pytest
 from typer.testing import CliRunner
 
 pytest.importorskip("copier", reason="copier is not installed")
-templates = pytest.importorskip("testkeel.templates", reason="testkeel is not importable")
+templates = pytest.importorskip("aurseal.templates", reason="aurseal is not importable")
 if shutil.which("git") is None:
     pytest.skip("git is not on PATH", allow_module_level=True)
 
-from testkeel.assignment import scaffold, update  # noqa: E402
-from testkeel.cli import app  # noqa: E402
+from aurseal.assignment import scaffold, update  # noqa: E402
+from aurseal.cli import app  # noqa: E402
 
 runner = CliRunner()
 V1 = scaffold.TEMPLATE_TAG

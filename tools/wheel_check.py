@@ -1,8 +1,8 @@
-"""The built testkeel wheel holds only the package.
+"""The built aurseal wheel holds only the package.
 
 ``python -m tools.wheel_check dist`` exits 1 when the directory does not hold exactly one
-testkeel wheel, or when that wheel carries a file outside ``testkeel/`` and its
-``testkeel-<version>.dist-info/`` metadata (the framework, the demo system, local tooling
+aurseal wheel, or when that wheel carries a file outside ``aurseal/`` and its
+``aurseal-<version>.dist-info/`` metadata (the framework, the demo system, local tooling
 config). Shared by package.yml and publish.yml, so the wheel that is published passes the
 same check as the wheel built on every change.
 """
@@ -14,7 +14,7 @@ import zipfile
 from collections.abc import Sequence
 from pathlib import Path
 
-PREFIXES = ("testkeel/", "testkeel-")
+PREFIXES = ("aurseal/", "aurseal-")
 
 
 def stray_entries(wheel: Path) -> list[str]:
@@ -25,12 +25,12 @@ def stray_entries(wheel: Path) -> list[str]:
 
 def check(directory: Path) -> list[str]:
     """Problems with the wheel in ``directory``; empty when it is clean."""
-    wheels = sorted(directory.glob("testkeel-*.whl"))
+    wheels = sorted(directory.glob("aurseal-*.whl"))
     if len(wheels) != 1:
-        return [f"expected one testkeel wheel in {directory}, found {len(wheels)}"]
+        return [f"expected one aurseal wheel in {directory}, found {len(wheels)}"]
     stray = stray_entries(wheels[0])
     if stray:
-        return [f"files outside testkeel/ in {wheels[0].name}: {stray}"]
+        return [f"files outside aurseal/ in {wheels[0].name}: {stray}"]
     return []
 
 
@@ -41,7 +41,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     for problem in problems:
         print(problem, file=sys.stderr)
     if not problems:
-        print(f"{next(directory.glob('testkeel-*.whl')).name}: only the package")
+        print(f"{next(directory.glob('aurseal-*.whl')).name}: only the package")
     return 1 if problems else 0
 
 

@@ -7,8 +7,8 @@ import json
 import pytest
 from pydantic import ValidationError
 
-from testkeel.model.identity import fingerprint
-from testkeel.model.v1 import (
+from aurseal.model.identity import fingerprint
+from aurseal.model.v1 import (
     SCHEMA_VERSION,
     Attempt,
     BuildContext,
