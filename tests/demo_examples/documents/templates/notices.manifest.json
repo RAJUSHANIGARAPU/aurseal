@@ -1,0 +1,163 @@
+[
+  {
+    "template": "order_summary",
+    "absent_from_envs": [],
+    "samples": [
+      "samples/order_summary.complete.json",
+      "samples/order_summary.minimal.json"
+    ],
+    "must_show": [
+      "Monthly charge:",
+      "Customer:",
+      "Reseller:",
+      "Data region:",
+      "Net monthly:",
+      "Tax monthly:"
+    ],
+    "section_headings": [],
+    "money_fields": [
+      "Monthly charge:",
+      "Net monthly:",
+      "Tax monthly:",
+      "Setup fee:"
+    ],
+    "conditional_lines": [
+      "Workspace:",
+      "Setup fee:",
+      "PO reference:"
+    ],
+    "pinned_text": [
+      "SUB-004512",
+      "Monthly charge: EUR 39.00",
+      "Mira Sample",
+      "Sample Channel Ltd"
+    ],
+    "open_issues": []
+  },
+  {
+    "template": "account_opened",
+    "absent_from_envs": [],
+    "samples": [
+      "samples/account_opened.complete.json",
+      "samples/account_opened.minimal.json"
+    ],
+    "must_show": [
+      "Subscription:",
+      "Starts on:",
+      "Term ends:",
+      "Charge per period:",
+      "Data region:"
+    ],
+    "section_headings": [],
+    "money_fields": [
+      "Charge per period:"
+    ],
+    "conditional_lines": [
+      "Workspace:",
+      "Billing contact:",
+      "PO reference:"
+    ],
+    "pinned_text": [
+      "Mira Sample",
+      "SUB-004512",
+      "Charge per period: EUR 117.00",
+      "Workspace: TRAINING"
+    ],
+    "open_issues": [
+      {
+        "issue": "DEMO-117",
+        "summary": "period charge printed raw",
+        "notes": "the period charge skips the money filter",
+        "seen_in": "demo fault switch doc_amount_unformatted",
+        "finding": "RAW-AMOUNT"
+      }
+    ]
+  },
+  {
+    "template": "plan_update_notice",
+    "absent_from_envs": [],
+    "samples": [
+      "samples/plan_update_notice.complete.json",
+      "samples/plan_update_notice.minimal.json"
+    ],
+    "must_show": [
+      "Adjustment:",
+      "Applies from:",
+      "New charge per period:",
+      "Customer:",
+      "Data region:"
+    ],
+    "section_headings": [],
+    "money_fields": [
+      "Adjustment:",
+      "New charge per period:"
+    ],
+    "conditional_lines": [
+      "Workspace:",
+      "PO reference:"
+    ],
+    "pinned_text": [
+      "Adjustment: EUR 4.00",
+      "Applies from: 2026-06-11",
+      "New charge per period: EUR 45.00"
+    ],
+    "open_issues": []
+  },
+  {
+    "template": "closure_notice",
+    "absent_from_envs": [],
+    "samples": [
+      "samples/closure_notice.complete.json",
+      "samples/closure_notice.minimal.json"
+    ],
+    "must_show": [
+      "Credit:",
+      "Credit net:",
+      "Credit tax:",
+      "Ends on:",
+      "Reason:",
+      "Customer:"
+    ],
+    "section_headings": [],
+    "money_fields": [
+      "Credit:",
+      "Credit net:",
+      "Credit tax:"
+    ],
+    "conditional_lines": [
+      "PO reference:"
+    ],
+    "pinned_text": [
+      "Credit: EUR -19.50",
+      "Credit net: EUR -16.25",
+      "Credit tax: EUR -3.25",
+      "Reason: CONSOLIDATING"
+    ],
+    "open_issues": []
+  },
+  {
+    "template": "term_extension_notice",
+    "absent_from_envs": [
+      "legacy"
+    ],
+    "samples": [
+      "samples/term_extension_notice.complete.json",
+      "samples/term_extension_notice.minimal.json"
+    ],
+    "must_show": [
+      "New charge per period:",
+      "New term:",
+      "Customer:"
+    ],
+    "section_headings": [],
+    "money_fields": [
+      "New charge per period:"
+    ],
+    "conditional_lines": [],
+    "pinned_text": [
+      "New charge per period: EUR 39.98",
+      "New term: 2027-06-01 - 2028-06-01"
+    ],
+    "open_issues": []
+  }
+]

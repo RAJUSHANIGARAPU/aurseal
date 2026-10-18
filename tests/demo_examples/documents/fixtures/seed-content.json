@@ -1,0 +1,6 @@
+{
+  "workspace_type": "TRAINING",
+  "data_region": "AP-SOUTH",
+  "billing_contact": {"name": "Odile Ledger", "email": "odile.ledger@example.test"},
+  "change": {"addons": {"audit_trail": true}}
+}

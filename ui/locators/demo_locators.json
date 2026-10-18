@@ -1,0 +1,632 @@
+{
+  "page.title": {
+    "type": "testid",
+    "value": "page-title"
+  },
+  "page.faults_banner": {
+    "type": "testid",
+    "value": "demo-faults-banner"
+  },
+  "page.error_banner": {
+    "type": "testid",
+    "value": "error-banner"
+  },
+  "page.side_menu": {
+    "type": "testid",
+    "value": "side-menu"
+  },
+  "page.breadcrumb": {
+    "type": "testid",
+    "value": "breadcrumb"
+  },
+  "wizard.parties_step": {
+    "type": "testid",
+    "value": "step-parties"
+  },
+  "wizard.pick_partner": {
+    "type": "testid",
+    "value": "pick-partner"
+  },
+  "wizard.pick_customer": {
+    "type": "testid",
+    "value": "pick-customer"
+  },
+  "wizard.partner_summary": {
+    "type": "testid",
+    "value": "partner-summary"
+  },
+  "wizard.customer_summary": {
+    "type": "testid",
+    "value": "customer-summary"
+  },
+  "wizard.partner_change": {
+    "type": "testid",
+    "value": "partner-change"
+  },
+  "wizard.customer_change": {
+    "type": "testid",
+    "value": "customer-change"
+  },
+  "wizard.customer_number": {
+    "type": "testid",
+    "value": "customer-number"
+  },
+  "wizard.customer_number_lookup": {
+    "type": "testid",
+    "value": "customer-number-lookup"
+  },
+  "wizard.customer_number_status": {
+    "type": "testid",
+    "value": "customer-number-status"
+  },
+  "wizard.verification_step": {
+    "type": "testid",
+    "value": "step-verification"
+  },
+  "wizard.screening_run": {
+    "type": "testid",
+    "value": "screening-run"
+  },
+  "wizard.screening_status": {
+    "type": "testid",
+    "value": "screening-status"
+  },
+  "wizard.address_block": {
+    "type": "testid",
+    "value": "address-block"
+  },
+  "wizard.plan": {
+    "type": "label",
+    "value": "Plan"
+  },
+  "wizard.frequency": {
+    "type": "label",
+    "value": "Frequency"
+  },
+  "wizard.start_date": {
+    "type": "testid",
+    "value": "start-date"
+  },
+  "wizard.data_region": {
+    "type": "label",
+    "value": "Data region"
+  },
+  "wizard.workspace_type": {
+    "type": "label",
+    "value": "Workspace type"
+  },
+  "wizard.invoice_delivery": {
+    "type": "label",
+    "value": "Invoice delivery"
+  },
+  "wizard.step_error": {
+    "type": "testid",
+    "value": "step-error"
+  },
+  "wizard.parties_submit": {
+    "type": "testid",
+    "value": "parties-submit"
+  },
+  "picker.dialog": {
+    "type": "role",
+    "role": "dialog",
+    "name": "Select a record"
+  },
+  "picker.row": {
+    "type": "testid",
+    "value": "picker-row"
+  },
+  "price.step": {
+    "type": "testid",
+    "value": "step-quote"
+  },
+  "price.net": {
+    "type": "testid",
+    "value": "price-net"
+  },
+  "price.tax_rate": {
+    "type": "testid",
+    "value": "price-tax-rate"
+  },
+  "price.commission": {
+    "type": "testid",
+    "value": "price-commission"
+  },
+  "price.calculate": {
+    "type": "role",
+    "role": "button",
+    "name": "Calculate"
+  },
+  "price.field_error": {
+    "type": "testid",
+    "value": "error-{field}"
+  },
+  "price.activate_immediately": {
+    "type": "label",
+    "value": "Activate immediately"
+  },
+  "price.submit": {
+    "type": "data",
+    "attribute": "data-action",
+    "value": "submit"
+  },
+  "confirm.step": {
+    "type": "testid",
+    "value": "step-confirm"
+  },
+  "confirm.status": {
+    "type": "testid",
+    "value": "status-pill"
+  },
+  "confirm.monthly_gross": {
+    "type": "testid",
+    "value": "monthly-gross"
+  },
+  "confirm.action": {
+    "type": "data",
+    "attribute": "data-action",
+    "value": "confirm"
+  },
+  "detail.version_panel": {
+    "type": "testid",
+    "value": "version-panel"
+  },
+  "detail.field": {
+    "type": "testid",
+    "value": "{name}"
+  },
+  "detail.status_pill": {
+    "type": "testid",
+    "value": "status-pill"
+  },
+  "detail.number": {
+    "type": "testid",
+    "value": "subscription-number"
+  },
+  "detail.actions": {
+    "type": "role",
+    "role": "toolbar",
+    "name": "Actions"
+  },
+  "detail.any_action": {
+    "type": "role",
+    "role": "button"
+  },
+  "detail.action": {
+    "type": "data",
+    "attribute": "data-action",
+    "value": "{action}"
+  },
+  "detail.ledger_row": {
+    "type": "testid",
+    "value": "ledger-row"
+  },
+  "detail.ledger_cell": {
+    "type": "data",
+    "attribute": "data-col",
+    "value": "{column}"
+  },
+  "detail.version_select": {
+    "type": "testid",
+    "value": "version-select"
+  },
+  "detail.document_row": {
+    "type": "testid",
+    "value": "document-row"
+  },
+  "detail.download_document": {
+    "type": "testid",
+    "value": "download-document"
+  },
+  "detail.message_row": {
+    "type": "testid",
+    "value": "message-row"
+  },
+  "detail.download_message": {
+    "type": "testid",
+    "value": "download-message"
+  },
+  "detail.generate_messages": {
+    "type": "role",
+    "role": "button",
+    "name": "Generate messages"
+  },
+  "detail.job_status": {
+    "type": "testid",
+    "value": "job-status"
+  },
+  "detail.note_item": {
+    "type": "testid",
+    "value": "note-item"
+  },
+  "detail.note_title": {
+    "type": "testid",
+    "value": "note-title"
+  },
+  "detail.note_description": {
+    "type": "testid",
+    "value": "note-description"
+  },
+  "draft.kind": {
+    "type": "testid",
+    "value": "draft-kind"
+  },
+  "draft.status": {
+    "type": "testid",
+    "value": "draft-status"
+  },
+  "draft.step": {
+    "type": "testid",
+    "value": "draft-step"
+  },
+  "draft.effective_date": {
+    "type": "testid",
+    "value": "draft-effective-date"
+  },
+  "draft.field_error": {
+    "type": "testid",
+    "value": "error-{field}"
+  },
+  "draft.action": {
+    "type": "data",
+    "attribute": "data-action",
+    "value": "{action}"
+  },
+  "draft.reason": {
+    "type": "label",
+    "value": "Reason"
+  },
+  "draft.precondition_error": {
+    "type": "testid",
+    "value": "error-precondition"
+  },
+  "draft.closure_precondition": {
+    "type": "label",
+    "value": "The subscription may end on this date"
+  },
+  "draft.addon": {
+    "type": "data",
+    "attribute": "data-addon",
+    "value": "{addon}"
+  },
+  "draft.data_region": {
+    "type": "label",
+    "value": "Data region"
+  },
+  "draft.workspace_type": {
+    "type": "label",
+    "value": "Workspace type"
+  },
+  "draft.invoice_delivery": {
+    "type": "label",
+    "value": "Invoice delivery"
+  },
+  "draft.spend_cap": {
+    "type": "label",
+    "value": "Monthly spend cap"
+  },
+  "draft.po_reference": {
+    "type": "label",
+    "value": "PO reference"
+  },
+  "draft.contact_name": {
+    "type": "label",
+    "value": "Billing contact name"
+  },
+  "draft.contact_email": {
+    "type": "label",
+    "value": "Billing contact e-mail"
+  },
+  "draft.add_note": {
+    "type": "label",
+    "value": "Add invoice note"
+  },
+  "draft.add_label": {
+    "type": "label",
+    "value": "Add label"
+  },
+  "draft.monthly_net": {
+    "type": "testid",
+    "value": "draft-monthly-net"
+  },
+  "renew.indexation_step": {
+    "type": "testid",
+    "value": "step-indexation"
+  },
+  "renew.price_step": {
+    "type": "testid",
+    "value": "step-price"
+  },
+  "renew.current_price": {
+    "type": "testid",
+    "value": "renewal-current-price"
+  },
+  "renew.new_price": {
+    "type": "testid",
+    "value": "renewal-new-price"
+  },
+  "renew.index": {
+    "type": "label",
+    "value": "Index (%)"
+  },
+  "renew.next": {
+    "type": "testid",
+    "value": "renewal-next"
+  },
+  "renew.back": {
+    "type": "testid",
+    "value": "renewal-back"
+  },
+  "renew.new_term_end_error": {
+    "type": "testid",
+    "value": "error-new-term-end"
+  },
+  "note.title": {
+    "type": "testid",
+    "value": "note-title"
+  },
+  "note.description": {
+    "type": "testid",
+    "value": "note-description"
+  },
+  "detail.document_template": {
+    "type": "role",
+    "role": "cell"
+  },
+  "customer.form": {
+    "type": "testid",
+    "value": "customer-form"
+  },
+  "customer.email": {
+    "type": "testid",
+    "value": "customer-email"
+  },
+  "customer.type": {
+    "type": "testid",
+    "value": "customer-type"
+  },
+  "customer.display_name": {
+    "type": "testid",
+    "value": "customer-display-name"
+  },
+  "customer.phone": {
+    "type": "testid",
+    "value": "customer-phone"
+  },
+  "customer.address_field": {
+    "type": "testid",
+    "value": "address-{key}"
+  },
+  "customer.payout_account": {
+    "type": "testid",
+    "value": "customer-payout-account"
+  },
+  "customer.save": {
+    "type": "testid",
+    "value": "customer-save"
+  },
+  "customer.save_status": {
+    "type": "testid",
+    "value": "save-status"
+  },
+  "customer.field_error": {
+    "type": "testid",
+    "value": "error-{path}"
+  },
+  "customer.start_route": {
+    "type": "data",
+    "attribute": "data-start-route",
+    "value": "{route}"
+  },
+  "admin.cards": {
+    "type": "role",
+    "role": "region",
+    "name": "Reference data"
+  },
+  "admin.card_heading": {
+    "type": "role",
+    "role": "heading",
+    "level": 2
+  },
+  "admin.any_link": {
+    "type": "testid",
+    "value": "admin-link-",
+    "regex": true
+  },
+  "admin.link": {
+    "type": "testid",
+    "value": "admin-link-{key}"
+  },
+  "accounts.table": {
+    "type": "testid",
+    "value": "accounts-table"
+  },
+  "accounts.row": {
+    "type": "testid",
+    "value": "account-row"
+  },
+  "accounts.row_by_id": {
+    "type": "data",
+    "attribute": "data-id",
+    "value": "{id}"
+  },
+  "accounts.menu": {
+    "type": "testid",
+    "value": "account-menu"
+  },
+  "accounts.edit": {
+    "type": "testid",
+    "value": "account-edit"
+  },
+  "accounts.number": {
+    "type": "testid",
+    "value": "account-number"
+  },
+  "accounts.name": {
+    "type": "testid",
+    "value": "account-name"
+  },
+  "accounts.managed": {
+    "type": "testid",
+    "value": "account-managed"
+  },
+  "account_edit.number": {
+    "type": "testid",
+    "value": "account-number-input"
+  },
+  "integrations.root": {
+    "type": "testid",
+    "value": "integrations"
+  },
+  "integrations.form": {
+    "type": "testid",
+    "value": "integration-{key}"
+  },
+  "integrations.hint": {
+    "type": "testid",
+    "value": "hint-{target}"
+  },
+  "detail.section": {
+    "type": "role",
+    "role": "region",
+    "name": "{name}"
+  },
+  "wizard.steps": {
+    "type": "testid",
+    "value": "wizard-steps"
+  },
+  "detail.open_draft_link": {
+    "type": "testid",
+    "value": "open-draft-link"
+  },
+  "list.table": {
+    "type": "testid",
+    "value": "subscriptions-table"
+  },
+  "list.row": {
+    "type": "testid",
+    "value": "subscription-row"
+  },
+  "list.title": {
+    "type": "testid",
+    "value": "subscription-title"
+  },
+  "list.status": {
+    "type": "testid",
+    "value": "status-pill"
+  },
+  "list.link": {
+    "type": "testid",
+    "value": "subscription-link"
+  },
+  "list.filter": {
+    "type": "testid",
+    "value": "filter-input"
+  },
+  "list.chip": {
+    "type": "testid",
+    "value": "filter-chip"
+  },
+  "list.chip_text": {
+    "type": "testid",
+    "value": "filter-chip-text"
+  },
+  "list.next": {
+    "type": "testid",
+    "value": "page-next"
+  },
+  "list.prev": {
+    "type": "testid",
+    "value": "page-prev"
+  },
+  "tasks.table": {
+    "type": "testid",
+    "value": "tasks-table"
+  },
+  "tasks.zone": {
+    "type": "testid",
+    "value": "task-zone"
+  },
+  "tasks.row": {
+    "type": "testid",
+    "value": "task-row"
+  },
+  "tasks.row_by_id": {
+    "type": "data",
+    "attribute": "data-id",
+    "value": "{id}"
+  },
+  "tasks.cell": {
+    "type": "testid",
+    "value": "task-{name}"
+  },
+  "tasks.menu": {
+    "type": "testid",
+    "value": "task-menu"
+  },
+  "tasks.open": {
+    "type": "testid",
+    "value": "task-open"
+  },
+  "tasks.new_title": {
+    "type": "testid",
+    "value": "task-new-title"
+  },
+  "tasks.new_subscription": {
+    "type": "testid",
+    "value": "task-new-subscription"
+  },
+  "tasks.new_target": {
+    "type": "testid",
+    "value": "task-new-target"
+  },
+  "tasks.create": {
+    "type": "testid",
+    "value": "task-create"
+  },
+  "login.form": {
+    "type": "testid",
+    "value": "login-form"
+  },
+  "login.username": {
+    "type": "testid",
+    "value": "login-username"
+  },
+  "login.password": {
+    "type": "testid",
+    "value": "login-password"
+  },
+  "login.submit": {
+    "type": "testid",
+    "value": "login-submit"
+  },
+  "login.error": {
+    "type": "testid",
+    "value": "login-error"
+  },
+  "menu.item": {
+    "type": "testid",
+    "value": "menu-{key}"
+  },
+  "picker.search": {
+    "type": "testid",
+    "value": "picker-search"
+  },
+  "settlements.table": {
+    "type": "testid",
+    "value": "settlements-table"
+  },
+  "settlements.party": {
+    "type": "role",
+    "role": "combobox",
+    "name": "Party"
+  },
+  "settlements.option": {
+    "type": "testid",
+    "value": "party-option"
+  },
+  "settlements.row": {
+    "type": "testid",
+    "value": "settlement-row"
+  }
+}

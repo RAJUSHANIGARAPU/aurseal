@@ -1,0 +1,36 @@
+[
+  {
+    "template": "invoice",
+    "absent_from_envs": [],
+    "samples": [
+      "samples/invoice.complete.json",
+      "samples/invoice.minimal.json"
+    ],
+    "must_show": [
+      "Amount due:",
+      "Net:",
+      "Tax:",
+      "Billing period:",
+      "Subscription:",
+      "Customer:"
+    ],
+    "section_headings": [],
+    "money_fields": [
+      "Amount due:",
+      "Net:",
+      "Tax:"
+    ],
+    "conditional_lines": [
+      "Pay by:",
+      "PO reference:"
+    ],
+    "pinned_text": [
+      "Invoice 200317",
+      "Amount due: EUR 117.00",
+      "Net: EUR 97.50",
+      "Tax: EUR 19.50",
+      "Billing period: 2026-06-01 - 2026-09-01"
+    ],
+    "open_issues": []
+  }
+]

@@ -1,0 +1,14 @@
+[
+  {
+    "template": "/ui/subscriptions",
+    "open_issues": [
+      {
+        "issue": "BUG-171",
+        "summary": "a11y",
+        "notes": "the list filter input has no label or accessible name",
+        "seen_in": "axe rule 'label' on [data-testid=filter-input] (demo fault screen_filter_unlabelled)",
+        "finding": "label"
+      }
+    ]
+  }
+]

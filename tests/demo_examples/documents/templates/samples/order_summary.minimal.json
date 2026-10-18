@@ -1,0 +1,19 @@
+{
+  "subscription": {
+    "number": "SUB-004512",
+    "data_region": "EU-NORTH"
+  },
+  "price": {
+    "monthly_net": 32.5,
+    "monthly_tax": 6.5,
+    "monthly_gross": 39.0
+  },
+  "customer": {
+    "name": "Mira Sample",
+    "number": "CUS-D1-41"
+  },
+  "partner": {
+    "name": "Sample Channel Ltd",
+    "number": "PAR-D1-3"
+  }
+}

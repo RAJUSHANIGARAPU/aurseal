@@ -121,7 +121,9 @@ class ScriptGenerator:
         for s in scenarios:
             body_parts.append(self._scenario_src(s))
 
-        return header + "\n\n".join(body_parts) + "\n"
+        from traceability.review import mark_draft
+
+        return mark_draft(header + "\n\n".join(body_parts) + "\n", "web-discovery", page_url)
 
     def _scenario_src(self, s: TestScenario) -> str:
         func = _to_func_name(s.name)

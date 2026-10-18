@@ -1,0 +1,9 @@
+{
+  "name": "reseller-terms",
+  "create": {
+    "method": "POST",
+    "path": "/reseller-terms",
+    "body": {"name": "Terms ${SEED_TAG}", "share_percent": "${share_percent}", "flat_fee": 0},
+    "capture": {"id": "id", "name": "name"}
+  }
+}

@@ -1,12 +1,16 @@
 """Applies healing strategies for classified UI test failures.
 
 Healing strategies, in order of safety:
-  locator_patch   — rewrites the failing entry in wiki_locators.json with an
+  locator_patch   — heals the failing entry in wiki_locators.json with an
                     LLM-suggested alternative selector, after checking the
                     suggestion is a shape core/base_page.py can resolve. Touches
                     only JSON, never test code — but that JSON is loaded by every
                     page object, so an unvalidated write breaks far more than the
-                    test that failed (see _locator_shape_error).
+                    test that failed (see _locator_shape_error). By default the
+                    heal is PROPOSED into wiki_locators.heals-pending.json for
+                    review and the registry is untouched (applied=False);
+                    HEAL_AUTOPERSIST=true writes the registry itself, atomically
+                    and under a lock (autonomous_ui/locator_store.py).
   wait_retry      — records the test in healing_overrides.json so the orchestrator
                     adds --reruns on the next pytest run. Safe: no code change.
   assertion_patch — delegates to AutoFixer to rewrite the test file. Guarded:
@@ -21,6 +25,9 @@ When NOT to auto-heal:
   - the suggested locator is not a shape base_page.resolve() understands
   - the suggested locator is the value already in the registry (a no-op is not
     a fix, and reporting it as one made the heal log unreadable)
+
+Every decision, applied or not, is appended to the heal event log
+(autonomous_ui/heal_events.py, reports/healing/healing-events.jsonl).
 
 A heal that did nothing must never report applied=True. Everything above
 returns strategy="none" with the reason, which is deliberately NOT the same as
@@ -37,8 +44,11 @@ from pathlib import Path
 
 from api.llm.base import BaseLLMClient
 from api.llm.claude_client import ClaudeLLMClient
+from autonomous_ui.heal_events import HealEvent, HealEventLog
+from autonomous_ui.locator_store import LocatorStore, strip_heal_metadata
 from autonomous_ui.models import FailureAnalysis, FailureType, HealingResult
 from core.ai.auto_fixer import AutoFixer
+from core.locator_strategy import LocatorStrategy, priority_prompt, shape_error
 
 _LOCATOR_REGISTRY = Path("ui/locators/wiki_locators.json")
 _HEALING_OVERRIDES = Path("reports/healing_overrides.json")
@@ -52,12 +62,6 @@ _JSON_FENCE_RE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL)
 # applied=True — a silent non-heal reported as a heal. Named here so the failure
 # message can quote the actual limit.
 _PATCH_MAX_TOKENS = 1024
-
-# The locator shapes core/base_page.py:resolve() can turn into a Playwright
-# locator, and what each one has to carry. Anything else raises there — for the
-# whole page object, on every test using the key, not just the healed one.
-_LOCATOR_VALUE_TYPES = ("css", "testid", "placeholder", "text")
-_LOCATOR_TYPES = (*_LOCATOR_VALUE_TYPES, "role")
 
 
 @dataclass(frozen=True)
@@ -77,39 +81,59 @@ def _locator_shape_error(locator: object) -> str:
     loads at construction, so an unvalidated write is not scoped to the test
     that failed. Probed: the model answered
     ``"new_locator": "[data-testid=search-field]"`` — a bare string where a
-    mapping belongs — it was written verbatim, and core/base_page.py:16 then
+    mapping belongs — it was written verbatim, and core/base_page.py then
     raised ``TypeError: string indices must be integers`` for every test using
-    that key. A locator is cheap to check and expensive to get wrong.
+    that key. A locator is cheap to check and expensive to get wrong. The
+    check is ``core.locator_strategy.shape_error``, the same one
+    ``BasePage.resolve`` renders through.
     """
-    if not isinstance(locator, dict):
-        return f"expected a locator mapping, got {type(locator).__name__}"
-
-    kind = locator.get("type")
-    if not isinstance(kind, str) or not kind:
-        return "locator has no 'type'"
-    if kind not in _LOCATOR_TYPES:
-        return f"unsupported locator type '{kind}' — base_page.resolve() would raise"
-
-    if kind == "role":
-        role = locator.get("role")
-        if not isinstance(role, str) or not role.strip():
-            return "role locator has no 'role'"
-        return ""
-
-    value = locator.get("value")
-    if not isinstance(value, str) or not value.strip():
-        return f"{kind} locator has no usable 'value'"
-    return ""
+    return shape_error(locator)
 
 
 class UIHealer:
     """Applies the appropriate healing strategy for a FailureAnalysis."""
 
-    def __init__(self, llm: BaseLLMClient | None = None) -> None:
+    def __init__(
+        self,
+        llm: BaseLLMClient | None = None,
+        *,
+        event_log: HealEventLog | None = None,
+        autopersist: bool | None = None,
+    ) -> None:
         self._llm = llm or ClaudeLLMClient()
         self._patched_locator_keys: set[str] = set()  # guard against repeated patches
+        self._event_log = event_log
+        self._autopersist = autopersist  # None: HEAL_AUTOPERSIST decides
+        self._locator_change: dict = {}
 
     def heal(self, analysis: FailureAnalysis, dom_snapshot: str = "") -> HealingResult:
+        self._locator_change = {}
+        result = self._heal(analysis, dom_snapshot)
+        self._log_event(analysis, result)
+        return result
+
+    def _log_event(self, analysis: FailureAnalysis, result: HealingResult) -> None:
+        log = self._event_log or HealEventLog()
+        try:
+            log.append(
+                HealEvent(
+                    test=analysis.test_name,
+                    strategy=result.strategy,
+                    applied=result.applied,
+                    details=result.details,
+                    failure_type=analysis.failure_type.value,
+                    confidence=analysis.confidence,
+                    locator_key=self._locator_change.get("key", ""),
+                    old_locator=self._locator_change.get("old"),
+                    new_locator=self._locator_change.get("new"),
+                    persisted=self._locator_change.get("persisted"),
+                    patched_files=[str(p) for p in result.patched_files],
+                )
+            )
+        except Exception:  # noqa: BLE001 - logging a heal never fails it
+            pass
+
+    def _heal(self, analysis: FailureAnalysis, dom_snapshot: str) -> HealingResult:
         if analysis.confidence == "low":
             return HealingResult(
                 test_name=analysis.test_name,
@@ -136,8 +160,9 @@ class UIHealer:
     # ------------------------------------------------------------------
 
     def _heal_locator(self, analysis: FailureAnalysis, dom_snapshot: str) -> HealingResult:
+        store = LocatorStore(_LOCATOR_REGISTRY, autopersist=self._autopersist)
         try:
-            registry = json.loads(_LOCATOR_REGISTRY.read_text())
+            registry = store.load()
         except FileNotFoundError:
             return self._record_retry(analysis)
 
@@ -177,7 +202,8 @@ class UIHealer:
         if shape_error:
             return self._no_heal(analysis, f"locator patch rejected — '{key}': {shape_error}")
 
-        if new_locator == registry[key]:
+        self._locator_change = {"key": key, "old": registry[key], "new": new_locator}
+        if new_locator == strip_heal_metadata(registry[key]):
             # The model handed back the value already in the registry. Writing
             # it changes nothing, and reporting applied=True with
             # "patched 'k': X → X" counted a no-op as a fix.
@@ -195,19 +221,30 @@ class UIHealer:
                 ),
             )
 
-        old_locator = registry[key]
-        registry[key] = new_locator
-        _LOCATOR_REGISTRY.write_text(json.dumps(registry, indent=2))
+        old_locator = strip_heal_metadata(registry[key])
+        reason = patch.get("reasoning", "LLM suggestion")
+        write = store.update(key, new_locator, reason=str(reason))
         self._patched_locator_keys.add(key)
+        self._locator_change["persisted"] = write.persisted
+
+        if not write.persisted:
+            return HealingResult(
+                test_name=analysis.test_name,
+                strategy="locator_patch",
+                applied=False,
+                details=(
+                    f"proposed '{key}': {old_locator} → {new_locator} in {write.path.name} "
+                    f"for review; the registry is unchanged (HEAL_AUTOPERSIST=true writes it) "
+                    f"(reason: {reason})"
+                ),
+                patched_files=[write.path],
+            )
 
         return HealingResult(
             test_name=analysis.test_name,
             strategy="locator_patch",
             applied=True,
-            details=(
-                f"patched '{key}': {old_locator} → {new_locator} "
-                f"(reason: {patch.get('reasoning', 'LLM suggestion')})"
-            ),
+            details=(f"patched '{key}': {old_locator} → {new_locator} (reason: {reason})"),
             patched_files=[_LOCATOR_REGISTRY],
         )
 
@@ -242,8 +279,9 @@ CURRENT LOCATOR REGISTRY (wiki_locators.json):
 Task:
 1. Identify which locator key in the registry corresponds to the failing selector.
 2. Find the element in the DOM and suggest a more robust alternative selector.
-3. Prefer selectors in this priority order:
-     data-testid > aria-label > role > placeholder > text > css
+3. Prefer selectors in this priority order (locator "type" in brackets):
+     {priority_prompt()}
+     [{" > ".join(s.value for s in LocatorStrategy)}]
 4. Never use raw CSS class names that look auto-generated (e.g. "Component_foo__Ab1cd").
 
 Return ONLY valid JSON in exactly this structure, no other text:

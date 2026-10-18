@@ -1,0 +1,5 @@
+{
+  "kind": "change",
+  "effective_in_days": 20,
+  "changes": {"addons": {"sandbox": true}, "data_region": "EU-NORTH"}
+}

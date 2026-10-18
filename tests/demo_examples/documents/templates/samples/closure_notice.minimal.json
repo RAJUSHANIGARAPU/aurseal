@@ -1,0 +1,18 @@
+{
+  "subscription": {
+    "number": "SUB-004512"
+  },
+  "cancel": {
+    "total": -19.5,
+    "net": -16.25,
+    "tax": -3.25,
+    "period_start": "2026-06-16"
+  },
+  "closure": {
+    "reason": "CONSOLIDATING"
+  },
+  "customer": {
+    "name": "Mira Sample",
+    "number": "CUS-D1-41"
+  }
+}

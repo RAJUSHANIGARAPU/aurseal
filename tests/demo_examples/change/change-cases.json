@@ -1,0 +1,434 @@
+{
+  "suite": "demo-subscription-changes",
+  "cases": [
+    {
+      "id": "CHG-TERMS-1",
+      "title": "Agree a new monthly net price",
+      "state": "automated",
+      "test": "tests/demo_examples/change/test_change_scenarios.py::test_change_case",
+      "seen_passing": true,
+      "proof": "two green runs in a row of tests/demo_examples/change, 2026-10-17",
+      "inputs": {
+        "action": "change",
+        "ends_in": "active",
+        "reasons": [
+          "RSN-PRICE-REVIEW"
+        ],
+        "touches": [
+          "monthly_net"
+        ],
+        "apply": {
+          "monthly_net": 52.8
+        },
+        "then": {
+          "price.monthly_net": 52.8
+        },
+        "origin": "invented"
+      }
+    },
+    {
+      "id": "CHG-TERMS-2",
+      "title": "Set a spending ceiling",
+      "state": "automated",
+      "test": "tests/demo_examples/change/test_change_scenarios.py::test_change_case",
+      "seen_passing": true,
+      "proof": "two green runs in a row of tests/demo_examples/change, 2026-10-17",
+      "inputs": {
+        "action": "change",
+        "ends_in": "active",
+        "reasons": [
+          "RSN-BUDGET-CEILING"
+        ],
+        "touches": [
+          "spend_cap"
+        ],
+        "apply": {
+          "spend_cap": 175
+        },
+        "then": {
+          "spend_cap": 175.0
+        },
+        "origin": "invented"
+      }
+    },
+    {
+      "id": "CHG-TERMS-3",
+      "title": "Grow the seat count with a second block",
+      "state": "automated",
+      "test": "tests/demo_examples/change/test_change_scenarios.py::test_change_case",
+      "seen_passing": true,
+      "proof": "two green runs in a row of tests/demo_examples/change, 2026-10-17",
+      "inputs": {
+        "action": "change",
+        "ends_in": "active",
+        "reasons": [
+          "RSN-HEADCOUNT"
+        ],
+        "touches": [
+          "seat_blocks"
+        ],
+        "apply": {
+          "seat_blocks": [
+            {
+              "name": "Core team",
+              "seats": 8
+            },
+            {
+              "name": "Night shift",
+              "seats": 5
+            }
+          ]
+        },
+        "then": {
+          "seat_total": 13,
+          "seat_blocks.1.seats": 5
+        },
+        "origin": "invented"
+      }
+    },
+    {
+      "id": "CHG-BILL-1",
+      "title": "Settle invoices by bank transfer",
+      "state": "automated",
+      "test": "tests/demo_examples/change/test_change_scenarios.py::test_change_case",
+      "seen_passing": true,
+      "proof": "two green runs in a row of tests/demo_examples/change, 2026-10-17",
+      "inputs": {
+        "action": "change",
+        "ends_in": "active",
+        "reasons": [
+          "RSN-PAYMENT-ROUTE"
+        ],
+        "touches": [
+          "payment_method"
+        ],
+        "apply": {
+          "payment_method": {
+            "type": "BANK_TRANSFER"
+          }
+        },
+        "then": {
+          "payment_method.type": "BANK_TRANSFER"
+        },
+        "origin": "invented"
+      }
+    },
+    {
+      "id": "CHG-BILL-2",
+      "title": "Publish invoices on the portal rather than by e-mail",
+      "state": "automated",
+      "test": "tests/demo_examples/change/test_change_scenarios.py::test_change_case",
+      "seen_passing": true,
+      "proof": "two green runs in a row of tests/demo_examples/change, 2026-10-17",
+      "inputs": {
+        "action": "change",
+        "ends_in": "active",
+        "reasons": [
+          "RSN-DELIVERY-CHANNEL"
+        ],
+        "touches": [
+          "invoice_delivery"
+        ],
+        "apply": {
+          "invoice_delivery": "PORTAL"
+        },
+        "then": {
+          "invoice_delivery": "PORTAL"
+        },
+        "origin": "invented"
+      }
+    },
+    {
+      "id": "CHG-BILL-3",
+      "title": "Hand billing over to a different contact",
+      "state": "automated",
+      "test": "tests/demo_examples/change/test_change_scenarios.py::test_change_case",
+      "seen_passing": true,
+      "proof": "two green runs in a row of tests/demo_examples/change, 2026-10-17",
+      "inputs": {
+        "action": "change",
+        "ends_in": "active",
+        "reasons": [
+          "RSN-CONTACT-HANDOVER"
+        ],
+        "touches": [
+          "billing_contact"
+        ],
+        "apply": {
+          "billing_contact": {
+            "name": "Robin Sample",
+            "email": "robin@example.test"
+          }
+        },
+        "then": {
+          "billing_contact.name": "Robin Sample",
+          "billing_contact.email": "robin@example.test"
+        },
+        "origin": "invented"
+      }
+    },
+    {
+      "id": "CHG-BILL-4",
+      "title": "Quote the buyer's requisition number",
+      "state": "automated",
+      "test": "tests/demo_examples/change/test_change_scenarios.py::test_change_case",
+      "seen_passing": true,
+      "proof": "two green runs in a row of tests/demo_examples/change, 2026-10-17",
+      "inputs": {
+        "action": "change",
+        "ends_in": "active",
+        "reasons": [
+          "RSN-BUYER-REFERENCE"
+        ],
+        "touches": [
+          "po_reference"
+        ],
+        "apply": {
+          "po_reference": "REQ/88-B"
+        },
+        "then": {
+          "po_reference": "REQ/88-B"
+        },
+        "origin": "invented"
+      }
+    },
+    {
+      "id": "CHG-BILL-5",
+      "title": "Print an extra line on every invoice",
+      "state": "automated",
+      "test": "tests/demo_examples/change/test_change_scenarios.py::test_change_case",
+      "seen_passing": true,
+      "proof": "two green runs in a row of tests/demo_examples/change, 2026-10-17",
+      "inputs": {
+        "action": "change",
+        "ends_in": "active",
+        "reasons": [
+          "RSN-INVOICE-TEXT"
+        ],
+        "touches": [
+          "invoice_notes"
+        ],
+        "apply": {
+          "add_invoice_notes": [
+            {
+              "text": "Remit to the account on the cover page."
+            }
+          ]
+        },
+        "then": {
+          "invoice_notes.-1.text": "Remit to the account on the cover page."
+        },
+        "origin": "invented"
+      }
+    },
+    {
+      "id": "CHG-SETUP-1",
+      "title": "Enable the audit trail add-on",
+      "state": "automated",
+      "test": "tests/demo_examples/change/test_change_scenarios.py::test_change_case",
+      "seen_passing": true,
+      "proof": "two green runs in a row of tests/demo_examples/change, 2026-10-17",
+      "inputs": {
+        "action": "change",
+        "ends_in": "active",
+        "reasons": [
+          "RSN-COMPLIANCE"
+        ],
+        "touches": [
+          "addons"
+        ],
+        "apply": {
+          "addons": {
+            "audit_trail": true
+          }
+        },
+        "then": {
+          "addons.audit_trail": true
+        },
+        "origin": "invented"
+      }
+    },
+    {
+      "id": "CHG-SETUP-2",
+      "title": "Host the data in the Asia-Pacific region",
+      "state": "automated",
+      "test": "tests/demo_examples/change/test_change_scenarios.py::test_change_case",
+      "seen_passing": true,
+      "proof": "two green runs in a row of tests/demo_examples/change, 2026-10-17",
+      "inputs": {
+        "action": "change",
+        "ends_in": "active",
+        "reasons": [
+          "RSN-RESIDENCY"
+        ],
+        "touches": [
+          "data_region"
+        ],
+        "apply": {
+          "data_region": "AP-SOUTH"
+        },
+        "then": {
+          "data_region": "AP-SOUTH"
+        },
+        "origin": "invented"
+      }
+    },
+    {
+      "id": "CHG-SETUP-3",
+      "title": "Repurpose the workspace for training sessions",
+      "state": "automated",
+      "test": "tests/demo_examples/change/test_change_scenarios.py::test_change_case",
+      "seen_passing": true,
+      "proof": "two green runs in a row of tests/demo_examples/change, 2026-10-17",
+      "inputs": {
+        "action": "change",
+        "ends_in": "active",
+        "reasons": [
+          "RSN-WORKSPACE-PURPOSE"
+        ],
+        "touches": [
+          "workspace_type"
+        ],
+        "apply": {
+          "workspace_type": "TRAINING"
+        },
+        "then": {
+          "workspace_type": "TRAINING"
+        },
+        "origin": "invented"
+      }
+    },
+    {
+      "id": "CHG-SETUP-4",
+      "title": "Record that a grant pays for the subscription",
+      "state": "automated",
+      "test": "tests/demo_examples/change/test_change_scenarios.py::test_change_case",
+      "seen_passing": true,
+      "proof": "two green runs in a row of tests/demo_examples/change, 2026-10-17",
+      "inputs": {
+        "action": "change",
+        "ends_in": "active",
+        "reasons": [
+          "RSN-CLASSIFICATION"
+        ],
+        "touches": [
+          "labels"
+        ],
+        "apply": {
+          "add_labels": [
+            "L-GRANT"
+          ]
+        },
+        "then": {
+          "labels.-1.code": "L-GRANT"
+        },
+        "origin": "invented"
+      }
+    },
+    {
+      "id": "CHG-OWNER-1",
+      "title": "Transfer the subscription to another customer",
+      "state": "automated",
+      "test": "tests/demo_examples/change/test_change_scenarios.py::test_ownership_transfer_needs_acceptance",
+      "seen_passing": true,
+      "proof": "two green runs in a row of tests/demo_examples/change, 2026-10-17",
+      "inputs": {
+        "action": "change",
+        "ends_in": "active",
+        "reasons": [
+          "RSN-NEW-OWNER"
+        ],
+        "touches": [
+          "customer_id"
+        ],
+        "origin": "invented"
+      }
+    },
+    {
+      "id": "CHG-LOCK-1",
+      "title": "A change that alters the currency is turned down",
+      "state": "automated",
+      "test": "tests/demo_examples/change/test_locked_fields.py::test_currency_change_is_refused",
+      "seen_passing": true,
+      "proof": "two green runs in a row of tests/demo_examples/change, 2026-10-17",
+      "inputs": {
+        "action": "change",
+        "ends_in": "changing",
+        "reasons": [
+          "RSN-TERM-LOCK"
+        ],
+        "touches": [
+          "currency"
+        ],
+        "origin": "invented"
+      }
+    },
+    {
+      "id": "CHG-LOCK-2",
+      "title": "A change that alters the billing frequency is turned down",
+      "state": "automated",
+      "test": "tests/demo_examples/change/test_locked_fields.py::test_every_locked_field_is_refused_on_open_and_on_autosave",
+      "seen_passing": true,
+      "proof": "two green runs in a row of tests/demo_examples/change, 2026-10-17",
+      "inputs": {
+        "action": "change",
+        "ends_in": "changing",
+        "reasons": [
+          "RSN-TERM-LOCK"
+        ],
+        "touches": [
+          "frequency"
+        ],
+        "origin": "invented"
+      }
+    },
+    {
+      "id": "CHG-LOCK-3",
+      "title": "Step up to a richer plan",
+      "state": "planned",
+      "waiting_on": "the plan is fixed for the term (plan_id is refused in a change); a plan move needs the subscription closed and a new one opened",
+      "inputs": {
+        "action": "change",
+        "ends_in": "active",
+        "reasons": [
+          "RSN-PLAN-UPGRADE"
+        ],
+        "touches": [
+          "plan_id"
+        ],
+        "origin": "invented"
+      }
+    },
+    {
+      "id": "CHG-LOCK-4",
+      "title": "Step down to a leaner plan",
+      "state": "planned",
+      "waiting_on": "the plan is fixed for the term (plan_id is refused in a change); a plan move needs the subscription closed and a new one opened",
+      "inputs": {
+        "action": "change",
+        "ends_in": "active",
+        "reasons": [
+          "RSN-PLAN-DOWNGRADE"
+        ],
+        "touches": [
+          "plan_id"
+        ],
+        "origin": "invented"
+      }
+    },
+    {
+      "id": "CHG-LIFE-1",
+      "title": "Pause the subscription and pick it up again later",
+      "state": "manual",
+      "why_manual": "the lifecycle has no transition into suspended, so a pause can never be set up for resume to act on",
+      "inputs": {
+        "action": "resume",
+        "ends_in": "suspended",
+        "reasons": [
+          "RSN-PAUSE"
+        ],
+        "origin": "invented"
+      }
+    }
+  ]
+}
