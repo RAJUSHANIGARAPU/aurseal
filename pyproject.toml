@@ -40,6 +40,7 @@ dependencies = [
 testkeel = "testkeel.cli:app"
 
 [project.entry-points."testkeel.importers"]
+cypress = "testkeel.importers.cypress:CypressImporter"
 junit = "testkeel.importers.junit:JUnitImporter"
 playwright = "testkeel.importers.playwright:PlaywrightImporter"
 testkeel = "testkeel.importers.upload:UploadImporter"

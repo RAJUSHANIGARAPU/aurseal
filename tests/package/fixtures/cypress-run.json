@@ -1,0 +1,39 @@
+{
+  "cypressVersion": "13.6.0",
+  "browserName": "chrome",
+  "browserVersion": "120.0.0",
+  "osName": "linux",
+  "startedTestsAt": "2026-01-05T10:00:00.000Z",
+  "endedTestsAt": "2026-01-05T10:00:09.000Z",
+  "totalDuration": 9000,
+  "totalSuites": 2,
+  "totalTests": 4,
+  "totalPassed": 2,
+  "totalFailed": 1,
+  "totalPending": 1,
+  "totalSkipped": 0,
+  "runs": [
+    {
+      "spec": {"name": "cart.cy.js", "relative": "cypress/e2e/cart.cy.js",
+               "absolute": "/work/shop/cypress/e2e/cart.cy.js", "fileName": "cart",
+               "fileExtension": ".js"},
+      "error": null,
+      "reporter": "spec",
+      "stats": {"suites": 2, "tests": 4, "passes": 2, "pending": 1, "skipped": 0,
+                "failures": 1, "duration": 9000},
+      "tests": [
+        {"title": ["Cart", "adds an item [SHOP-3]"], "state": "passed", "duration": 812,
+         "displayError": null, "attempts": [{"state": "passed"}]},
+        {"title": ["Cart", "removes an item"], "state": "passed", "duration": 640,
+         "displayError": null, "attempts": [{"state": "failed"}, {"state": "passed"}]},
+        {"title": ["Cart", "applies a coupon"], "state": "pending", "duration": 0,
+         "displayError": null, "attempts": [{"state": "pending"}]},
+        {"title": ["Cart", "Totals", "shows the total"], "state": "failed", "duration": 4000,
+         "displayError": "AssertionError: Timed out retrying after 4000ms",
+         "attempts": [{"state": "failed"}, {"state": "failed"}]}
+      ],
+      "screenshots": [],
+      "video": null
+    }
+  ]
+}
