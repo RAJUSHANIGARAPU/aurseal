@@ -1,0 +1,9 @@
+src/{{ package_name }}/
+  pages/        one class per page; methods are user actions
+  components/   parts shared by several pages
+  data/         typed test data tables
+  settings.py   APP_* environment settings
+tests/
+  ui/           live tests against the target
+  unit/         offline tests: settings, page objects on local HTML
+  fixtures/     static HTML for the offline tests

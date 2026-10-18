@@ -1,0 +1,49 @@
+"""Live checks of the landing page that hold for any healthy site."""
+
+from __future__ import annotations
+
+import re
+
+import pytest
+from playwright.sync_api import ConsoleMessage, Page, expect
+
+from {{ package_name }}.pages.home_page import HomePage
+
+pytestmark = pytest.mark.regression
+
+VIEWPORTS = {
+    "phone": {"width": 390, "height": 844},
+    "tablet": {"width": 820, "height": 1180},
+    "desktop": {"width": 1440, "height": 900},
+}
+
+
+@pytest.mark.smoke
+def test_home_page_loads_with_a_title(page: Page):
+    HomePage(page).open()
+    expect(page).to_have_title(re.compile(r"\S"))
+
+
+def test_home_page_loads_without_console_errors(page: Page):
+    errors: list[str] = []
+
+    def record(message: ConsoleMessage) -> None:
+        if message.type == "error":
+            errors.append(message.text)
+
+    page.on("console", record)
+    HomePage(page).open()
+    assert errors == []
+
+
+@pytest.mark.parametrize("viewport", VIEWPORTS.values(), ids=VIEWPORTS.keys())
+def test_home_page_fits_the_viewport(page: Page, viewport):
+    page.set_viewport_size(viewport)
+    home = HomePage(page).open()
+    assert home.fits_viewport_width(), f"horizontal scroll at {viewport['width']}px"
+
+
+def test_every_navigation_link_has_an_accessible_name(page: Page):
+    navigation = HomePage(page).open().navigation
+    expect(navigation.links.first).to_be_visible()
+    assert navigation.named_links.count() == navigation.links.count()

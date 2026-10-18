@@ -1,0 +1,5 @@
+    "--browser=chromium",
+    "--tracing=retain-on-failure",
+    "--screenshot=only-on-failure",
+    "--video=retain-on-failure",
+    "--output=reports/test-results",

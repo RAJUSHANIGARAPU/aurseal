@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Sign in</title></head>
+<body>
+<main>
+  <form id="login">
+    <label for="username">Username</label>
+    <input id="username" name="username" autocomplete="username">
+    <label for="password">Password</label>
+    <input id="password" name="password" type="password" autocomplete="current-password">
+    <button type="submit">Sign in</button>
+  </form>
+  <p role="alert" hidden></p>
+</main>
+<script>
+  // Responds after a delay, like a real server, so a test that does not wait fails.
+  document.getElementById("login").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const user = document.getElementById("username").value;
+    const password = document.getElementById("password").value;
+    const alert = document.querySelector("[role=alert]");
+    setTimeout(() => {
+      let message = "";
+      if (!user) message = "Username is required";
+      else if (password !== "correct-password") message = "Username and password do not match";
+      else if (user === "locked_user") message = "This user is locked out";
+      if (message) {
+        alert.textContent = message;
+        alert.hidden = false;
+        return;
+      }
+      alert.hidden = true;
+      const heading = document.createElement("h1");
+      heading.textContent = "Welcome";
+      document.querySelector("main").replaceChildren(heading);
+    }, 300);
+  });
+</script>
+</body>
+</html>
