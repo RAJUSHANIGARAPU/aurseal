@@ -1,0 +1,126 @@
+# Lifecycle of a demo subscription, in the neutral workflow format the generators read.
+#
+# key             machine key (served at GET /api/machines/<key>)
+# initial_states  where a new entity starts
+# states          title + transitions (action -> target state, optional condition)
+# actions         title, the screen element (data-action) that triggers it, operations
+# fields          the entity's field schema
+#
+# The state `suspended` is deliberately unreachable: nothing transitions into it. It exists
+# so a reachability analysis has a real case to report.
+key: subscription
+title: Subscription
+version: 1
+initial_states: [draft]
+
+states:
+  draft:
+    title: Draft
+    transitions:
+      - action: submit
+        to: pending_payment
+      - action: activate
+        to: active
+        condition: activate_immediately == true
+  pending_payment:
+    title: Pending payment
+    transitions:
+      - action: confirm
+        to: active
+  active:
+    title: Active
+    transitions:
+      - action: change
+        to: changing
+      - action: cancel
+        to: changing
+      - action: renew
+        to: changing
+      - action: note
+        to: active
+  changing:
+    title: Change in progress
+    transitions:
+      - action: confirm_change
+        to: active
+        condition: draft.kind == 'change'
+      - action: confirm_cancel
+        to: cancelled
+        condition: draft.kind == 'cancel'
+      - action: confirm_renew
+        to: renewed
+        condition: draft.kind == 'renew'
+      - action: discard_draft
+        to: active
+  renewed:
+    title: Renewed
+    transitions:
+      - action: change
+        to: changing
+      - action: cancel
+        to: changing
+      - action: renew
+        to: changing
+      - action: note
+        to: renewed
+  cancelled:
+    title: Cancelled
+    transitions: []
+  suspended:
+    title: Suspended
+    transitions:
+      - action: resume
+        to: active
+
+actions:
+  submit:
+    title: Submit for payment
+    operations: [compute_price, issue_order_summary]
+  activate:
+    title: Activate immediately
+    operations: [schedule_transactions, issue_account_opened]
+  confirm:
+    title: Confirm
+    operations: [schedule_transactions, issue_account_opened]
+  change:
+    title: Change
+    operations: [open_change_draft]
+  cancel:
+    title: End subscription
+    operations: [open_cancel_draft]
+  renew:
+    title: Renew
+    condition: term_end within renewal window and every period before it booked
+    operations: [open_renew_draft]
+  note:
+    title: Add note
+    operations: [open_note_draft]
+  confirm_change:
+    title: Confirm change
+    operations: [write_version, book_change_transaction, issue_plan_update_notice]
+  confirm_cancel:
+    title: Confirm closure
+    operations: [write_version, book_credit, issue_closure_notice]
+  confirm_renew:
+    title: Confirm renewal
+    operations: [write_version, index_price, schedule_renewal_term, issue_term_extension_notice]
+  discard_draft:
+    title: Discard draft
+    operations: [discard_draft]
+  resume:
+    title: Resume
+    operations: [reactivate]
+
+fields:
+  - {name: customer_id, type: reference, required: true, ref: customers}
+  - {name: partner_id, type: reference, required: true, ref: partners}
+  - {name: plan_id, type: reference, required: true, ref: plans}
+  - {name: frequency, type: choice, required: true, choices: [MONTHLY, QUARTERLY, YEARLY]}
+  - {name: start_date, type: date, required: true}
+  - {name: data_region, type: choice, required: true, choices: [EU-CENTRAL, EU-NORTH, AP-SOUTH]}
+  - {name: workspace_type, type: choice, required: false, choices: [TEAM_SPACE, SANDBOX, TRAINING]}
+  - {name: invoice_delivery, type: choice, required: true, choices: [EMAIL, PORTAL]}
+  - {name: monthly_net, type: amount, required: false, min: 1.00, max: 10000.00}
+  - {name: spend_cap, type: amount, required: false, min: 0}
+  - {name: po_reference, type: text, required: false, pattern: "^[A-Za-z0-9 ./-]{1,35}$"}
+  - {name: activate_immediately, type: boolean, required: false}
