@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "metric_fault_injection.schema.json",
+  "title": "metric_fault_injection",
+  "description": "One fault spec installed by one test: how often it fired and what the resilience oracles said.",
+  "type": "object",
+  "required": ["id", "run_id", "created_at", "spec_id", "kind", "url_glob", "fired"],
+  "properties": {
+    "id": {"type": "string", "minLength": 1},
+    "run_id": {"type": "string", "minLength": 1},
+    "nodeid": {"type": ["string", "null"]},
+    "created_at": {"type": "string"},
+    "spec_id": {"type": "string", "minLength": 1},
+    "kind": {"enum": ["latency", "status", "abort", "timeout", "truncate_body"]},
+    "url_glob": {"type": "string", "minLength": 1},
+    "fired": {"type": "integer", "minimum": 0},
+    "oracle": {"type": ["string", "null"]},
+    "oracle_outcome": {"enum": ["pass", "fail", null]}
+  },
+  "additionalProperties": false
+}

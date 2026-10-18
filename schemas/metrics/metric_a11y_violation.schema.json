@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "metric_a11y_violation.schema.json",
+  "title": "metric_a11y_violation",
+  "description": "One axe rule violated on one route (a subset of axe's own result JSON).",
+  "type": "object",
+  "required": ["id", "run_id", "created_at", "route", "rule_id", "nodes"],
+  "properties": {
+    "id": {"type": "string", "minLength": 1},
+    "run_id": {"type": "string", "minLength": 1},
+    "nodeid": {"type": ["string", "null"]},
+    "created_at": {"type": "string"},
+    "route": {"type": "string", "minLength": 1},
+    "rule_id": {"type": "string", "minLength": 1},
+    "impact": {"type": ["string", "null"], "enum": ["minor", "moderate", "serious", "critical", null]},
+    "wcag_tags": {"type": "string"},
+    "nodes": {"type": "integer", "minimum": 0},
+    "known_defect": {"type": ["string", "null"]}
+  },
+  "additionalProperties": false
+}

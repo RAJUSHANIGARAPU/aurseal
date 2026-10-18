@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="com.example.LoginTest" time="0.5" tests="3" errors="0" skipped="1" failures="1">
+  <properties><property name="java.version" value="21"/></properties>
+  <testcase name="acceptsValidPassword()" classname="com.example.LoginTest" time="0.12"/>
+  <testcase name="rejectsBadPassword()" classname="com.example.LoginTest" time="0.2">
+    <failure message="expected: &lt;401&gt; but was: &lt;200&gt;" type="org.opentest4j.AssertionFailedError">org.opentest4j.AssertionFailedError: expected: &lt;401&gt; but was: &lt;200&gt;
+	at com.example.LoginTest.rejectsBadPassword(LoginTest.java:31)</failure>
+    <system-out>login attempt for user-7</system-out>
+  </testcase>
+  <testcase name="lockout()" classname="com.example.LoginTest" time="0">
+    <skipped message="disabled until lockout lands"/>
+  </testcase>
+</testsuite>

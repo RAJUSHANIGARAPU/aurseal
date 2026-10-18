@@ -1,0 +1,125 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R 5 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 7 0 R >> >> /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length 1376 >>
+stream
+BT
+/F1 16 Tf
+1.0000 0.0000 -0.0000 1.0000 60 790 Tm
+(INVOICE) Tj
+/F1 11 Tf
+1.0000 0.0000 -0.0000 1.0000 60 750 Tm
+(Invoice number) Tj
+/F1 11 Tf
+1.0000 0.0000 -0.0000 1.0000 220 750 Tm
+(INV-2031-0042) Tj
+/F1 11 Tf
+1.0000 0.0000 -0.0000 1.0000 60 732 Tm
+(Invoice date) Tj
+/F1 11 Tf
+1.0000 0.0000 -0.0000 1.0000 220 732 Tm
+(4 May 2031) Tj
+/F1 11 Tf
+1.0000 0.0000 -0.0000 1.0000 60 714 Tm
+(Customer) Tj
+/F1 11 Tf
+1.0000 0.0000 -0.0000 1.0000 220 714 Tm
+(Example Trading Ltd) Tj
+/F1 12 Tf
+1.0000 0.0000 -0.0000 1.0000 60 680 Tm
+(Delivery address) Tj
+/F1 11 Tf
+1.0000 0.0000 -0.0000 1.0000 60 662 Tm
+(12 Sample Street) Tj
+/F1 11 Tf
+1.0000 0.0000 -0.0000 1.0000 60 644 Tm
+(Exampletown EX1 2AB) Tj
+/F1 11 Tf
+1.0000 0.0000 -0.0000 1.0000 60 610 Tm
+(Item) Tj
+/F1 11 Tf
+1.0000 0.0000 -0.0000 1.0000 220 610 Tm
+(Quantity) Tj
+/F1 11 Tf
+1.0000 0.0000 -0.0000 1.0000 340 610 Tm
+(Amount) Tj
+/F1 11 Tf
+1.0000 0.0000 -0.0000 1.0000 60 592 Tm
+(Desk lamp) Tj
+/F1 11 Tf
+1.0000 0.0000 -0.0000 1.0000 220 592 Tm
+(2) Tj
+/F1 11 Tf
+1.0000 0.0000 -0.0000 1.0000 340 592 Tm
+(1,250.00) Tj
+/F1 11 Tf
+1.0000 0.0000 -0.0000 1.0000 60 574 Tm
+(Cable set) Tj
+/F1 11 Tf
+1.0000 0.0000 -0.0000 1.0000 220 574 Tm
+(1) Tj
+/F1 11 Tf
+1.0000 0.0000 -0.0000 1.0000 340 574 Tm
+(48.50) Tj
+/F1 11 Tf
+1.0000 0.0000 -0.0000 1.0000 60 540 Tm
+(Total due) Tj
+/F1 11 Tf
+1.0000 0.0000 -0.0000 1.0000 220 540 Tm
+(GBP 1,298.50) Tj
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 7 0 R >> >> /Contents 6 0 R >>
+endobj
+6 0 obj
+<< /Length 293 >>
+stream
+BT
+/F1 12 Tf
+1.0000 0.0000 -0.0000 1.0000 60 790 Tm
+(Payment terms) Tj
+/F1 11 Tf
+1.0000 0.0000 -0.0000 1.0000 60 772 Tm
+(Due within 30 days of the invoice date.) Tj
+/F1 11 Tf
+1.0000 0.0000 -0.0000 1.0000 60 754 Tm
+(Reference) Tj
+/F1 11 Tf
+1.0000 0.0000 -0.0000 1.0000 220 754 Tm
+(ORD-42) Tj
+ET
+endstream
+endobj
+7 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+8 0 obj
+<< /Producer (Example Renderer 1.0) >>
+endobj
+xref
+0 9
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000127 00000 n 
+0000000253 00000 n 
+0000001681 00000 n 
+0000001807 00000 n 
+0000002151 00000 n 
+0000002248 00000 n 
+trailer
+<< /Size 9 /Root 1 0 R /Info 8 0 R >>
+startxref
+2302
+%%EOF

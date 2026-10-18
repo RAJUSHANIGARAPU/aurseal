@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "metric_mutation_score.schema.json",
+  "title": "metric_mutation_score",
+  "description": "Mutation score of one package in one run (PIT and Stryker reports map onto the same counts).",
+  "type": "object",
+  "required": ["id", "run_id", "created_at", "package", "killed", "survived", "no_tests", "threshold"],
+  "properties": {
+    "id": {"type": "string", "minLength": 1},
+    "run_id": {"type": "string", "minLength": 1},
+    "nodeid": {"type": ["string", "null"]},
+    "created_at": {"type": "string"},
+    "package": {"type": "string", "minLength": 1},
+    "killed": {"type": "integer", "minimum": 0},
+    "survived": {"type": "integer", "minimum": 0},
+    "timeout": {"type": "integer", "minimum": 0},
+    "no_tests": {"type": "integer", "minimum": 0},
+    "score": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+    "threshold": {"type": "number", "minimum": 0, "maximum": 1},
+    "tool_version": {"type": ["string", "null"]}
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "metric_security_scan.schema.json",
+  "title": "metric_security_scan",
+  "description": "Evidence that one security tool ran, and what it found.",
+  "type": "object",
+  "required": ["id", "run_id", "created_at", "tool", "findings", "blocking"],
+  "properties": {
+    "id": {"type": "string", "minLength": 1},
+    "run_id": {"type": "string", "minLength": 1},
+    "nodeid": {"type": ["string", "null"]},
+    "created_at": {"type": "string"},
+    "tool": {"type": "string", "minLength": 1},
+    "tool_version": {"type": ["string", "null"]},
+    "findings": {"type": "integer", "minimum": 0},
+    "blocking": {"type": "integer", "minimum": 0},
+    "exit_code": {"type": ["integer", "null"]}
+  },
+  "additionalProperties": false
+}

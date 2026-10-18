@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "metrics/metric_db_snapshot.schema.json",
+  "title": "metric_db_snapshot row",
+  "type": "object",
+  "required": ["id", "run_id", "created_at", "name", "phase", "row_count", "digest"],
+  "properties": {
+    "id": {"type": "string"},
+    "run_id": {"type": "string"},
+    "nodeid": {"type": ["string", "null"]},
+    "created_at": {"type": "string"},
+    "name": {"type": "string"},
+    "phase": {"enum": ["before", "after", "snapshot"]},
+    "row_count": {"type": "integer", "minimum": 0},
+    "digest": {"type": "string"}
+  }
+}

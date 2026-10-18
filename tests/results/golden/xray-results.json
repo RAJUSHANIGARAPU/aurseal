@@ -1,0 +1,24 @@
+{
+  "info": {
+    "summary": "Automated run r1",
+    "description": "Imported from the results store (source: pytest).",
+    "startDate": "2026-01-05T10:00:00.000Z",
+    "finishDate": "2026-01-05T10:05:00.000Z",
+    "testEnvironments": [
+      "qa"
+    ]
+  },
+  "tests": [
+    {
+      "testKey": "QA-1",
+      "status": "PASSED",
+      "start": "2026-01-05T10:00:01.000Z",
+      "finish": "2026-01-05T10:01:06.000Z"
+    },
+    {
+      "testKey": "QA-2",
+      "status": "FAILED",
+      "comment": "refund was 0"
+    }
+  ]
+}

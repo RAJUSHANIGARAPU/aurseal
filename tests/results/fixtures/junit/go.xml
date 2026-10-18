@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="3" failures="1">
+	<testsuite name="example.test/shop/cart" tests="3" failures="1" errors="0" id="0" hostname="ci" time="0.020" timestamp="2026-01-05T12:00:00Z">
+		<testcase name="TestAddItem" classname="cart" time="0.001"></testcase>
+		<testcase name="TestTotal/with_discount" classname="cart" time="0.002">
+			<failure message="Failed" type="">cart_test.go:42: total = 90, want 80</failure>
+		</testcase>
+		<testcase name="TestEmpty" classname="cart" time="0.000">
+			<skipped message="cart_test.go:50: needs database"></skipped>
+		</testcase>
+	</testsuite>
+</testsuites>

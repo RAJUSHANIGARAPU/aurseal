@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "metric_security_finding.schema.json",
+  "title": "metric_security_finding",
+  "description": "One finding from a security tool (secrets, SAST, dependency audit), allow-listed or not.",
+  "type": "object",
+  "required": ["id", "run_id", "created_at", "tool", "rule_id", "severity", "location", "fingerprint", "allowlisted"],
+  "properties": {
+    "id": {"type": "string", "minLength": 1},
+    "run_id": {"type": "string", "minLength": 1},
+    "nodeid": {"type": ["string", "null"]},
+    "created_at": {"type": "string"},
+    "tool": {"type": "string", "minLength": 1},
+    "rule_id": {"type": "string", "minLength": 1},
+    "severity": {"enum": ["low", "medium", "high", "critical", "unknown"]},
+    "location": {"type": "string"},
+    "fingerprint": {"type": "string", "minLength": 1},
+    "allowlisted": {"enum": [0, 1]},
+    "allowlist_expires": {"type": ["string", "null"]}
+  },
+  "additionalProperties": false
+}

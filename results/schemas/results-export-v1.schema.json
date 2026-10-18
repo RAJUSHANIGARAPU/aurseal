@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.test/schemas/results/results-export-v1.schema.json",
+  "title": "Run results export",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run",
+    "result_count",
+    "results"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "run": {
+      "type": "object",
+      "required": [
+        "run_id"
+      ]
+    },
+    "result_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "run_id",
+          "nodeid",
+          "case_id",
+          "outcome",
+          "attempts",
+          "duration_ms",
+          "started_at",
+          "finished_at",
+          "worker",
+          "browser",
+          "message",
+          "failure_fingerprint",
+          "skip_reason",
+          "defect_ref",
+          "revision_id"
+        ],
+        "properties": {
+          "run_id": {
+            "type": "string"
+          },
+          "nodeid": {
+            "type": "string"
+          },
+          "case_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "outcome": {
+            "enum": [
+              "passed",
+              "failed",
+              "error",
+              "xfailed",
+              "skipped",
+              "not_run"
+            ]
+          },
+          "attempts": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "duration_ms": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "started_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "worker": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "browser": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "failure_fingerprint": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "skip_reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "defect_ref": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "revision_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "finished_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

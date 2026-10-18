@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="jest tests" tests="2" failures="1" errors="0" time="1.1">
+  <testsuite name="login" errors="0" failures="1" skipped="0" timestamp="2026-01-05T11:00:00" time="1.0" tests="2">
+    <testcase classname="login rejects a bad password" name="login rejects a bad password" time="0.4">
+      <failure>Error: expect(received).toBe(expected)
+
+Expected: 401
+Received: 200</failure>
+    </testcase>
+    <testcase classname="login accepts a good password" name="login accepts a good password" time="0.6">
+      <properties><property name="feature" value="login"/><property name="owner" value="team-web"/></properties>
+    </testcase>
+  </testsuite>
+</testsuites>

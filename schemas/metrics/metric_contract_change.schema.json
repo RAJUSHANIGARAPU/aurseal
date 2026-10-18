@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "metrics/metric_contract_change.schema.json",
+  "title": "metric_contract_change row",
+  "type": "object",
+  "required": ["id", "run_id", "created_at", "consumer", "provider", "change_type", "location", "detail", "source"],
+  "properties": {
+    "id": {"type": "string"},
+    "run_id": {"type": "string"},
+    "nodeid": {"type": ["string", "null"]},
+    "created_at": {"type": "string"},
+    "consumer": {"type": "string"},
+    "provider": {"type": "string"},
+    "from_version": {"type": ["string", "null"]},
+    "to_version": {"type": ["string", "null"]},
+    "change_type": {"enum": ["breaking", "non_breaking"]},
+    "location": {"type": "string"},
+    "detail": {"type": "string"},
+    "source": {"enum": ["capture", "openapi"]}
+  }
+}

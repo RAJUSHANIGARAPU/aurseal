@@ -1,0 +1,6 @@
+# Migration domains and the table prefix each one owns. One line per domain: `<domain> <prefix>`.
+# `core` owns the unprefixed core tables. Every other domain may only CREATE tables named
+# `<prefix>_*`, and never ALTERs a core table (it references core tables by foreign key).
+# A domain directory under results/migrations/ that is not listed here is refused.
+core -
+trace trace

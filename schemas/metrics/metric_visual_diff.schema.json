@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "metric_visual_diff.schema.json",
+  "title": "metric_visual_diff",
+  "description": "One screenshot compared with its baseline.",
+  "type": "object",
+  "required": ["id", "run_id", "created_at", "name", "browser", "outcome", "diff_pixels", "diff_ratio", "threshold"],
+  "properties": {
+    "id": {"type": "string", "minLength": 1},
+    "run_id": {"type": "string", "minLength": 1},
+    "nodeid": {"type": ["string", "null"]},
+    "created_at": {"type": "string"},
+    "name": {"type": "string", "minLength": 1},
+    "browser": {"type": "string", "minLength": 1},
+    "width": {"type": "integer", "minimum": 0},
+    "height": {"type": "integer", "minimum": 0},
+    "diff_pixels": {"type": "integer", "minimum": 0},
+    "diff_ratio": {"type": "number", "minimum": 0, "maximum": 1},
+    "threshold": {"type": "number", "minimum": 0, "maximum": 1},
+    "outcome": {"enum": ["match", "mismatch", "missing_baseline", "size_changed"]},
+    "baseline_sha256": {"type": ["string", "null"]},
+    "actual_path": {"type": ["string", "null"]},
+    "diff_path": {"type": ["string", "null"]}
+  },
+  "additionalProperties": false
+}
