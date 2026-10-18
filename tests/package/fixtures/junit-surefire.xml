@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.example.shop.RefundTest" tests="3" failures="0" errors="0" skipped="0" time="0.5">
+  <properties>
+    <property name="java.version" value="21" />
+  </properties>
+  <testcase name="partialRefund" classname="com.example.shop.RefundTest" time="0.120">
+    <flakyFailure message="expected 10 but was 9" type="org.opentest4j.AssertionFailedError" />
+  </testcase>
+  <testcase name="fullRefund" classname="com.example.shop.RefundTest" time="0.080">
+    <properties>
+      <property name="case_id" value="SHOP-12" />
+    </properties>
+  </testcase>
+  <testcase name="refundByAmount(int)[1]" classname="com.example.shop.RefundTest" time="0.010" />
+</testsuite>

@@ -1,0 +1,53 @@
+{
+  "config": {"projects": [{"name": "chromium"}, {"name": "firefox"}]},
+  "suites": [
+    {
+      "title": "e2e/cart.spec.ts",
+      "file": "e2e/cart.spec.ts",
+      "specs": [],
+      "suites": [
+        {
+          "title": "Cart",
+          "file": "e2e/cart.spec.ts",
+          "specs": [
+            {
+              "title": "adds an item @SHOP-3",
+              "tags": ["@smoke"],
+              "tests": [
+                {"projectName": "chromium", "expectedStatus": "passed", "status": "expected",
+                 "results": [{"retry": 0, "status": "passed", "duration": 812}]},
+                {"projectName": "firefox", "expectedStatus": "passed", "status": "flaky",
+                 "results": [
+                   {"retry": 1, "status": "passed", "duration": 900},
+                   {"retry": 0, "status": "timedOut", "duration": 30000,
+                    "error": {"message": "Timeout 30000ms exceeded."}}
+                 ]}
+              ]
+            },
+            {
+              "title": "removes an item",
+              "tags": [],
+              "tests": [
+                {"projectName": "chromium", "expectedStatus": "failed", "status": "expected",
+                 "results": [{"retry": 0, "status": "failed", "duration": 100,
+                              "error": {"message": "known defect BUG-142"}}]},
+                {"projectName": "firefox", "expectedStatus": "passed", "status": "unexpected",
+                 "results": [{"retry": 0, "status": "interrupted", "duration": 5}]}
+              ]
+            },
+            {
+              "title": "shows totals",
+              "tags": [],
+              "tests": [
+                {"projectName": "chromium", "expectedStatus": "skipped", "status": "skipped",
+                 "results": []}
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {"expected": 3, "unexpected": 1, "flaky": 1, "skipped": 1}
+}

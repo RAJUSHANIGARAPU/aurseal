@@ -39,6 +39,10 @@ dependencies = [
 [project.scripts]
 testkeel = "testkeel.cli:app"
 
+[project.entry-points."testkeel.importers"]
+junit = "testkeel.importers.junit:JUnitImporter"
+playwright = "testkeel.importers.playwright:PlaywrightImporter"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/testkeel"]
 
