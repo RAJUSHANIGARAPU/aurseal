@@ -38,7 +38,7 @@ OK, UNEXPECTED, USAGE, NOT_EMPTY, LEAK, SELF_CHECK, PREREQUISITE, INTERRUPTED = 
     0, 1, 2, 3, 4, 5, 6, 130,
 )  # fmt: skip
 ANSWERS_FILE = ".copier-answers.yml"
-#: The release tag ``copier update`` checks out from :data:`PUBLIC_SOURCE`.
+#: The release tag ``assignment update`` fetches from :data:`PUBLIC_SOURCE`.
 TEMPLATE_TAG = f"testkeel-v{__version__}"
 _URL_RE = re.compile(r"^https?://[^\s/]+[^\s]*$")
 #: The only index a generated lock file may name; user-level index settings are ignored.
@@ -184,11 +184,11 @@ def write_answers(staging: Path, type_: str, answers: Mapping[str, Any]) -> None
     """The ``--updatable`` answers file: the public repository at this release's tag.
 
     Copier would record the local path of the installed templates (a home directory);
-    this records the public source instead, so ``copier update`` can fetch it later.
+    this records the public source instead, so ``assignment update`` can fetch it later.
     Values are written as JSON scalars, which are valid YAML.
     """
     lines = [
-        "# Answers for `copier update`; do not edit by hand.",
+        "# Answers for `testkeel assignment update`; do not edit by hand.",
         f"_commit: {TEMPLATE_TAG}",
         f"_src_path: {PUBLIC_SOURCE}",
     ]
