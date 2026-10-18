@@ -1,0 +1,32 @@
+# A distributed run: one master that applies the profile and writes the reports, and
+# WORKERS workers that generate the traffic. `make docker-load PROFILE=load WORKERS=4`.
+x-locust: &locust
+  build: .
+  env_file:
+    - path: .env
+      required: false
+  environment:
+    PYTHONPATH: /app/src
+    APP_TARGET_URL: ${APP_TARGET_URL:-{{ target_url }}}
+    ALLOW_REMOTE_LOAD: ${ALLOW_REMOTE_LOAD:-}
+    PROFILE: ${PROFILE:-smoke}
+    WORKERS: ${WORKERS:-2}
+
+services:
+  master:
+    <<: *locust
+    # The guard runs first, so a load profile cannot reach a remote host from here either.
+    command:
+      - sh
+      - -c
+      - >-
+        python -m {{ package_name }}.guard "$$PROFILE" "$$APP_TARGET_URL" &&
+        locust --config "profiles/$$PROFILE.conf" --master --expect-workers "$$WORKERS"
+        --host "$$APP_TARGET_URL" &&
+        python -m {{ package_name }}.slo "$$PROFILE"
+    volumes:
+      - ./reports:/app/reports
+
+  worker:
+    <<: *locust
+    command: ["locust", "-f", "locustfiles/api_user.py", "--worker", "--master-host", "master"]

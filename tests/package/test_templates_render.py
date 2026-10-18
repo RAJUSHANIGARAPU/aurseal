@@ -58,6 +58,11 @@ CASES = {
         "perf-k6",
         {"report": "allure", "docker": False, "ci": "none"},
     ),
+    "perf-locust": ("perf-locust", {}),
+    "perf-locust-both-no-docker-py313": (
+        "perf-locust",
+        {"report": "both", "docker": False, "python_version": "3.13"},
+    ),
 }
 CODE_CASES = [name for name, (type_, _) in CASES.items() if type_ != "strategy"]
 BROWSER_TYPES = {"web-ui", "a11y"}
@@ -258,6 +263,8 @@ def test_rendered_code_type_checks(rendered, name):
         pytest.skip("types-jsonschema is not installed")
     if CASES[name][0] == "api-graphql" and not _importable("gql", "graphql"):
         pytest.skip("gql is not installed")
+    if CASES[name][0] == "perf-locust" and not _importable("locust"):
+        pytest.skip("locust is not installed")
     result = _run([sys.executable, "-m", "mypy"], rendered[name])
     assert result.returncode == 0, result.stdout + result.stderr
 
@@ -329,8 +336,10 @@ def test_a11y_ships_an_empty_baseline_and_both_fixtures(rendered):
 @pytest.mark.skipif(
     not _importable("pydantic_settings"), reason="the perf projects' dependencies are not installed"
 )
-@pytest.mark.parametrize("name", [n for n in CODE_CASES if CASES[n][0] == "perf-k6"])
+@pytest.mark.parametrize("name", [n for n in CODE_CASES if CASES[n][0].startswith("perf-")])
 def test_perf_offline_tests_pass_without_network(rendered, name):
+    if CASES[name][0] == "perf-locust" and not _importable("locust"):
+        pytest.skip("locust is not installed")
     result = _run(
         [sys.executable, "-m", "pytest", "-m", "offline", "-p", "no:cacheprovider",
          "-o", "addopts=-ra --strict-markers"],
@@ -355,7 +364,7 @@ def test_k6_image_matches_the_version_ci_installs(rendered, name):
     assert len(pins) == (1 if sources else 0), pins
 
 
-@pytest.mark.parametrize("name", [n for n in CASES if CASES[n][0] == "perf-k6"])
+@pytest.mark.parametrize("name", [n for n in CASES if CASES[n][0].startswith("perf-")])
 def test_load_profiles_are_guarded_and_ci_runs_only_the_smoke(rendered, name):
     project = rendered[name]
     makefile = (project / "Makefile").read_text(encoding="utf-8")
@@ -364,8 +373,9 @@ def test_load_profiles_are_guarded_and_ci_runs_only_the_smoke(rendered, name):
         assert f"$(GUARD) {profile} " in recipe, f"make {profile} must run the target guard first"
     workflow = project / ".github/workflows/ci.yml"
     if workflow.exists():
-        scenarios = set(re.findall(r"k6/scenarios/(\w+)\.js", workflow.read_text(encoding="utf-8")))
-        assert scenarios == {"smoke"}
+        text = workflow.read_text(encoding="utf-8")
+        profiles = set(re.findall(r"(?:k6/scenarios|profiles)/(\w+)\.(?:js|conf)", text))
+        assert profiles == {"smoke"}
 
 
 # ------------------------------------------------------------------ the examples
