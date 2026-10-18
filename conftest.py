@@ -243,7 +243,10 @@ def enable_artifacts(context, request, browser_name):
 
 
 @pytest.fixture(scope="session")
-def browser_type_launch_args(browser_type_launch_args):
+def browser_type_launch_args(browser_type_launch_args, browser_name):
+    # Chromium switches: WebKit refuses to start on an unknown option.
+    if browser_name != "chromium":
+        return browser_type_launch_args
     return {
         **browser_type_launch_args,
         "args": [
