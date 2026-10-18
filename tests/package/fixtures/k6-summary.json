@@ -1,0 +1,42 @@
+{
+  "root_group": {
+    "name": "", "path": "", "id": "d41d8cd98f00b204e9800998ecf8427e",
+    "groups": [
+      {"name": "checkout", "path": "::checkout", "id": "a1", "groups": [],
+       "checks": [{"name": "order created", "path": "::checkout::order created", "id": "c2",
+                   "passes": 290, "fails": 10}]}
+    ],
+    "checks": [{"name": "status is 200", "path": "::status is 200", "id": "c1",
+                "passes": 1470, "fails": 30}]
+  },
+  "options": {"summaryTrendStats": ["avg", "min", "med", "max", "p(90)", "p(95)", "p(99)"],
+              "summaryTimeUnit": "", "noColor": false},
+  "state": {"isStdOutTTY": false, "isStdErrTTY": false, "testRunDurationMs": 60123.5},
+  "metrics": {
+    "http_req_duration": {
+      "type": "trend", "contains": "time",
+      "values": {"avg": 245.6, "min": 80.1, "med": 230.2, "max": 1210.4, "p(90)": 410.0,
+                 "p(95)": 612.3, "p(99)": 980.7},
+      "thresholds": {"p(95)<500": {"ok": false}, "p(99)<1500": {"ok": true}}
+    },
+    "http_req_duration{expected_response:true}": {
+      "type": "trend", "contains": "time",
+      "values": {"avg": 240.0, "min": 80.1, "med": 228.0, "max": 1100.0, "p(90)": 400.0,
+                 "p(95)": 590.0, "p(99)": 950.0}
+    },
+    "http_req_failed": {
+      "type": "rate", "contains": "default",
+      "values": {"rate": 0.004, "passes": 6, "fails": 1494},
+      "thresholds": {"rate<0.01": {"ok": true}}
+    },
+    "http_reqs": {"type": "counter", "contains": "default",
+                  "values": {"count": 1500, "rate": 24.95}},
+    "checks": {
+      "type": "rate", "contains": "default",
+      "values": {"rate": 0.977, "passes": 1760, "fails": 40},
+      "thresholds": {"rate>0.99": {"ok": false}}
+    },
+    "vus": {"type": "gauge", "contains": "default", "values": {"value": 1, "min": 1, "max": 10}}
+  },
+  "setup_data": null
+}

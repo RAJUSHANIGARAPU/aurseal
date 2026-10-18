@@ -115,7 +115,7 @@ def test_the_registry_sniffs_the_format():
 def test_a_named_format_skips_sniffing_and_an_unknown_one_is_refused():
     assert len(registry.parse_file(PYTEST_XML, format="junit")) == 9 - 1  # one rerun pair
     with pytest.raises(ReportError, match="unknown format"):
-        registry.parse_file(PYTEST_XML, format="k6")
+        registry.parse_file(PYTEST_XML, format="jmeter")
 
 
 def test_malformed_input_is_a_report_error():
