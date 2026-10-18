@@ -47,8 +47,9 @@ _ISO = re.compile(
 _COMPACT = re.compile(r"\b\d{8}T\d{6}Z\b")
 _UUID = re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b")
 _ADDRESS = re.compile(r"0x[0-9a-f]{6,}")
-_EPOCH_MS = re.compile(r'"(start|stop)": \d{10,}')
-_DURATION_JSON = re.compile(r'"(\w*_ms|\w*_s|duration)": [0-9.e-]+')
+_EPOCH_MS = re.compile(r'"(start|stop)":(\s*)\d{10,}')
+# Spaced or compact JSON alike: the results bundle is written with compact separators.
+_DURATION_JSON = re.compile(r'"(\w*_ms|\w*_s|duration)":(\s*)[0-9.e-]+')
 # The commit is known only inside a git checkout (null in an exported tree): always a placeholder.
 _GIT_SHA = re.compile(r'"(git_sha|git_commit|commit)": (?:"[0-9a-f]{7,40}"|null)')
 _THREAD = re.compile(r"\b\d+-(MainThread|Thread-\d+)")
@@ -89,8 +90,8 @@ class Normaliser:
         text = _COMPACT.sub("20000101T000000Z", text)
         text = _UUID.sub(self._uuid, text)
         text = _ADDRESS.sub("0x0", text)
-        text = _EPOCH_MS.sub(lambda m: f'"{m.group(1)}": 0', text)
-        text = _DURATION_JSON.sub(lambda m: f'"{m.group(1)}": 0', text)
+        text = _EPOCH_MS.sub(lambda m: f'"{m.group(1)}":{m.group(2)}0', text)
+        text = _DURATION_JSON.sub(lambda m: f'"{m.group(1)}":{m.group(2)}0', text)
         text = _TIME_ATTR.sub(lambda m: f'{m.group(1)}="0.000"', text)
         text = _HOST_ATTR.sub('hostname="localhost"', text)
         text = _THREAD.sub(lambda m: f"$PID-{m.group(1)}", text)

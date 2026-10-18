@@ -486,7 +486,14 @@ def build_catalogue(rootdir: Path, args: Sequence[str] = ()) -> Catalogue:
     rootdir = Path(rootdir).resolve()
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp) / "cases.json"
-        env = {**os.environ, COLLECTOR_OUT_ENV: str(out), "RESULTS_STORE": "off"}
+        # No bytecode: a cached .pyc is validated by whole-second mtime and size, so a file
+        # edited within the same second as the last collection would be read stale.
+        env = {
+            **os.environ,
+            COLLECTOR_OUT_ENV: str(out),
+            "RESULTS_STORE": "off",
+            "PYTHONDONTWRITEBYTECODE": "1",
+        }
         env["PYTHONPATH"] = os.pathsep.join(
             p for p in (str(Path(__file__).resolve().parents[1]), env.get("PYTHONPATH")) if p
         )
