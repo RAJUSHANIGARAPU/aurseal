@@ -30,7 +30,7 @@ from typing import Any
 
 from testkeel import __version__, leakgate
 from testkeel.assignment.slug import slugify
-from testkeel.assignment.types import AVAILABLE, BY_NAME
+from testkeel.assignment.types import AVAILABLE, BY_NAME, URL_FLAGS
 from testkeel.leakgate.project import PUBLIC_SOURCE, ProjectRules
 from testkeel.leakgate.scan import Finding
 
@@ -120,9 +120,21 @@ def _validate(opts: Options) -> tuple[str, dict[str, Any], Path]:
     slug = slugify(opts.name)
     if not slug:
         raise Abort(USAGE, f"--name {opts.name!r} has no letters or digits to make a name from")
-    for flag, value in (("--target-url", opts.target_url), ("--api-base-url", opts.api_base_url)):
-        if value is not None and not _URL_RE.match(value):
-            raise Abort(USAGE, f"{flag} must be an http(s) URL")
+    urls = {"target_url": opts.target_url, "api_base_url": opts.api_base_url}
+    defaults = dict(kind.urls)
+    for option, value in urls.items():
+        if value is None:
+            continue
+        if option not in defaults:
+            takes = " and ".join(URL_FLAGS[o] for o in defaults) or "no URL"
+            raise Abort(
+                USAGE, f"{URL_FLAGS[option]} does not apply to {opts.type} (it takes {takes})"
+            )
+        if not _URL_RE.match(value):
+            raise Abort(USAGE, f"{URL_FLAGS[option]} must be an http(s) URL")
+    required = [URL_FLAGS[o] for o, default in defaults.items() if default is None and not urls[o]]
+    if required:
+        raise Abort(USAGE, f"{opts.type} needs {' and '.join(required)}")
     if opts.python_version not in {"3.11", "3.12", "3.13"}:
         raise Abort(USAGE, "--python must be 3.11, 3.12 or 3.13")
     if opts.report not in {"html", "allure", "both"}:
@@ -141,7 +153,6 @@ def _validate(opts: Options) -> tuple[str, dict[str, Any], Path]:
         raise Abort(NOT_EMPTY, f"{output} is not empty; use --force to write into it")
     if opts.git and not opts.dry_run and shutil.which("git") is None:
         raise Abort(PREREQUISITE, "git is not on PATH (or pass --no-git)")
-    url = getattr(opts, kind.url_option) if kind.url_option else None
     answers: dict[str, Any] = {
         "project_name": opts.name.strip(),
         "project_slug": slug,
@@ -154,8 +165,8 @@ def _validate(opts: Options) -> tuple[str, dict[str, Any], Path]:
         "credit": opts.credit,
         "updatable": opts.updatable,
     }
-    if kind.url_option:
-        answers[kind.url_option] = url or kind.default_target
+    for option, default in defaults.items():
+        answers[option] = urls[option] or default
     return slug, answers, output
 
 
