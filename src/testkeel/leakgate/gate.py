@@ -97,3 +97,27 @@ def run(
     if findings:
         return Outcome(FINDINGS, findings, notes)
     return Outcome(NOT_ASSESSED if fork else CLEAN, [], notes)
+
+
+def denylist_hits(
+    texts: Sequence[str],
+    environ: Mapping[str, str] | None = None,
+    home: Path | None = None,
+) -> bool | None:
+    """Whether any of ``texts`` hits the denylist; None when no usable list exists.
+
+    Answers yes or no only, so a caller can warn without naming the entry or the text.
+    """
+    env = dict(os.environ if environ is None else environ)
+    if home is None and env.get("HOME"):
+        home = Path(env["HOME"])
+    try:
+        lists = deny.load(None, env, home)
+    except deny.DenylistError:
+        return None
+    if not lists:
+        return None
+    scanner = Scanner(lists)
+    for text in texts:
+        scanner.text("text", text, pii=False)
+    return bool(scanner.findings)
