@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.test/schemas/traceability/release-policy.schema.json",
+  "title": "Release policy",
+  "type": "object",
+  "required": ["version", "requirements", "detectors"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {"const": 1},
+    "default_priority": {"type": "string"},
+    "requirements": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "block": {"type": "array", "items": {"$ref": "#/$defs/status"}},
+          "no_verdict": {"type": "array", "items": {"$ref": "#/$defs/status"}}
+        }
+      }
+    },
+    "detectors": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "block": {"type": "array", "items": {"$ref": "#/$defs/red"}},
+        "no_verdict": {"type": "array", "items": {"$ref": "#/$defs/red"}},
+        "attention": {"type": "array", "items": {"$ref": "#/$defs/red"}}
+      }
+    },
+    "defects": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "blocking_severities": {"type": "array", "items": {"type": "string"}},
+        "blocking_labels": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  },
+  "$defs": {
+    "status": {"enum": ["UNCOVERED", "NOT_RUN", "UNVERIFIED", "FAILING", "KNOWN_DEFECT",
+                        "DRAFT_ONLY", "PASSING", "PROVED"]},
+    "red": {"enum": ["reproduces", "cleared", "held_empty", "signature_mismatch",
+                     "closed_pass", "closed_regressed"]}
+  }
+}

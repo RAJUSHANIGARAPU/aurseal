@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.test/schemas/v1/project.schema.json",
+  "title": "Project",
+  "type": "object",
+  "required": [
+    "key",
+    "name",
+    "archived"
+  ],
+  "properties": {
+    "key": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "archived": {
+      "type": "boolean"
+    },
+    "archived_at": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "created_at": {
+      "type": "string"
+    },
+    "settings": {
+      "type": "object"
+    },
+    "role": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  }
+}

@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Exploratory sessions{% endblock %}
+{% block content %}
+<h1>Exploratory sessions</h1>
+{% if can_record %}
+<h2>Start a session</h2>
+<form method="post" action="/ui/{{ project }}/sessions">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <p><label for="charter">Charter (mission)</label><br>
+     <textarea id="charter" data-testid="session-charter" name="charter" rows="3" cols="80" required></textarea></p>
+  <p><label for="area">Area</label> <input id="area" name="area" size="30">
+     <label for="requirements">Requirements</label> <input id="requirements" data-testid="session-requirements" name="requirements" size="30" placeholder="REQ-1 REQ-2">
+     <label for="timebox">Timebox (minutes)</label> <input id="timebox" name="timebox_min" size="5"></p>
+  <button type="submit" data-testid="session-start">Start</button>
+</form>
+{% endif %}
+<h2>Sessions</h2>
+<div class="scroll"><table>
+  <thead><tr><th>Charter</th><th>Tester</th><th>Status</th><th>Duration</th><th>Requirements</th></tr></thead>
+  <tbody>
+  {% for s in sessions %}
+  <tr><td><a href="/ui/{{ project }}/sessions/{{ s.id }}">{{ s.charter }}</a></td><td>{{ s.tester }}</td>
+      <td>{{ s.status }}</td>
+      <td>{{ s.duration_min }} min{% if s.timebox_min %} / {{ s.timebox_min }}{% endif %}{% if s.over_timebox %} <span class="warn">over the timebox</span>{% endif %}</td>
+      <td>{{ s.requirements|join(", ") }}</td></tr>
+  {% else %}
+  <tr><td colspan="5" class="muted">No sessions yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{% endblock %}

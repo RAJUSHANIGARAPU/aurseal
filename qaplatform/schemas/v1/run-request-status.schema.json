@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.test/schemas/v1/run-request-status.schema.json",
+  "title": "Run request status",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "id",
+    "project",
+    "target",
+    "status"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "id": {
+      "type": "string"
+    },
+    "project": {
+      "type": "string"
+    },
+    "target": {
+      "type": "string"
+    },
+    "environment": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "release": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "params": {
+      "type": "object"
+    },
+    "status": {
+      "enum": [
+        "queued",
+        "dispatched",
+        "running",
+        "finished",
+        "failed",
+        "rejected"
+      ]
+    },
+    "dispatcher": {
+      "type": "string"
+    },
+    "detail": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "run_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "external_ref": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "created_at": {
+      "type": "string"
+    },
+    "updated_at": {
+      "type": "string"
+    }
+  }
+}

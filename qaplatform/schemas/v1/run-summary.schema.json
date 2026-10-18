@@ -1,0 +1,216 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.test/schemas/v1/run-summary.schema.json",
+  "title": "Run summary",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "run_id",
+    "project",
+    "status",
+    "tally",
+    "verdicts",
+    "integrity"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "external_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "project": {
+      "type": "string"
+    },
+    "name": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "status": {
+      "enum": [
+        "open",
+        "finished",
+        "interrupted"
+      ]
+    },
+    "source": {
+      "type": "string"
+    },
+    "release": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "lane": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "environment": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "run_request_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "tally": {
+      "type": "object",
+      "required": [
+        "selected",
+        "received",
+        "passed",
+        "failed",
+        "error",
+        "xfailed",
+        "skipped",
+        "not_run",
+        "flaky"
+      ],
+      "properties": {
+        "selected": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "received": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "passed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "error": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "xfailed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "skipped": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "not_run": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "flaky": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "verdicts": {
+      "type": "object",
+      "required": [
+        "coverage",
+        "expected_red"
+      ],
+      "properties": {
+        "coverage": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "expected_red": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    },
+    "integrity": {
+      "type": "object",
+      "required": [
+        "verdict",
+        "breaches",
+        "rules_absent"
+      ],
+      "properties": {
+        "verdict": {
+          "enum": [
+            "PASS",
+            "FAIL",
+            "UNJUDGED"
+          ]
+        },
+        "assessed": {
+          "type": "boolean"
+        },
+        "breaches": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "rule",
+              "detail"
+            ],
+            "properties": {
+              "rule": {
+                "type": "string"
+              },
+              "detail": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "rules_absent": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "started_at": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "finished_at": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "links": {
+      "type": "object",
+      "properties": {
+        "self": {
+          "type": "string"
+        },
+        "ui": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

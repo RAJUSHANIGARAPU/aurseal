@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}{{ execution.title }}{% endblock %}
+{% block content %}
+<p><a href="/ui/{{ project }}/manual/{{ run.run_id }}">Back to the run</a></p>
+<h1>{{ execution.title }}</h1>
+<p class="muted"><code>{{ execution.case_key }}</code> · revision <code>{{ execution.revision_id }}</code>
+  · status <strong>{{ execution.status }}</strong></p>
+{% if execution.expected %}
+<h2>Expected</h2>
+<ul>{% for x in execution.expected %}<li>{{ x }}</li>{% endfor %}</ul>
+{% endif %}
+<h2>Steps</h2>
+<ol class="steps">
+{% for s in steps %}
+  <li id="step-{{ s.no }}" data-testid="step" {% if s.no == next_step %}aria-current="step"{% endif %}>
+    <p><strong>{{ s.text }}</strong>
+      {% if s.result %} <span class="tag">{{ s.result.status }}</span>{% if s.result.actual %} <span class="muted">{{ s.result.actual }}</span>{% endif %}{% endif %}</p>
+    {% if can_record %}
+    <form method="post" action="/ui/{{ project }}/manual/{{ run.run_id }}/{{ execution.id }}/steps/{{ s.no }}">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <label for="status-{{ s.no }}">Result</label>
+      <select id="status-{{ s.no }}" data-testid="step-status" name="status">
+        {% for st in ["pass", "fail", "blocked", "na"] %}
+        <option value="{{ st }}" {% if s.result and s.result.status == st %}selected{% endif %}>{{ st }}</option>
+        {% endfor %}
+      </select>
+      <label for="actual-{{ s.no }}">Actual</label>
+      <input id="actual-{{ s.no }}" data-testid="step-actual" name="actual" size="40" value="{{ s.result.actual if s.result else '' }}">
+      <label for="evidence-{{ s.no }}">Evidence link</label>
+      <input id="evidence-{{ s.no }}" data-testid="step-evidence" name="evidence_uri" size="30" value="{{ (s.result.evidence_uri or '') if s.result else '' }}">
+      <button type="submit" data-testid="step-save">Save step {{ s.no }}</button>
+    </form>
+    {% endif %}
+  </li>
+{% endfor %}
+</ol>
+{% if can_record %}
+<form method="post" action="/ui/{{ project }}/manual/{{ run.run_id }}/{{ execution.id }}/finish">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <button type="submit" data-testid="finish-execution" {% if execution.missing_steps %}disabled{% endif %}>Finish this case</button>
+  {% if execution.missing_steps %}<span class="muted">Record every step first ({{ execution.missing_steps|join(", ") }} left).</span>{% endif %}
+</form>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.test/schemas/v1/test-result.schema.json",
+  "title": "Test result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "test_id",
+    "outcome"
+  ],
+  "properties": {
+    "test_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "title": {
+      "type": "string",
+      "maxLength": 500
+    },
+    "suite": {
+      "type": "string",
+      "maxLength": 300
+    },
+    "outcome": {
+      "enum": [
+        "passed",
+        "failed",
+        "error",
+        "xfailed",
+        "skipped",
+        "not_run"
+      ]
+    },
+    "attempt": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 1
+    },
+    "duration_ms": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "message": {
+      "type": "string",
+      "maxLength": 4000
+    },
+    "trace": {
+      "type": "string",
+      "maxLength": 65536
+    },
+    "skip_reason": {
+      "type": "string",
+      "maxLength": 1000
+    },
+    "requirements": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Z][A-Z0-9]+-[0-9]+$"
+      }
+    },
+    "tickets": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 100
+      }
+    },
+    "tags": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 100
+      }
+    },
+    "steps": {
+      "type": "array",
+      "maxItems": 200,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "no",
+          "status"
+        ],
+        "properties": {
+          "no": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "status": {
+            "enum": [
+              "pass",
+              "fail",
+              "blocked",
+              "na"
+            ]
+          },
+          "actual": {
+            "type": "string",
+            "maxLength": 4000
+          },
+          "evidence_uri": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        }
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "$ref": "evidence-link.schema.json"
+      }
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.test/schemas/v1/run-finish.schema.json",
+  "title": "Run finish",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "finished_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "expected_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "interrupted": {
+      "type": "boolean",
+      "default": false
+    }
+  }
+}

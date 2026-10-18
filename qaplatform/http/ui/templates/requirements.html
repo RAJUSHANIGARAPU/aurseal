@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Requirements{% endblock %}
+{% block content %}
+<h1>Requirements{% if release %} · release {{ release }}{% endif %}</h1>
+<p>{% for status, n in totals.items() %}<span class="tag">{{ status }}: {{ n }}</span> {% endfor %}</p>
+<p class="muted">Only <strong>proved</strong> counts as evidence. "recorded_only" means tests ran
+  or someone looked, but nothing proved the requirement.</p>
+<div class="scroll"><table>
+  <thead><tr><th>Requirement</th><th>Status</th><th>Tests (latest outcome / verdict)</th><th>Open tickets</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+  <tr><td>{{ r.requirement }}</td><td><span class="tag {{ r.tone }}">{{ r.status }}</span></td>
+      <td>{% for t in r.tests %}<code>{{ t.test_id }}</code> {{ t.latest_outcome or "-" }} / {{ t.latest_verdict or "-" }}{% if not loop.last %}<br>{% endif %}{% endfor %}</td>
+      <td>{{ r.open_tickets|join(", ") }}</td></tr>
+  {% else %}
+  <tr><td colspan="4" class="muted">No requirement is linked to any test yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{% endblock %}

@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.test/schemas/v1/run-create.schema.json",
+  "title": "Run create",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "name"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "external_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "source": {
+      "enum": [
+        "automated",
+        "manual",
+        "exploratory",
+        "import"
+      ],
+      "default": "automated"
+    },
+    "lane": {
+      "type": "string",
+      "maxLength": 64
+    },
+    "environment": {
+      "type": "string",
+      "maxLength": 64
+    },
+    "release": {
+      "type": "string",
+      "maxLength": 64
+    },
+    "expected_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "run_request_id": {
+      "type": "string",
+      "maxLength": 64
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "repository": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "branch": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{7,40}$"
+        },
+        "ci_url": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "framework": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "framework_version": {
+          "type": "string",
+          "maxLength": 50
+        },
+        "sut_version": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "checkouts": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "commit"
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "commit": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "labels": {
+      "type": "object",
+      "maxProperties": 50,
+      "additionalProperties": {
+        "type": "string",
+        "maxLength": 200
+      }
+    }
+  }
+}

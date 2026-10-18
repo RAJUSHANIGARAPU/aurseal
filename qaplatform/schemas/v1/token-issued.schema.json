@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.test/schemas/v1/token-issued.schema.json",
+  "title": "Token issued",
+  "description": "The raw token appears in this response only; it is never stored or shown again.",
+  "type": "object",
+  "required": [
+    "token",
+    "id",
+    "user_id",
+    "role",
+    "project",
+    "expires_at"
+  ],
+  "properties": {
+    "token": {
+      "type": "string",
+      "pattern": "^qap_"
+    },
+    "id": {
+      "type": "string"
+    },
+    "user_id": {
+      "type": "string"
+    },
+    "role": {
+      "enum": [
+        "viewer",
+        "tester",
+        "lead",
+        "admin"
+      ]
+    },
+    "project": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "label": {
+      "type": "string"
+    },
+    "created_at": {
+      "type": "string"
+    },
+    "expires_at": {
+      "type": "string"
+    }
+  }
+}

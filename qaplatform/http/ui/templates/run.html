@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Run {{ run.run_id }}{% endblock %}
+{% block content %}
+<h1>Run <code>{{ run.run_id }}</code>{% if run.name %} · {{ run.name }}{% endif %}</h1>
+<p class="muted">{{ run.source }}{% if run.release %} · release {{ run.release }}{% endif %}
+  {% if run.external_id %} · {{ run.external_id }}{% endif %} · {{ run.status }}
+  · started {{ run.started_at or "?" }}{% if run.finished_at %} · finished {{ run.finished_at }}{% endif %}</p>
+
+<div class="verdict {{ headline.tone }}" data-testid="integrity">
+  Run trust: <strong>{{ headline.label }}</strong> <span class="muted">({{ headline.what }})</span>
+</div>
+
+<ul class="counts" data-testid="counts" aria-label="Outcome and proof counts">
+  {% for c in counts %}<li class="{{ c.tone }}"><b>{{ c.value }}</b>{{ c.label }}</li>{% endfor %}
+</ul>
+
+{% if breaches %}
+<h2>Why the verdict is not PASS</h2>
+<ul>{% for b in breaches %}<li><strong>{{ b.rule }}</strong>: {{ b.detail }}</li>{% endfor %}</ul>
+{% endif %}
+{% if absent %}
+<details><summary>Rules that did not apply ({{ absent|length }})</summary>
+<ul>{% for a in absent %}<li class="muted">{{ a }}</li>{% endfor %}</ul></details>
+{% endif %}
+
+<h2>Results</h2>
+{% if truncated %}<p class="warn">Showing the first page only; use the API for the rest.</p>{% endif %}
+<div class="scroll"><table>
+  <thead><tr><th>Test</th><th>Outcome</th><th>Attempts</th><th>Message</th></tr></thead>
+  <tbody>
+  {% for r in results %}
+  <tr><td><a href="/ui/{{ project }}/history?test_id={{ q(r.test_id) }}"><code>{{ r.test_id }}</code></a></td>
+      <td><span class="tag {{ r.tone }}">{{ r.outcome }}</span>{% if r.failed_attempts %} <span class="warn">flaky</span>{% endif %}</td>
+      <td>{{ r.attempts }}</td>
+      <td>{{ r.message or r.skip_reason or "" }}</td></tr>
+  {% else %}
+  <tr><td colspan="4" class="muted">No results.</td></tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+
+<h2>Verdict rows</h2>
+<div class="scroll"><table>
+  <thead><tr><th>Test</th><th>Kind</th><th>Ticket / subject</th><th>Verdict</th><th>Detail</th></tr></thead>
+  <tbody>
+  {% for v in verdicts %}
+  <tr><td><code>{{ v.test_id }}</code></td><td>{{ v.kind }}</td>
+      <td>{{ v.ticket or v.subject or "" }}</td><td>{{ v.verdict }}</td><td>{{ v.detail }}</td></tr>
+  {% else %}
+  <tr><td colspan="5" class="muted">No verdict rows: nothing in this run claims more than pass/fail.</td></tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+
+<h2>Evidence</h2>
+<ul>
+{% for e in evidence %}
+  <li>{{ e.kind }}{% if e.nodeid %} · <code>{{ e.nodeid }}</code>{% endif %}:
+    {% if e.link.href %}<a href="{{ e.link.href }}" rel="noopener noreferrer">{{ e.link.text }}</a>{% else %}<code>{{ e.link.text }}</code>{% endif %}</li>
+{% else %}
+  <li class="muted">No evidence links.</li>
+{% endfor %}
+</ul>
+{% endblock %}

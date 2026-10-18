@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.test/schemas/traceability/requirements-snapshot.schema.json",
+  "title": "Requirements snapshot (written by the sync, read by the marker check)",
+  "type": "object",
+  "required": ["schema_version", "generated_at", "sources", "requirements"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "generated_at": {"type": "string"},
+    "sources": {"type": "array", "items": {"type": "string"}},
+    "requirements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "status", "source"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^[A-Z][A-Z0-9]*-[0-9]+$"},
+          "title": {"type": "string"},
+          "status": {"enum": ["active", "retired"]},
+          "priority": {"type": ["string", "null"]},
+          "labels": {"type": "array", "items": {"type": "string"}},
+          "release": {"type": ["string", "null"]},
+          "parent_id": {"type": ["string", "null"]},
+          "source": {"type": "string"},
+          "source_ref": {"type": ["string", "null"]},
+          "url": {"type": ["string", "null"]},
+          "content_hash": {"type": "string"}
+        }
+      }
+    }
+  }
+}

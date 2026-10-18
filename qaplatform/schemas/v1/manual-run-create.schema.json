@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.test/schemas/v1/manual-run-create.schema.json",
+  "title": "Manual run create",
+  "description": "Either `spec` (spec-file markdown with `## Scenario` sections) or `cases`.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "name"
+  ],
+  "anyOf": [
+    {
+      "required": [
+        "spec"
+      ]
+    },
+    {
+      "required": [
+        "cases"
+      ]
+    }
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "external_id": {
+      "type": "string",
+      "maxLength": 200
+    },
+    "release": {
+      "type": "string",
+      "maxLength": 64
+    },
+    "environment": {
+      "type": "string",
+      "maxLength": 64
+    },
+    "spec": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200000
+    },
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 500,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "key",
+          "steps"
+        ],
+        "properties": {
+          "key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "steps": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 200,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            }
+          },
+          "expected": {
+            "type": "array",
+            "maxItems": 200,
+            "items": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          "preconditions": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          "requirements": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Z][A-Z0-9]+-[0-9]+$"
+            }
+          }
+        }
+      }
+    }
+  }
+}

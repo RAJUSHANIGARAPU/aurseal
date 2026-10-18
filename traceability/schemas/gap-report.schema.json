@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.test/schemas/traceability/gap-report.schema.json",
+  "title": "Coverage gap report",
+  "type": "object",
+  "required": ["schema_version", "generated_at", "mode", "sources", "counts", "items", "new_gaps", "closed_gaps"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "generated_at": {"type": "string"},
+    "mode": {"enum": ["static", "runtime"]},
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "items"],
+        "properties": {"name": {"type": "string"}, "items": {"type": "integer", "minimum": 1}}
+      }
+    },
+    "counts": {"type": "object", "additionalProperties": {"type": "integer"}},
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["source", "key", "title", "status", "covering_tests"],
+        "properties": {
+          "source": {"type": "string"},
+          "key": {"type": "string"},
+          "title": {"type": "string"},
+          "status": {"enum": ["gap", "covered", "covered_not_passing", "exercised"]},
+          "covering_tests": {"type": "array", "items": {"type": "string"}},
+          "exercised_by": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "new_gaps": {"type": "array", "items": {"type": "string"}},
+    "closed_gaps": {"type": "array", "items": {"type": "string"}},
+    "run_id": {"type": ["string", "null"]},
+    "branch": {"type": ["string", "null"]}
+  }
+}

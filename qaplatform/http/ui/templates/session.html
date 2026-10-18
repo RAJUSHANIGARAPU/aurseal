@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Session{% endblock %}
+{% block content %}
+<p><a href="/ui/{{ project }}/sessions">All sessions</a></p>
+<h1>{{ session.charter }}</h1>
+<p class="muted">{{ session.tester }} · <span data-testid="session-status">{{ session.status }}</span>
+  · {{ session.duration_min }} min{% if session.timebox_min %} of {{ session.timebox_min }}{% endif %}
+  {% if session.over_timebox %}<span class="warn"> · over the timebox</span>{% endif %}
+  {% if session.area %} · area {{ session.area }}{% endif %}
+  · run <a href="/ui/{{ project }}/runs/{{ session.run_id }}"><code>{{ session.run_id }}</code></a></p>
+<p class="muted">Contributes <strong>recorded</strong> (someone looked) to
+  {{ session.requirements|join(", ") or "no requirement" }}; a session never proves a requirement.</p>
+{% if can_record %}
+<h2>Add a note</h2>
+<form method="post" action="/ui/{{ project }}/sessions/{{ session.id }}/notes">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <select name="kind" data-testid="note-kind" aria-label="Kind">
+    {% for k in ["observation", "question", "bug", "idea"] %}<option value="{{ k }}">{{ k }}</option>{% endfor %}
+  </select>
+  <input name="text" data-testid="note-text" size="60" aria-label="Note" required>
+  <input name="defect_key" data-testid="note-defect" size="12" placeholder="BUG-1" aria-label="Defect key">
+  <input name="attachment_uri" size="24" placeholder="attachment link" aria-label="Attachment">
+  <button type="submit" data-testid="note-add">Add</button>
+</form>
+{% endif %}
+<h2>Notes ({{ session.notes|length }})</h2>
+<ol data-testid="notes">
+{% for n in session.notes %}
+  <li><span class="muted">{{ n.ts }}</span> <span class="tag {{ 'bad' if n.kind == 'bug' else 'info' }}">{{ n.kind }}</span>
+    {{ n.text }}{% if n.defect_key %} <strong>{{ n.defect_key }}</strong>{% endif %}
+    {% if n.attachment_uri %} · <code>{{ n.attachment_uri }}</code>{% endif %}</li>
+{% else %}
+  <li class="muted">No notes yet.</li>
+{% endfor %}
+</ol>
+{% if session.bugs %}
+<h2>Bugs found</h2>
+<ul>{% for b in session.bugs %}<li>{{ b.text }}{% if b.defect_key %} ({{ b.defect_key }}){% endif %}</li>{% endfor %}</ul>
+{% endif %}
+{% if session.debrief %}<h2>Debrief</h2><p>{{ session.debrief }}</p>{% endif %}
+{% if can_record %}
+<h2>End the session</h2>
+<form method="post" action="/ui/{{ project }}/sessions/{{ session.id }}/end">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <p><label for="debrief">Debrief: what was covered, what was not, follow-up</label><br>
+     <textarea id="debrief" data-testid="session-debrief" name="debrief" rows="5" cols="80"></textarea></p>
+  <label><input type="checkbox" name="abandoned" value="yes"> abandoned (records nothing)</label>
+  <button type="submit" data-testid="session-end">End session</button>
+</form>
+{% endif %}
+{% endblock %}

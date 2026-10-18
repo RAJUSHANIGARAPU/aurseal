@@ -1,0 +1,79 @@
+[
+  {
+    "name": "create run",
+    "method": "POST",
+    "path": "/api/v1/projects/default/runs",
+    "json": {
+      "schema_version": "1.0",
+      "name": "nightly",
+      "external_id": "ci-1042",
+      "expected_count": 3,
+      "provenance": {
+        "commit": "a1b2c3d",
+        "branch": "main"
+      }
+    },
+    "expect_status": 201,
+    "save": {
+      "run": "run_id"
+    },
+    "expect": {
+      "/status": "open"
+    }
+  },
+  {
+    "name": "upload junit",
+    "method": "POST",
+    "path": "/api/v1/projects/default/runs/{run}/junit",
+    "content_type": "application/xml",
+    "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<testsuite name=\"com.example.CartTest\" tests=\"3\">\n  <testcase classname=\"com.example.CartTest\" name=\"addsItem()\" time=\"0.2\">\n    <properties><property name=\"requirement\" value=\"REQ-7\"/></properties>\n  </testcase>\n  <testcase classname=\"com.example.CartTest\" name=\"removesItem()\" time=\"0.1\">\n    <properties><property name=\"requirement\" value=\"REQ-7\"/></properties>\n    <failure message=\"expected 0 but was 1\">at CartTest.removesItem</failure>\n  </testcase>\n  <testcase classname=\"com.example.CartTest\" name=\"discount()\" time=\"0\">\n    <skipped message=\"feature flag off\"/>\n  </testcase>\n</testsuite>\n",
+    "expect_status": 200,
+    "expect": {
+      "/added": 3
+    }
+  },
+  {
+    "name": "upload verdicts",
+    "method": "POST",
+    "path": "/api/v1/projects/default/runs/{run}/verdicts",
+    "content_type": "application/x-ndjson",
+    "text": "{\"test_id\": \"com.example.CartTest::removesItem()\", \"kind\": \"expected_red\", \"ticket\": \"BUG-142\", \"verdict\": \"reproduces\"}\n",
+    "expect_status": 200,
+    "expect": {
+      "/added": 1
+    }
+  },
+  {
+    "name": "finish",
+    "method": "POST",
+    "path": "/api/v1/projects/default/runs/{run}/finish",
+    "json": {
+      "schema_version": "1.0"
+    },
+    "expect_status": 200,
+    "expect": {
+      "/status": "finished",
+      "/tally/failed": 1,
+      "/tally/skipped": 1,
+      "/integrity/verdict": "PASS"
+    }
+  },
+  {
+    "name": "requirement status",
+    "method": "GET",
+    "path": "/api/v1/projects/default/requirements/REQ-7",
+    "expect_status": 200,
+    "expect": {
+      "/status": "failing"
+    }
+  },
+  {
+    "name": "verdict rows",
+    "method": "GET",
+    "path": "/api/v1/projects/default/verdicts?ticket=BUG-142",
+    "expect_status": 200,
+    "expect": {
+      "/verdicts/0/verdict": "reproduces"
+    }
+  }
+]

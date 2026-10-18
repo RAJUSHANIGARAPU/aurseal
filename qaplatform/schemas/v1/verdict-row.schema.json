@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.test/schemas/v1/verdict-row.schema.json",
+  "title": "Verdict row",
+  "description": "A statement about what a test proved. `nodeid` is accepted as an alias of `test_id`, and unknown fields (a local run id, a timestamp) are ignored, so a verdicts.jsonl file can be uploaded unchanged.",
+  "type": "object",
+  "required": [
+    "kind",
+    "verdict"
+  ],
+  "anyOf": [
+    {
+      "required": [
+        "test_id"
+      ]
+    },
+    {
+      "required": [
+        "nodeid"
+      ]
+    }
+  ],
+  "properties": {
+    "test_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "nodeid": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "kind": {
+      "enum": [
+        "expected_red",
+        "coverage"
+      ]
+    },
+    "ticket": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 100
+    },
+    "subject": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 200
+    },
+    "verdict": {
+      "type": "string"
+    },
+    "detail": {
+      "type": "string",
+      "maxLength": 4000
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "expected_red"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "verdict": {
+            "enum": [
+              "reproduces",
+              "cleared",
+              "held_empty",
+              "signature_mismatch",
+              "closed_pass",
+              "closed_regressed"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "coverage"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "verdict": {
+            "enum": [
+              "proved",
+              "recorded",
+              "held_empty",
+              "abstained"
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

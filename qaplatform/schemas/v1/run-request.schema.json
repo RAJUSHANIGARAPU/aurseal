@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.test/schemas/v1/run-request.schema.json",
+  "title": "Run request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "target"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "target": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100,
+      "description": "dispatcher-defined suite or job name"
+    },
+    "environment": {
+      "type": "string",
+      "maxLength": 64
+    },
+    "release": {
+      "type": "string",
+      "maxLength": 64
+    },
+    "params": {
+      "type": "object",
+      "maxProperties": 20,
+      "additionalProperties": {
+        "type": [
+          "string",
+          "number",
+          "boolean"
+        ]
+      }
+    }
+  }
+}

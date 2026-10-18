@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}History{% endblock %}
+{% block content %}
+<h1>Test history</h1>
+<form method="get">
+  <label for="test_id">Test id</label>
+  <input id="test_id" name="test_id" value="{{ test_id }}" size="70">
+  <button type="submit">Show</button>
+</form>
+{% if test_id %}
+<div class="scroll"><table>
+  <thead><tr><th>Run</th><th>Started</th><th>Source</th><th>Outcome</th><th>Earlier red attempts</th><th>Run trust</th></tr></thead>
+  <tbody>
+  {% for h in history %}
+  <tr><td><a href="/ui/{{ project }}/runs/{{ h.run_id }}"><code>{{ h.run_id }}</code></a></td>
+      <td>{{ h.run_started_at or "" }}</td><td>{{ h.source }}</td><td>{{ h.outcome }}</td>
+      <td>{{ h.failed_attempts }}</td><td>{{ h.integrity_verdict or "open" }}</td></tr>
+  {% else %}
+  <tr><td colspan="6" class="muted">No results for this test id.</td></tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{% endif %}
+{% endblock %}

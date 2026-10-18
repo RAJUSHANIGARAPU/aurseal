@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.test/schemas/v1/evidence-batch.schema.json",
+  "title": "Evidence batch",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "links"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "links": {
+      "type": "array",
+      "maxItems": 1000,
+      "items": {
+        "$ref": "evidence-link.schema.json"
+      }
+    }
+  }
+}

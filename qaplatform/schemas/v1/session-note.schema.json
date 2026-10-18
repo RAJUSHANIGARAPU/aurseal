@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.test/schemas/v1/session-note.schema.json",
+  "title": "Exploratory session note",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "text"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "kind": {
+      "enum": [
+        "observation",
+        "question",
+        "bug",
+        "idea"
+      ]
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 8000
+    },
+    "attachment_uri": {
+      "type": "string",
+      "maxLength": 2000
+    },
+    "defect_key": {
+      "type": "string",
+      "maxLength": 100
+    }
+  }
+}
