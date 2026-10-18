@@ -1,0 +1,4 @@
+{
+  "about": "Known accessibility violations: filed, excused from the gate, expected to keep reproducing. Each entry needs an issue. Remove an entry once it is fixed; never add one to make a build pass.",
+  "violations": []
+}

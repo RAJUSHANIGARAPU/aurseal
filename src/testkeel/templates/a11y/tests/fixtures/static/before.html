@@ -1,0 +1,16 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Planted violations</title></head>
+<body>
+<!-- Each element below fails one WCAG 2.1 AA rule on purpose. The offline tests expect
+     the scanner to find every one: a scanner that finds nothing here is broken. -->
+<div id="logo"><img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" width="40" height="40"></div>
+<p id="faint" style="color:#bbbbbb;background:#ffffff">Opening hours: 9 to 5.</p>
+<form>
+  <input id="email" type="text" name="email">
+  <button id="send" type="submit"></button>
+</form>
+<!-- Not a WCAG rule (axe tags it best-practice only), so a WCAG scan must not report it. -->
+<h1 id="empty-heading"></h1>
+</body>
+</html>

@@ -1,0 +1,11 @@
+a11y-baseline.json   known violations, each with its issue; entries may only be removed
+src/{{ package_name }}/
+  a11y/
+    scanner.py  injects axe-core, runs it with the configured tags, returns findings
+    baseline.py the known-violations file and the verdict: new, still known, fixed
+    pages.py    the pages and page states the suite scans
+  settings.py   APP_* environment settings
+tests/
+  a11y/         live scans of the target
+  unit/         offline: the scanner on local HTML, the baseline rules
+  fixtures/     static HTML with planted violations, and its fixed version
