@@ -1,0 +1,35 @@
+# Test plan: {{ project_name }}
+
+One page. Replace every _(prompt)_ with your own words; delete what does not apply.
+
+## Scope
+
+- **In scope:** _(the features or endpoints this suite covers)_
+- **Out of scope:** _(what you left out, and the risk each exclusion leaves open)_
+
+## Risks and priority
+
+Highest risk first. Priority = likelihood x impact; the tests follow this order.
+
+| Risk | Likelihood | Impact | Priority | Covered by |
+|---|---|---|---|---|
+| _(what could go wrong for a user or the business)_ | H/M/L | H/M/L | P1 | `tests/...` |
+
+## Automated vs exploratory
+
+- **Automated:** _(stable, high-value, repeatable checks)_
+- **Exploratory:** _(what a person should look at, and why a script would miss it)_
+
+## Entry and exit criteria
+
+- **Entry:** _(environment reachable, test data available, build deployed)_
+- **Exit:** _(all P1 tests pass; every failure triaged into a finding or a test fix)_
+
+## Environments and data
+
+- **Target:** _(URL and version under test)_
+- **Data:** _(how each test gets data it owns, and how it cleans up)_
+
+## Known limits
+
+- _(time box, environment you could not reach, flakiness you observed and did not fix)_

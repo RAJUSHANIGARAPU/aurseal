@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+{%- raw %}
+  group: ci-${{ github.ref }}
+  # A newer push to a pull request supersedes the older run; runs on main always finish.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+{%- endraw %}
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          python-version: "{{ python_version }}"
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy
+
+{% include '_partials/' ~ type ~ '/ci-test-job.part' %}
+  report:
+    needs: test
+    # The report matters most when tests failed, so build it unless the run was cancelled.
+{%- raw %}
+    if: ${{ !cancelled() && needs.test.result != 'skipped' }}
+{%- endraw %}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: reports
+          path: reports
+{%- if report in ['allure', 'both'] %}
+      - name: Render the Allure report
+        run: npx --yes allure-commandline@2.46.1 generate reports/allure-results -o reports/allure-report --clean
+{%- endif %}
+      - name: Assemble the site
+        run: |
+          mkdir -p site
+{%- if report == 'html' %}
+          cp reports/report.html site/index.html
+{%- elif report == 'allure' %}
+          cp -r reports/allure-report/. site/
+{%- else %}
+          cp reports/report.html site/index.html
+          cp -r reports/allure-report site/allure
+{%- endif %}
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+  deploy:
+    needs: report
+{%- raw %}
+    if: ${{ !cancelled() && needs.report.result == 'success' && github.ref == 'refs/heads/main' }}
+{%- endraw %}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+{%- raw %}
+      url: ${{ steps.deployment.outputs.page_url }}
+{%- endraw %}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
