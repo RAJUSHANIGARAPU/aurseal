@@ -53,7 +53,7 @@ fullstack    planned   web-ui and api-rest combined (needs browser)
 | `--api-base-url` | text | | API under test. |
 | `--python` | text | `3.12` | 3.11, 3.12 or 3.13. |
 | `--report` | text | `html` | html, allure or both. |
-| `--ci` | text | `github` | github, gitlab or none. |
+| `--ci` | text | `github` | github or none. |
 | `--docker` / `--no-docker` | flag | `--docker` | Dockerfile and compose file. |
 | `--git` / `--no-git` | flag | `--git` | `git init`, no commit. |
 | `--credit` / `--no-credit` | flag | `--no-credit` | One README footer line naming testkeel. |
