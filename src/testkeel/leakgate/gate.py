@@ -1,5 +1,10 @@
 """One leak-gate run: load the lists, scan the sources, decide the exit code.
 
+Rule sets: the denylist and the personal-data rules always run. The generated-project
+rules (:mod:`.project`: hosts, tool traces, the lock file's index, standalone) run only
+when the caller passes ``project``, which ``new-assignment`` and ``assignment check`` do
+and the repository scan (``python -m testkeel.leakgate``) never does.
+
 Exit codes: 0 clean, 1 findings, 2 cannot run (missing/empty/invalid list under
 ``missing_list="fail"``, bad allowlist, unreadable source), 3 not assessed (``fork``: the
 denylist is unavailable by design; personal-data rules still ran and found nothing).
@@ -14,6 +19,7 @@ from pathlib import Path
 
 from testkeel.leakgate import allow as allowlist
 from testkeel.leakgate import denylist as deny
+from testkeel.leakgate.project import ProjectRules
 from testkeel.leakgate.scan import Finding, Scanner
 
 CLEAN, FINDINGS, CANNOT_RUN, NOT_ASSESSED = 0, 1, 2, 3
@@ -40,6 +46,7 @@ def run(
     fork: bool = False,
     environ: Mapping[str, str] | None = None,
     home: Path | None = None,
+    project: ProjectRules | None = None,
 ) -> Outcome:
     env = dict(os.environ if environ is None else environ)
     if home is None and env.get("HOME"):
@@ -68,7 +75,7 @@ def run(
     except (allowlist.AllowError, OSError) as exc:
         return Outcome(CANNOT_RUN, error=str(exc))
 
-    scanner = Scanner(lists, allows, env.get("HOME"))
+    scanner = Scanner(lists, allows, env.get("HOME"), project)
     try:
         for tree in trees:
             if not tree.is_dir():

@@ -18,6 +18,7 @@ from testkeel.leakgate import allow as allowlist
 from testkeel.leakgate.denylist import Denylist, Matcher
 from testkeel.leakgate.normalise import line_tokens
 from testkeel.leakgate.pii import HOME, line_rules
+from testkeel.leakgate.project import ProjectRules
 
 MAX_FILE_BYTES = 5 * 1024 * 1024
 _SKIP_DIRS = {".git", ".venv", "venv", "node_modules", "__pycache__", ".mypy_cache"}
@@ -40,6 +41,7 @@ class Scanner:
     denylist: Denylist | None
     allows: Sequence[allowlist.Allow] = ()
     home: str | None = None
+    project: ProjectRules | None = None  # generated-project rules; None for a repository
     findings: set[Finding] = field(default_factory=set)
     notes: list[str] = field(default_factory=list)
 
@@ -121,17 +123,32 @@ class Scanner:
             try:
                 if path.stat().st_size > MAX_FILE_BYTES:
                     skipped += 1
+                    self._project_path(relative, shown[relative], None)
                     continue
                 data = path.read_bytes()
             except OSError:
                 continue
-            if b"\0" in data[:8192]:
+            binary = b"\0" in data[:8192]
+            text = None if binary else data.decode("utf-8", errors="replace")
+            self._project_path(relative, shown[relative], text)
+            if text is None:
                 continue  # binary: its name was checked above
-            self.text(relative, data.decode("utf-8", errors="replace"), relative, shown[relative])
+            self.text(relative, text, relative, shown[relative])
+            if self.project is not None:
+                for number, rule in self.project.content(relative, text):
+                    self.findings.add(Finding(shown[relative], number, rule))
         if skipped:
             self.notes.append(
                 f"{skipped} file(s) over {MAX_FILE_BYTES // 1024 // 1024} MB not read"
             )
+
+    def _project_path(self, relative: str, shown: str, text: str | None) -> None:
+        if self.project is None:
+            return
+        parts = shown.split("/")
+        for depth, rule in self.project.path(relative, text):
+            where = "/".join(parts[:depth]) + ("/" if depth < len(parts) else "")
+            self.findings.add(Finding(where, None, rule))
 
     def message(self, label: str, text: str) -> None:
         self.text(label, text)
