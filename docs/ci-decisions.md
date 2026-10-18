@@ -157,10 +157,10 @@ log.
 
 ## Package
 
-**Rule.** The installable package (`src/testkeel`) is installed in the offline job with
+**Rule.** The installable package (`src/aurseal`) is installed in the offline job with
 `pip install -e .`, and its tests (`tests/package/`) run in the offline suite, where the
 CI-selection gate sees them. `package.yml` adds only what that job cannot: `mypy --strict`
-on Python 3.12, a build whose wheel must hold nothing but `testkeel/`, and a second run of
+on Python 3.12, a build whose wheel must hold nothing but `aurseal/`, and a second run of
 `tests/package` with every generated project's dependencies and Chromium installed. That
 run fails when any test skips, because there a skip means a check ran nowhere.
 
@@ -171,15 +171,15 @@ its dependencies.
 
 **Change safely.** Keep `tests/package/` collectable only when the package is installed (its
 conftest skips collection otherwise). Never put `src` on the pytest path: the tests must
-import the installed package. Package release tags are `testkeel-v*`, because plain `v*`
-fires `release.yml`; `publish.yml` builds, checks and publishes only on `testkeel-v*`, with
+import the installed package. Package release tags are `aurseal-v*`, because plain `v*`
+fires `release.yml`; `publish.yml` builds, checks and publishes only on `aurseal-v*`, with
 trusted publishing (`id-token: write` on the publish jobs alone, environment `pypi`), and
 its wheel check is the same `tools/wheel_check.py` that `package.yml` runs. Process:
 [Releasing](kit/releasing.md).
 
 ## Leak check
 
-**Rule.** `leak-check.yml` runs `python -m testkeel.leakgate` on every pull request (tree,
+**Rule.** `leak-check.yml` runs `python -m aurseal.leakgate` on every pull request (tree,
 title, body, commit messages, added lines), on every push to `main` (tree) and weekly
 (tree, plus the whole history against the denylist). The denylist is the repository secret
 `LEAK_DENYLIST` and never a file in the repository. Without it a branch of this repository
@@ -193,7 +193,7 @@ the check itself republishing what it found.
 
 **Change safely.** A personal-data false positive goes in `leakgate-allow.toml` with a
 reason; a denylist false positive is fixed in the private list. Run the same scan locally
-with `python -m testkeel.leakgate scan --tree .` before pushing: on a public repository a
+with `python -m aurseal.leakgate scan --tree .` before pushing: on a public repository a
 pushed branch is already published, so the CI run is detection, not prevention.
 
 ## Examples lane
@@ -202,7 +202,7 @@ pushed branch is already published, so the CI run is detection, not prevention.
 pull request.
 
 - **Local, per pull request.** `examples-pr.yml` runs when a pull request touches
-  `examples/` or `src/testkeel/templates/`: a matrix job per example runs its
+  `examples/` or `src/aurseal/templates/`: a matrix job per example runs its
   `make test-local`, which starts a copy of the target in Docker, runs the suite against it
   and removes it. No test traffic leaves the runner. Before the suite starts, `test-local`
   refuses any `APP_*URL` or `TARGET_URL` in its environment whose host is not `localhost`,

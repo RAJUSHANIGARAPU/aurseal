@@ -30,7 +30,7 @@ def test_the_changelog_has_an_unreleased_section_and_the_current_version():
 
 def test_the_pending_publisher_matches_the_workflow():
     table = _publisher_table()
-    assert table["PyPI project name"] == "testkeel"
+    assert table["PyPI project name"] == "aurseal"
     assert table["Workflow name"] == "publish.yml"
     assert table["Environment name"] == PUBLISH["jobs"]["pypi"]["environment"]["name"]
     assert f"`{PUBLISH['jobs']['testpypi']['environment']['name']}`" in RELEASING

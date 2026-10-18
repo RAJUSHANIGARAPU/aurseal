@@ -3,8 +3,8 @@
 ## Set up
 
 ```bash
-git clone https://github.com/RAJUSHANIGARAPU/wiki_project
-cd wiki_project
+git clone https://github.com/RAJUSHANIGARAPU/aurseal
+cd aurseal
 python -m venv .venv && . .venv/bin/activate
 pip install -r requirements.txt
 pip install -e .
@@ -15,9 +15,9 @@ pip install pre-commit && pre-commit install   # ruff, workflow lint and the lea
 
 | Path | What |
 |---|---|
-| `src/testkeel/` | The package: CLI, importers, result model, report, leak gate |
-| `src/testkeel/templates/` | The project templates (`_base/` plus one overlay per type) |
-| `tests/package/` | The package's tests; collected only when `testkeel` is installed |
+| `src/aurseal/` | The package: CLI, importers, result model, report, leak gate |
+| `src/aurseal/templates/` | The project templates (`_base/` plus one overlay per type) |
+| `tests/package/` | The package's tests; collected only when `aurseal` is installed |
 | `examples/` | Projects generated from the templates; their own pytest configuration |
 | `docs/` | This site; `mkdocs.yml` at the repository root |
 
@@ -29,7 +29,7 @@ Run what CI runs for the part you changed:
 ruff check . && ruff format --check .
 pytest tests/package -n auto          # the package
 pytest tests/ -n auto -m "not demo_ui and not draft and not render_check"   # the offline suite
-python -m testkeel.leakgate scan --tree .
+python -m aurseal.leakgate scan --tree .
 ```
 
 For a documentation change, build the site the way CI does:
@@ -56,8 +56,8 @@ example in the same commit, or the regeneration check fails.
 
 ## Adding a project type
 
-A new type needs an overlay under `src/testkeel/templates/<type>/`, an entry in
-`src/testkeel/assignment/types.py` (so `testkeel list-types` shows it), a render case in
+A new type needs an overlay under `src/aurseal/templates/<type>/`, an entry in
+`src/aurseal/assignment/types.py` (so `aurseal list-types` shows it), a render case in
 the template tests, and a section on the [Templates](templates.md) page. Until all of
 them exist it stays `planned`, which `new-assignment` refuses.
 

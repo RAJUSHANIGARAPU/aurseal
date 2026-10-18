@@ -1,6 +1,6 @@
 # Templates
 
-`testkeel new-assignment --type <type>` renders a [Copier](https://copier.readthedocs.io/)
+`aurseal new-assignment --type <type>` renders a [Copier](https://copier.readthedocs.io/)
 template that ships inside the package. Every type is a common skeleton plus a
 type-specific overlay. Templates use no Copier tasks and no Jinja extensions, so rendering
 never runs code from the template.
@@ -172,7 +172,7 @@ files, and a test fails when a fresh render no longer matches them.
 ## Updating a project
 
 A project made with `--updatable` can take template improvements from a later release
-with one command, [`testkeel assignment update`](cli.md#testkeel-assignment-update).
+with one command, [`aurseal assignment update`](cli.md#aurseal-assignment-update).
 `copier update` itself does not work on these projects, and that is a deliberate choice.
 
 A project is rendered in several Copier passes into one directory: the common skeleton
@@ -180,20 +180,20 @@ A project is rendered in several Copier passes into one directory: the common sk
 the `web-ui`, `api-rest` and `fullstack` overlays in turn. `copier update` replays one
 pass from one template directory, so it cannot reproduce that. Two ways out were weighed:
 
-| | One-pass template, plain `copier update` | `testkeel assignment update` (chosen) |
+| | One-pass template, plain `copier update` | `aurseal assignment update` (chosen) |
 |---|---|---|
 | Template layout | Every overlay file moves into one tree behind a type condition in its name; every file both the skeleton and an overlay ship becomes one file with a branch per type; `fullstack`'s overlay order becomes nested conditions. | Unchanged: skeleton plus overlays, each readable on its own. |
 | Risk to existing output | The whole tree is rewritten; byte-identical output has to be re-proved for every type and option. | None: the render code gains one parameter (which template directory to read). |
 | Update semantics | Copier's three-way merge. | The same: render the recorded answers at the old and the new tag, merge the difference into the project with `git merge-file`. |
-| Needs | A `copier.yml` at the repository root. | git, and testkeel installed (it already is, to generate the project). |
+| Needs | A `copier.yml` at the repository root. | git, and aurseal installed (it already is, to generate the project). |
 | Cost | Adding a type touches the shared tree and every condition. | The merge logic is ours to keep correct; tested end to end against a local repository with two tags, a user edit and a conflict. |
 
 The strongest case for the one-pass template is that any Copier user could update
-without testkeel. It loses because a project made with testkeel already depends on it,
+without aurseal. It loses because a project made with aurseal already depends on it,
 and the restructure would make every future template change harder to read and review
 for the sake of a tool most users never call directly.
 
 Both renders run this installation's render passes over the template files fetched at
 each tag, so no Python from the template repository runs; Copier itself runs no tasks
 and loads no extensions here. If a later release changes how types compose (a new
-overlay order), upgrade testkeel first, then update.
+overlay order), upgrade aurseal first, then update.
