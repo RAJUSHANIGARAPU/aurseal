@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ACME Shop</title>
+<style>
+:root{--bg:#fff;--fg:#1d1d1f;--muted:#5f6368;--line:#e2e2e6;--pass:#17733a;--fail:#b3261e;
+--broken:#8a4b00;--skip:#5f6368;--chip:#f3f3f6}
+@media (prefers-color-scheme:dark){:root{--bg:#141416;--fg:#ececf0;--muted:#a0a0aa;
+--line:#2c2c31;--pass:#5bd28a;--fail:#ff8a80;--broken:#ffb74d;--skip:#a0a0aa;--chip:#222227}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);
+font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:1100px;margin:0 auto;padding:24px 16px}
+h1{font-size:22px;margin:0 0 4px}
+.meta{color:var(--muted);margin:0 0 20px}
+.tiles{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 20px;padding:0;list-style:none}
+.tiles li{background:var(--chip);border-radius:8px;padding:8px 12px;min-width:96px}
+.tiles b{display:block;font-size:20px}
+.table{overflow-x:auto}
+table{border-collapse:collapse;width:100%}
+th,td{text-align:left;vertical-align:top;padding:6px 8px;border-bottom:1px solid var(--line)}
+th{font-weight:600;color:var(--muted)}
+td.msg{font-family:ui-monospace,Menlo,monospace;font-size:12px;white-space:pre-wrap;
+word-break:break-word;max-width:420px}
+.s{font-weight:600}.s-passed{color:var(--pass)}.s-failed{color:var(--fail)}
+.s-broken{color:var(--broken)}.s-skipped,.s-blocked,.s-retest{color:var(--skip)}
+.flaky{font-size:12px;color:var(--broken)}
+</style>
+</head>
+<body>
+<main>
+<h1>ACME Shop</h1>
+<p class="meta">nightly · generated 2026-01-02 03:04 UTC by testkeel VERSION</p>
+<ul class="tiles"><li>tests<b>13</b></li><li>pass rate<b>70.0%</b></li><li>flaky<b>2</b></li><li>passed<b>7</b></li><li>failed<b>1</b></li><li>broken<b>2</b></li><li>skipped<b>3</b></li></ul>
+<div class="table"><table>
+<thead><tr><th>status</th><th>case</th><th>test</th><th>where</th><th>configuration</th><th>attempts</th><th>duration</th><th>message</th></tr></thead>
+<tbody>
+<tr><td class="s s-failed">failed</td><td>XWVMZ3CPV7</td><td>test_total [GBP-30]</td><td>tests/shop/test_cart.py › TestCart</td><td></td><td>1</td><td>12 ms</td><td class="msg">assert 31 == 30</td></tr>
+<tr><td class="s s-broken">broken</td><td>2NDWOESTYX</td><td>removes an item</td><td>e2e/cart.spec.ts › Cart</td><td>firefox</td><td>1</td><td>5 ms</td><td class="msg"></td></tr>
+<tr><td class="s s-broken">broken</td><td>5LV2ZYBJ6B</td><td>test_empty_cart</td><td>tests/shop/test_cart.py</td><td></td><td>1</td><td>2 ms</td><td class="msg">fixture &#x27;db&#x27; not found</td></tr>
+<tr><td class="s s-skipped">skipped</td><td>NHQKFZTG7C</td><td>shows totals</td><td>e2e/cart.spec.ts › Cart</td><td>chromium</td><td>1</td><td></td><td class="msg"></td></tr>
+<tr><td class="s s-skipped">skipped</td><td>AC5OIYUHKA</td><td>test_coupon_later</td><td>tests/shop/test_cart.py</td><td></td><td>1</td><td>0 ms</td><td class="msg">coupon service not ready</td></tr>
+<tr><td class="s s-skipped">skipped</td><td>OTREBJGG5K</td><td>test_known_rounding</td><td>tests/shop/test_cart.py</td><td></td><td>1</td><td>1 ms</td><td class="msg">rounding bug BUG-142</td></tr>
+<tr><td class="s s-passed">passed</td><td>SHOP-3</td><td>adds an item</td><td>e2e/cart.spec.ts › Cart</td><td>chromium</td><td>1</td><td>812 ms</td><td class="msg"></td></tr>
+<tr><td class="s s-passed">passed <span class="flaky">flaky</span></td><td>SHOP-3</td><td>adds an item</td><td>e2e/cart.spec.ts › Cart</td><td>firefox</td><td>2</td><td>30.90 s</td><td class="msg"></td></tr>
+<tr><td class="s s-passed">passed</td><td>2NDWOESTYX</td><td>removes an item</td><td>e2e/cart.spec.ts › Cart</td><td>chromium</td><td>1</td><td>100 ms</td><td class="msg">known defect BUG-142</td></tr>
+<tr><td class="s s-passed">passed</td><td>XWVMZ3CPV7</td><td>test_total [EUR-10]</td><td>tests/shop/test_cart.py › TestCart</td><td></td><td>1</td><td>10 ms</td><td class="msg"></td></tr>
+<tr><td class="s s-passed">passed</td><td>XWVMZ3CPV7</td><td>test_total [USD-20]</td><td>tests/shop/test_cart.py › TestCart</td><td></td><td>1</td><td>11 ms</td><td class="msg"></td></tr>
+<tr><td class="s s-passed">passed</td><td>SHOP-7</td><td>test_pay</td><td>tests/shop/test_checkout.py</td><td></td><td>1</td><td>30 ms</td><td class="msg"></td></tr>
+<tr><td class="s s-passed">passed <span class="flaky">flaky</span></td><td>LM2USYEXD4</td><td>test_retry_me</td><td>tests/shop/test_checkout.py</td><td></td><td>2</td><td>41 ms</td><td class="msg"></td></tr>
+</tbody>
+</table></div>
+</main>
+</body>
+</html>
