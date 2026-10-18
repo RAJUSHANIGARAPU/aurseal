@@ -11,12 +11,10 @@ does not exist breaks every project the kit scaffolds, not only this repository'
 
 from __future__ import annotations
 
-import json
+import http.client
 import os
 import re
 import sys
-import urllib.error
-import urllib.request
 from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
 
@@ -45,19 +43,24 @@ def references(root: Path, roots: Iterable[str] = ROOTS) -> set[tuple[str, str]]
 
 
 def api_fetch(token: str | None) -> Fetch:
+    """Ask api.github.com over HTTPS; the host is fixed, so no other scheme or host is possible."""
+
     def fetch(api_path: str) -> bool | None:
-        request = urllib.request.Request(f"https://api.github.com/{api_path}")
-        request.add_header("Accept", "application/vnd.github+json")
+        headers = {"Accept": "application/vnd.github+json", "User-Agent": "testkeel-action-refs"}
         if token:
-            request.add_header("Authorization", f"Bearer {token}")
+            headers["Authorization"] = f"Bearer {token}"
+        connection = http.client.HTTPSConnection("api.github.com", timeout=20)
         try:
-            with urllib.request.urlopen(request, timeout=20) as response:
-                json.load(response)
-                return True
-        except urllib.error.HTTPError as error:
-            return False if error.code in (404, 422) else None
-        except (urllib.error.URLError, TimeoutError):
+            connection.request("GET", f"/{api_path}", headers=headers)
+            response = connection.getresponse()
+            response.read()
+        except (OSError, http.client.HTTPException):
             return None
+        finally:
+            connection.close()
+        if response.status == 200:
+            return True
+        return False if response.status in (404, 422) else None
 
     return fetch
 
