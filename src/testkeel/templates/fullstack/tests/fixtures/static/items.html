@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Items</title></head>
+<body>
+<main>
+  <h1>Items</h1>
+  <table>
+    <thead><tr><th scope="col">Name</th><th scope="col">Price</th></tr></thead>
+    <tbody></tbody>
+  </table>
+</main>
+<script>
+  // Rows arrive after a delay, like a list loaded from an API, so a test that does not wait fails.
+  const items = [{name: "Kettle", price: 24.5}, {name: "Kettle lid", price: 4}];
+  setTimeout(() => {
+    const body = document.querySelector("tbody");
+    for (const item of items) {
+      const row = body.insertRow();
+      row.insertCell().textContent = item.name;
+      row.insertCell().textContent = item.price.toFixed(2);
+    }
+  }, 300);
+</script>
+</body>
+</html>

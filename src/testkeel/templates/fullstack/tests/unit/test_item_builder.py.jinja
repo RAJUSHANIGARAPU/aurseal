@@ -1,0 +1,34 @@
+"""The shared data builder: valid by default, unique per build, invalid data stops early."""
+
+from __future__ import annotations
+
+import pytest
+from pydantic import ValidationError
+
+from {{ package_name }}.data.items import ItemBuilder
+
+pytestmark = pytest.mark.offline
+
+
+def test_the_default_build_is_a_valid_item():
+    item = ItemBuilder(prefix="kettle").build()
+    assert item.name.startswith("kettle-")
+    assert item.price >= 0
+
+
+def test_every_build_gets_a_name_no_other_test_uses():
+    names = {ItemBuilder().build().name for _ in range(200)}
+    assert len(names) == 200
+
+
+def test_with_returns_a_changed_copy_and_leaves_the_original_alone():
+    base = ItemBuilder()
+    cheap = base.with_price(1.5).with_tags("sale")
+
+    assert (cheap.build().price, cheap.build().tags) == (1.5, ["sale"])
+    assert (base.price, base.tags) == (ItemBuilder.price, ())
+
+
+def test_an_invalid_item_fails_at_build_time_not_at_the_api():
+    with pytest.raises(ValidationError, match="price"):
+        ItemBuilder().with_price(-1).build()

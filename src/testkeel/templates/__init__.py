@@ -1,8 +1,9 @@
 """Copier templates for generated assignment projects.
 
-A project is two Copier passes into one directory: the common skeleton (``_base``),
-then the type overlay, which wins where both ship a file. ``render`` is the only
-entry point; callers pass answers as data and never prompt.
+A project is rendered in Copier passes into one directory: the common skeleton (``_base``),
+then the type overlay, which wins where both ship a file. A composed type (``fullstack``)
+applies the overlays it is built from first, then its own. ``render`` is the only entry
+point; callers pass answers as data and never prompt.
 """
 
 from __future__ import annotations
@@ -23,7 +24,11 @@ TYPES: tuple[str, ...] = (
     "perf-k6",
     "perf-locust",
     "mobile",
+    "fullstack",
 )
+
+#: Types built from other types' overlays, applied in this order (a later one wins).
+COMPOSED: dict[str, tuple[str, ...]] = {"fullstack": ("web-ui", "api-rest", "fullstack")}
 
 #: Answers a caller may pass. Everything else is computed or has a default.
 DATA_KEYS: frozenset[str] = frozenset(
@@ -59,11 +64,12 @@ def render(type_: str, destination: Path, data: Mapping[str, Any]) -> Path:
     from copier import run_copy  # optional dependency, imported only when rendering
 
     answers = {**data, "type": type_}
-    for layer in ("base", "overlay"):
+    passes = [("base", type_)] + [("overlay", name) for name in COMPOSED.get(type_, (type_,))]
+    for layer, overlay in passes:
         run_copy(
             str(TEMPLATES_DIR),
             str(destination),
-            data={**answers, "layer": layer},
+            data={**answers, "layer": layer, "overlay": overlay},
             defaults=True,
             overwrite=True,
             quiet=True,

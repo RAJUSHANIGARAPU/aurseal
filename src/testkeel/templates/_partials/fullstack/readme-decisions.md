@@ -1,0 +1,3 @@
+| Set up through the API, assert through the UI _(confirm)_ | Click through the UI to create data | The UI test checks what a user sees, not how fast a script can fill forms; setup is fast and exact | The API and the UI must point at the same environment |
+| One settings object and one data builder for both layers _(confirm)_ | Separate configs per layer | A test cannot seed one environment and look at another; data is described once | A change to the builder touches both layers |
+{% include '_partials/web-ui/readme-decisions.md' %}{% include '_partials/api-rest/readme-decisions.md' %}

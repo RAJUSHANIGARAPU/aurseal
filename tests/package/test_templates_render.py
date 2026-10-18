@@ -68,9 +68,14 @@ CASES = {
         "mobile",
         {"report": "allure", "docker": False, "ci": "none"},
     ),
+    "fullstack": ("fullstack", {}),
+    "fullstack-both-no-docker-py311": (
+        "fullstack",
+        {"report": "both", "docker": False, "python_version": "3.11"},
+    ),
 }
 CODE_CASES = [name for name, (type_, _) in CASES.items() if type_ != "strategy"]
-BROWSER_TYPES = {"web-ui", "a11y"}
+BROWSER_TYPES = {"web-ui", "a11y", "fullstack"}
 
 # Template syntax that must never reach a generated file. `${{` is a GitHub Actions
 # expression, not Jinja, so it is the one legitimate double brace.
@@ -409,6 +414,41 @@ def test_mobile_live_tests_skip_without_an_appium_url(rendered):
     if result.returncode != 0 and not _importable("appium"):
         pytest.skip("Appium-Python-Client is not installed")
     assert result.returncode == 0, result.stdout[-3000:] + result.stderr[-2000:]
+
+
+@pytest.mark.skipif(
+    not _importable("httpx", "pydantic_settings", "jsonschema"),
+    reason="the fullstack project's API dependencies are not installed",
+)
+@pytest.mark.parametrize("name", [n for n in CODE_CASES if CASES[n][0] == "fullstack"])
+def test_fullstack_offline_tests_without_a_browser_pass(rendered, name):
+    # The page-object tests need Chromium; everything else in the offline tier runs here.
+    result = _run(
+        [sys.executable, "-m", "pytest", "-m", "offline", "-p", "no:cacheprovider",
+         "-o", "addopts=-ra --strict-markers",
+         "--ignore=tests/unit/test_login_page.py", "--ignore=tests/unit/test_items_page.py"],
+        rendered[name],
+    )  # fmt: skip
+    assert result.returncode == 0, result.stdout[-3000:] + result.stderr[-2000:]
+    assert re.search(r"\b\d{2,} passed\b", result.stdout), result.stdout[-1000:]
+
+
+def test_fullstack_is_web_ui_plus_api_rest_plus_the_seam(rendered):
+    # File lists from the snapshot: rendered trees may meanwhile hold lint and type caches.
+    trees = json.loads(SNAPSHOT.read_text(encoding="utf-8"))
+    fullstack = set(trees["fullstack"])
+    parts = set(trees["web-ui"]) | set(trees["api-rest"])
+    assert parts <= fullstack, sorted(parts - fullstack)
+    assert sorted(fullstack - parts) == [
+        "src/acme_shop/data/items.py",
+        "src/acme_shop/pages/items_page.py",
+        "tests/fixtures/static/items.html",
+        "tests/ui/test_items_seam.py",
+        "tests/unit/test_item_builder.py",
+        "tests/unit/test_items_page.py",
+    ]
+    settings = (rendered["fullstack"] / "src/acme_shop/settings.py").read_text(encoding="utf-8")
+    assert '@field_validator("base_url", "api_base_url")' in settings
 
 
 # ------------------------------------------------------------------ the examples

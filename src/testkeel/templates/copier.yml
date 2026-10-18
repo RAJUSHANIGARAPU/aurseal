@@ -2,12 +2,13 @@
 #
 # A project is rendered in two passes into the same directory: `layer=base` renders
 # `_base/` (the common skeleton), then `layer=overlay` renders the type's own directory
-# over it, so a file the overlay ships wins. `testkeel.templates.render` does both.
+# over it, so a file the overlay ships wins. A composed type renders several overlay
+# directories in turn (`overlay`). `testkeel.templates.render` runs every pass.
 #
 # No `_tasks` and no Jinja extensions: rendering never needs `--trust`.
 
 _min_copier_version: "9.19"
-_subdirectory: "{{ '_base' if layer == 'base' else type }}"
+_subdirectory: "{{ '_base' if layer == 'base' else overlay }}"
 _templates_suffix: .jinja
 # The answers file is only written when the template ships
 # `{{ _copier_conf.answers_file }}.jinja`; `_base` ships it under `updatable` only.
@@ -25,6 +26,7 @@ type:
     - perf-k6
     - perf-locust
     - mobile
+    - fullstack
 
 layer:
   type: str
@@ -33,6 +35,12 @@ layer:
   choices:
     - base
     - overlay
+  when: false
+
+overlay:
+  type: str
+  help: Overlay directory this pass renders (a composed type renders several in turn)
+  default: "{{ type }}"
   when: false
 
 project_name:
@@ -67,7 +75,7 @@ target_url:
   type: str
   help: Web application under test
   default: "https://example.test"
-  when: "{{ type in ['web-ui', 'a11y', 'perf-k6', 'perf-locust'] }}"
+  when: "{{ type in ['web-ui', 'a11y', 'perf-k6', 'perf-locust', 'fullstack'] }}"
   validator: >-
     {% if not (target_url | regex_search('^https?://[^\\s/]+')) %}an http(s) URL{% endif %}
 
@@ -75,7 +83,7 @@ api_base_url:
   type: str
   help: Base URL of the API under test
   default: "https://api.example.test"
-  when: "{{ type in ['api-rest', 'api-graphql'] }}"
+  when: "{{ type in ['api-rest', 'api-graphql', 'fullstack'] }}"
   validator: >-
     {% if not (api_base_url | regex_search('^https?://[^\\s/]+')) %}an http(s) URL{% endif %}
 
