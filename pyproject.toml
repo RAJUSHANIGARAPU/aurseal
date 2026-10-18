@@ -43,6 +43,9 @@ testkeel = "testkeel.cli:app"
 junit = "testkeel.importers.junit:JUnitImporter"
 playwright = "testkeel.importers.playwright:PlaywrightImporter"
 
+[project.entry-points."testkeel.reporters"]
+html = "testkeel.reporting.html:HtmlReporter"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/testkeel"]
 
