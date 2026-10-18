@@ -160,10 +160,14 @@ log.
 **Rule.** The installable package (`src/testkeel`) is installed in the offline job with
 `pip install -e .`, and its tests (`tests/package/`) run in the offline suite, where the
 CI-selection gate sees them. `package.yml` adds only what that job cannot: `mypy --strict`
-on Python 3.12 and a build whose wheel must hold nothing but `testkeel/`.
+on Python 3.12, a build whose wheel must hold nothing but `testkeel/`, and a second run of
+`tests/package` with every generated project's dependencies and Chromium installed. That
+run fails when any test skips, because there a skip means a check ran nowhere.
 
 **Prevents.** Package tests that no gate audits; a wheel or sdist that ships the framework,
-the demo system or local tooling config.
+the demo system or local tooling config; a template whose generated project only ever
+renders, because its own type check and offline tests skip in the offline job for lack of
+its dependencies.
 
 **Change safely.** Keep `tests/package/` collectable only when the package is installed (its
 conftest skips collection otherwise). Never put `src` on the pytest path: the tests must
