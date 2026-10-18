@@ -1,61 +1,67 @@
 ---
-description: "Use to generate a pytest + Playwright test (and optionally a page object) from a trace ZIP via core.ai.TestGenerator, writing it into ui/tests or ui/pages and checking it compiles and runs."
+description: "Produce a runnable pytest + Playwright test (and optionally a page object) from a recorded Playwright trace archive, using the repository's TestGenerator. Manual only."
 disable-model-invocation: true
 ---
 
 # generate-test-from-trace
 
-Generate a complete pytest + Playwright test file from a trace ZIP.
-
 ## Usage
 
 ```
-/generate-test-from-trace [trace.zip] [page_name]
+/generate-test-from-trace [path/to/trace.zip] [snake_case_name]
 ```
 
-Example: `/generate-test-from-trace reports/traces/test_search_20250423.zip wiki_search`
+Without a path, list the three newest traces and use the newest unless the user picks
+another. Without a name, it is derived from the first URL visited in the trace.
 
 ## Steps
 
-1. Find the trace:
+1. **Resolve the trace:**
+
    ```bash
-   ls -t reports/traces/*.zip | head -3
+   python -m tools.slash.traces list
    ```
 
-2. Generate the test:
-   ```python
-   from core.ai.test_generator import TestGenerator
-   from pathlib import Path
+   Name the trace that will be used. Stop with a clear message when there is none, or
+   when the file is not a readable trace archive - before any file is written.
 
-   gen = TestGenerator()
-   code = gen.generate_from_trace(Path("reports/traces/<trace>.zip"), "wiki_search")
-   Path("ui/tests/test_wiki_search.py").write_text(code)
-   print(code)
-   ```
+2. **Generate** the test module (and the page object when the user asks for one, or when
+   none exists for this screen) through `core.ai.test_generator.TestGenerator`:
 
-3. Or generate a page object:
-   ```python
-   code = gen.generate_page_object(
-       "WikiSearchPage",
-       "https://en.wikipedia.org/wiki/*",
-       "Wikipedia search and article navigation"
-   )
-   Path("ui/pages/wiki_search_page.py").write_text(code)
-   ```
-
-4. Verify generated code compiles:
    ```bash
-   python -m py_compile ui/tests/test_wiki_search.py && echo OK
+   python -m tools.slash.traces generate --trace "$TRACE" --name "$NAME" [--page-object]
    ```
 
-5. Run the generated test:
+   It writes `ui/tests/test_<name>.py` and `ui/pages/<name>_page.py` (class name from the
+   flow name, the URL pattern the page lives under, a one-line purpose). When a target
+   file already exists it stops: **ask the user** and re-run with `--overwrite` only on a
+   yes. Without generator credentials (`ANTHROPIC_API_KEY`) it says so and writes nothing;
+   never write code by hand in its place. Print the generated code.
+
+3. **Compile** happens before writing; a compile error stops the command before any test
+   runs.
+
+4. **Run** the new module verbosely and report the result:
+
    ```bash
-   pytest ui/tests/test_wiki_search.py -v
+   pytest ui/tests/test_${NAME}.py -v
    ```
 
-## Framework conventions (enforced in generated code)
+## Conventions the generated code must follow
 
-- Inherit from `core.base_page.BasePage`
-- Use `expect()` not `assert` for Playwright assertions
-- Locator priority: `data-testid` > `aria-label` > `role` > `text`
-- Never `time.sleep()` — use `page.wait_for_load_state()` or `expect().to_be_visible(timeout=N)`
+- Page objects extend `BasePage` (`core/base_page.py`).
+- UI checks use Playwright's web-first `expect(...)`, not bare asserts.
+- Selector order: test id, accessible label, role, visible text.
+- No fixed sleeps; wait on the load state or on an element becoming visible with a timeout.
+
+The helper rejects generated code with a sleep or a page object that does not extend
+`BasePage`.
+
+## Output
+
+The files written, the compile result, and pass/fail of the run (with the failure summary
+when red).
+
+## Stop conditions
+
+No trace found; generator unavailable; compile failure; overwrite declined.

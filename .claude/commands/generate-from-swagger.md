@@ -1,122 +1,62 @@
 ---
-description: "Use to generate pytest API tests from an OpenAPI/Swagger spec (URL or file): happy path, 400, 401 and 404 per tag, plus client classes and testdata; runs, fixes and commits them."
+description: "Generate pytest API tests from an OpenAPI/Swagger document, one module per tag, covering the success path and the 400/401/404 responses each operation can actually produce. Manual only."
 disable-model-invocation: true
 ---
 
 # generate-from-swagger
 
-Fetch an OpenAPI/Swagger spec (URL or file) and generate pytest API tests covering every
-endpoint group — happy path, validation errors, auth boundaries.
-
 ## Usage
 
 ```
-/generate-from-swagger <swagger-url-or-file> [featureName]
+/generate-from-swagger <spec URL or file> [feature]
 ```
 
-Examples:
-- `/generate-from-swagger http://localhost:8080/openapi.json search`
-- `/generate-from-swagger api/postman/sample_collection.json`
+`feature` defaults to a snake_case form of the document title. A document behind
+authentication must be downloaded by hand first; pass the local file.
 
----
+## Steps
 
-## Phase 1 — Fetch and parse the spec
+1. **Load and look.** Print the title, the number of paths, the first paths and the
+   security schemes:
 
-```bash
-# From URL
-curl -s "$SWAGGER_URL" -o /tmp/openapi-spec.json
-# Or from file
-cp "$SWAGGER_FILE" /tmp/openapi-spec.json
+   ```bash
+   python -m tools.slash.openapi_plan summary "$SPEC"
+   ```
 
-python3 -c "
-import json
-spec = json.load(open('/tmp/openapi-spec.json'))
-print('Title:', spec.get('info',{}).get('title'))
-paths = spec.get('paths', {})
-print('Endpoints:', len(paths))
-for path in list(paths)[:10]: print(' ', path)
-"
-```
+2. **Plan per tag** (done by the helper): a success case for every operation (valid
+   request, 2xx, response shape checked) plus only the failure cases it can produce -
+   `400` when something required can be left out, `401` when the operation is secured,
+   `404` when the path names a resource. A public operation gets no 401 test.
 
-Extract endpoints, tags, schemas, security schemes.
+3. **Generate** one module per tag with the `api` marker and the batch marker
+   `generated_batch(name="<feature>")`, one test per operation and case, a client per tag
+   that has none in `api/clients/` (an existing client is reused, never duplicated), and
+   example request bodies in `<feature>_api_data.json`:
 
----
+   ```bash
+   python -m tools.slash.openapi_plan write "$SPEC" --feature "$FEATURE" --out generated_tests
+   ```
 
-## Phase 2 — Plan test coverage
+4. **Compile** the tests and clients: `python -m compileall -q generated_tests/$FEATURE`.
 
-Per tag/path group:
-1. **Happy path** — valid request → `2xx`, assert response shape
-2. **Missing required field** → `400`
-3. **Unauthorized** → `401`
-4. **Not found** → `404`
+5. **Run and fix** until 3 consecutive passes, at most 5 fix rounds:
 
----
+   ```bash
+   python -m tools.slash.reach --timeout 10 || exit 1
+   python -m tools.slash.stability --state reports/swagger-loop.json reset
+   pytest generated_tests/$FEATURE -m "generated_batch(name='$FEATURE')" \
+     --junitxml=reports/junit-swagger.xml
+   python -m tools.slash.stability --state reports/swagger-loop.json record --junit reports/junit-swagger.xml
+   ```
 
-## Phase 3 — Generate pytest API test files
+   | Symptom | Likely cause |
+   |---|---|
+   | 404 on every call | the server's base path differs from the document's |
+   | 401 on a success case | the auth header is missing (`API_TOKEN` not configured) |
+   | JSON decode error | an HTML error page came back: the service is down or misrouted |
+   | connection refused | wrong base URL |
 
-One file per OpenAPI tag: `api/tests/test_<tag>_api.py`
+6. **Commit** the tests, clients and test data only after 3 consecutive passes. If the
+   loop gives up, nothing is committed.
 
-```python
-import pytest
-from api.clients.<tag>_client import <Tag>Client
-
-@pytest.mark.api
-@pytest.mark.swagger_generated
-class Test<Tag>Api:
-    def test_<operationId>_happy_path(self, config):
-        client = <Tag>Client(config.get_base_url())
-        resp = client.<method>("<path>")
-        assert resp.status_code in range(200, 300)
-
-    def test_<operationId>_unauthorized(self, config):
-        client = <Tag>Client(config.get_base_url(), token="invalid")
-        resp = client.<method>("<path>")
-        assert resp.status_code == 401
-```
-
-Also generate:
-- `api/clients/<tag>_client.py` if the tag doesn't have a client yet
-- `ui/testdata/<featureName>-swagger-testdata.json` with example request bodies
-
----
-
-## Phase 4 — Syntax check
-
-```bash
-python3 -m py_compile api/tests/test_*_api.py api/clients/*_client.py
-```
-
----
-
-## Phase 5 — Run → auto-fix loop (3 passes, max 5 iterations)
-
-```bash
-source venv/bin/activate 2>/dev/null || true
-pytest --env=qa -m api api/tests/ -q --tb=short 2>&1 | tail -60
-```
-
-**Fix decision tree:**
-
-| Symptom | Fix |
-|---------|-----|
-| 404 | Path prefix mismatch — check `servers[0].url` |
-| 401 on happy path | Auth not set — add `Authorization: Bearer <token>` header |
-| `JSONDecodeError` | Response is HTML error page — check if service is up |
-| `ConnectionRefusedError` | Base URL wrong or service not started |
-
----
-
-## Phase 6 — Commit and report
-
-```bash
-git add api/tests/ api/clients/ ui/testdata/
-git commit -m "feat(api-tests): swagger coverage for <featureName>, passed 3×"
-```
-
----
-
-## Notes
-
-- Run: `pytest -m swagger_generated` to run only this batch
-- If spec is behind auth (secured swagger-ui), download the JSON manually first
-- Re-run to detect coverage drift after API changes
+Re-running the command after the API changes shows the coverage drift.

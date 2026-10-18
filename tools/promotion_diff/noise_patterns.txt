@@ -1,0 +1,24 @@
+# Housekeeping commits: a subject that matches one of these is tallied, not listed
+# as a functional change. Each line holds a Python regex, applied with re.search
+# and IGNORECASE to the commit subject. Empty lines and #-comments are skipped.
+# Pass --noise-file to use a different list.
+
+# dependency updates (bots and hand-written)
+\(deps(-dev)?\)
+\bupdate (all )?(non-major )?dependenc
+\bbump(s|ed)?\b
+renovate
+dependabot
+
+# release and changelog chores
+release[ -]?notes
+^(chore\()?release\b
+^changelog\b
+\[skip ci\]
+
+# formatting, lint and repository housekeeping
+^style(\(.*\))?!?:
+^chore(\(.*\))?!?: (format|lint|tidy|typo)
+^(ci|build)(\(.*\))?!?:
+\.gitignore
+\bpre-commit\b

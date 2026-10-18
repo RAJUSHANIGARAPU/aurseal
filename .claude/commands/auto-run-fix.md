@@ -1,123 +1,90 @@
 ---
-description: "Use to get a failing pytest suite green unattended: runs the tests, diagnoses failures, fixes locators and timing in page objects, commits each fix, and repeats until 3 consecutive passes or 5 fix rounds."
+description: "Run a failing UI suite (or a -k selection) until it is green three times in a row, diagnosing each red run and fixing selectors, waits and synchronisation in page objects and helpers only. Manual only."
 disable-model-invocation: true
 ---
 
 # auto-run-fix
 
-Autonomously run tests, analyze failures, fix code, and rerun until the suite passes
-**3 consecutive times** — no human intervention needed.
+Bring a red pytest + Playwright selection to a stable green without changing what any test
+expects. Start it yourself; never start it on your own initiative.
 
 ## Usage
 
 ```
-/auto-run-fix [-k "test_name_filter"] [--env qa]
+/auto-run-fix [-k "<filter>"] [env]
 ```
 
-Examples:
-- `/auto-run-fix` — run full suite
-- `/auto-run-fix -k "test_article_search"`
-- `/auto-run-fix -k "test_wiki_login" --env qa`
+Both arguments are optional. `env` defaults to the repository default (`qa`).
+When `scripts/auto_runner.py` covers what is asked, prefer it; this procedure is the manual
+equivalent with the stopping rules spelled out.
 
-## Loop
+## The loop
 
-Track two counters: `fix_attempts` (max 5) and `consecutive_passes` (target 3).
+The loop state lives in `reports/auto-run-fix.json` and `tools.slash.stability` owns the
+rules: **3 consecutive green runs** to finish, **at most 5 fix rounds**, and an early stop
+when the **same error survives 3 rounds**. A run that executed no tests is not green.
 
-Repeat until `consecutive_passes == 3` or `fix_attempts == 5`:
+1. Reset the counters:
 
-### Step 1 — Run tests
+   ```bash
+   python -m tools.slash.stability --state reports/auto-run-fix.json reset
+   ```
 
-```bash
-cd /path/to/wiki_project
-source venv/bin/activate 2>/dev/null || true
-pytest <filter_args> --junit-xml=reports/junit.xml -q --tb=short 2>&1 | tail -80
-```
+2. Run the selection with JUnit output and show only the tail of the console:
 
-### Step 2 — Check result
+   ```bash
+   pytest ui/tests -k "$FILTER" --env "$ENV" \
+     --junitxml=reports/junit-auto-fix.xml 2>&1 | tail -40
+   python -m tools.slash.stability --state reports/auto-run-fix.json record \
+     --junit reports/junit-auto-fix.xml
+   ```
 
-If all tests pass (exit code 0):
-  - Increment `consecutive_passes`
-  - If `consecutive_passes == 3` → **DONE** — go to Phase: Report
-  - If `consecutive_passes < 3` → log "Pass N/3 — running again to confirm stability" → go to Step 1
+3. The second command prints the next step:
+   - `rerun` - green but not yet three in a row. Say "green N of 3, re-running for
+     stability" and go back to step 2.
+   - `done` - three consecutive greens. Go to the report.
+   - `fix` - red. The green count is back to 0 and one fix round is used. Diagnose (step 4).
+   - `give-up` - five rounds used, or one error unchanged for three rounds. Go to the
+     failure report. Do not commit anything.
 
-If any test failed (exit code != 0):
-  - Reset `consecutive_passes = 0`
-  - Increment `fix_attempts`
-  - Continue to Step 3
+4. Diagnose a red run:
+   - list every failed and errored case with the start of its message:
+     `python -m tools.slash.junit --file reports/junit-auto-fix.xml`;
+   - find the newest trace: `ls -t reports/traces/*.zip | head -1`;
+   - read `docs/ai_learnings.md` (the known failure patterns) before changing anything;
+   - follow the stack trace to the exact page-object method and read it;
+   - classify and apply the smallest fix of that kind:
 
-### Step 3 — Collect failure evidence
+     | Failure | Fix |
+     |---|---|
+     | wrong or fragile selector | a semantic one: test id, ARIA label, role (in the locator JSON) |
+     | element not ready | wait for an explicit ready condition (`expect(...).to_be_visible()`, `to_be_enabled()`) |
+     | page not settled | wait for the load state or for the element the next step needs |
+     | stale element after a re-render | resolve the element again right before using it |
+     | value lost after input | fill, then read back and re-enter when it did not land |
 
-```bash
-# JUnit XML failures
-python3 -c "
-import glob, xml.etree.ElementTree as ET
-for f in glob.glob('reports/junit.xml'):
-    root = ET.parse(f).getroot()
-    for tc in root.iter('testcase'):
-        for child in tc:
-            if child.tag in ('failure', 'error'):
-                print(f'{tc.get(\"classname\")}.{tc.get(\"name\")}')
-                print(child.text[:800] if child.text else '(no message)')
-                print()
-"
+5. Before committing a fix, prove it touches no assertion, expectation or test data:
 
-# Most recent trace
-ls -t reports/traces/*.zip 2>/dev/null | head -1
-```
+   ```bash
+   git diff HEAD | python -m tools.slash.diff_guard
+   ```
 
-### Step 4 — Diagnose
+   Then commit just that fix, with a message saying what broke and why, and go back to step 2.
+   Each fix is its own commit.
 
-1. Read `docs/ai_learnings.md` for known patterns
-2. Read the stack trace — identify the exact method and line that failed
-3. Read that method in the Page Object file
-4. Apply the fix decision tree:
+## Rules
 
-| Symptom | Fix |
-|---------|-----|
-| `TimeoutError: waiting for selector` | Wrong locator — use `data-testid`, `aria-label`, or `role` |
-| `expect(locator).to_be_visible()` timeout | Add `page.wait_for_load_state("networkidle")` before assertion |
-| `AssertionError` on text content | Page not fully loaded — wait for a heading to be visible first |
-| `ElementHandle is detached` | Page re-rendered — re-resolve locator inside the assertion |
-| `StaleElementReferenceError` | Same as above — use `page.locator()` not stored element handles |
-| Value disappears after input | Add `page.wait_for_load_state("networkidle")` after each form action |
+- Never change assertions, expected values, test data or business logic. Only selectors,
+  waits and synchronisation in page objects (`ui/pages/`, `ui/locators/`) and helpers
+  (`ui/components/`, `core/`). The diff guard above enforces it.
+- No fixed sleeps: no `time.sleep`, no `wait_for_timeout`.
+- Nothing is committed while the run is red, and nothing broken is committed when the loop
+  gives up.
 
-### Step 5 — Fix
+## Report
 
-Apply the minimal targeted fix to the failing Page Object or test helper.
-Never change test assertions or business logic — only fix locators and timing.
-
-### Step 6 — Go to Step 1
-
----
-
-## Phase: Report
-
-When `consecutive_passes == 3`:
-
-```
-✓ PASSED 3× consecutively
-  Test filter: <filter or "all">
-  Passes:      run 1 ✓  run 2 ✓  run 3 ✓
-  Fix rounds:  <N> (0 = passed first try)
-  Changes:     <files modified, if any>
-
-Push-ready: git push -u origin <branch>
-```
-
----
-
-## Max fix iterations: 5
-
-If still failing after 5 fix attempts, report:
-- What was tried in each round
-- Remaining error with full stack trace
-- Recommended next step (open trace ZIP in trace.playwright.dev)
-- Do NOT commit broken code
-
-## Important Notes
-
-- Always read `docs/ai_learnings.md` before attempting a fix
-- Never change test logic or assertions — only fix locators, timing, and selectors in Page Objects
-- Commit each successful fix: `git commit -m "fix(test): <describe what broke and why>"`
-- If the same error repeats across 3 fix rounds without progress → stop and report, don't loop on a dead end
-- Use `python scripts/auto_runner.py` if it exists — it wraps the same logic with LogAnalyzer + AutoFixer
+- **Done:** the filter used, the three green runs, the number of fix rounds (0 means green
+  on the first try), every file changed (`git diff --stat <start>..HEAD`), and the push
+  command for the current branch: `git push -u origin "$(git branch --show-current)"`.
+- **Gave up:** what was tried in each round, the remaining error with its full traceback, and
+  the suggestion to open the newest trace: `playwright show-trace <newest trace>`.
