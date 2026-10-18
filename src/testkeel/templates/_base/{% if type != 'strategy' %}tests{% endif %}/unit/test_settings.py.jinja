@@ -7,7 +7,7 @@ from pydantic import ValidationError
 
 from {{ package_name }}.settings import Settings
 
-{% set url_variable = 'APP_BASE_URL' if type == 'web-ui' else 'APP_API_BASE_URL' -%}
+{% set url_variable = {'web-ui': 'APP_BASE_URL', 'mobile': 'APP_APPIUM_URL'}.get(type, 'APP_API_BASE_URL') -%}
 pytestmark = pytest.mark.offline
 
 

@@ -24,6 +24,7 @@ type:
     - strategy
     - perf-k6
     - perf-locust
+    - mobile
 
 layer:
   type: str

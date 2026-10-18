@@ -1,0 +1,26 @@
+
+
+# The demo app: pinned by release and SHA-256, downloaded on demand, never committed.
+APP_URL := https://github.com/webdriverio/native-demo-app/releases/download/v2.2.0/android.wdio.native.app.v2.2.0.apk
+APP_SHA256 := fe1d605ce099c73d93f33e5cbcb0df0bea437ce57aaaaf156b3b0fa1ca54931d
+APP_FILE := apps/android.wdio.native.app.v2.2.0.apk
+APPIUM_PORT ?= 4723
+
+.PHONY: app appium doctor live
+
+app: $(APP_FILE) ## download the demo app and verify its checksum
+
+$(APP_FILE):
+	mkdir -p $(@D)
+	curl -fsSL --retry 3 -o $@.part $(APP_URL)
+	echo "$(APP_SHA256)  $@.part" | shasum -a 256 -c -
+	mv $@.part $@
+
+appium: ## start an Appium server on APPIUM_PORT (needs: npm install -g appium)
+	appium --address 127.0.0.1 --port $(APPIUM_PORT)
+
+live: ## the live tests, one at a time (one device runs one session)
+	$(PYTEST) -m "not offline"
+
+doctor: ## check the Android SDK, Java and the UiAutomator2 driver
+	appium driver doctor uiautomator2

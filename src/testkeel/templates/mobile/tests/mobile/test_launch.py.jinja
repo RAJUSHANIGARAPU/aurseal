@@ -1,0 +1,22 @@
+"""Live checks that the app starts and its navigation works."""
+
+from __future__ import annotations
+
+import pytest
+
+from {{ package_name }}.screens import HomeScreen, TabBar
+from {{ package_name }}.screens.tab_bar import TABS
+
+pytestmark = pytest.mark.regression
+
+
+@pytest.mark.smoke
+def test_app_launches_to_home_screen(driver, settings):
+    assert HomeScreen(driver, settings.timeout_s).is_showing()
+
+
+@pytest.mark.parametrize("tab", TABS)
+def test_tab_bar_opens_each_screen(driver, settings, tab):
+    tabs = TabBar(driver, settings.timeout_s)
+    tabs.open(tab)
+    assert tabs.is_visible(tabs.screen_for(tab)), f"tab {tab!r} did not open {TABS[tab]!r}"

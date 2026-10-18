@@ -1,0 +1,66 @@
+"""Capabilities from settings, checked without an Appium server or a device."""
+
+from __future__ import annotations
+
+from typing import Any
+
+import pytest
+
+from {{ package_name }}.driver import build_options, create_driver
+from {{ package_name }}.settings import Settings
+
+pytestmark = pytest.mark.offline
+
+
+def capabilities(root, **fields: Any) -> dict[str, Any]:
+    return build_options(Settings(**fields), project_root=root).to_capabilities()
+
+
+def test_the_session_is_android_on_uiautomator2(tmp_path):
+    caps = capabilities(tmp_path)
+    assert caps["platformName"] == "Android"
+    assert caps["automationName"].lower() == "uiautomator2"
+
+
+def test_a_relative_app_path_resolves_against_the_project_root(tmp_path):
+    caps = capabilities(tmp_path, app_path="apps/demo.apk")
+    assert caps["appium:app"] == str((tmp_path / "apps" / "demo.apk").resolve())
+
+
+def test_an_absolute_app_path_is_kept(tmp_path):
+    app = (tmp_path / "elsewhere" / "demo.apk").resolve()
+    assert capabilities(tmp_path / "project", app_path=str(app))["appium:app"] == str(app)
+
+
+def test_empty_settings_are_left_out_instead_of_sent_empty(tmp_path):
+    caps = capabilities(tmp_path, avd="", platform_version="")
+    assert "appium:avd" not in caps
+    assert "appium:platformVersion" not in caps
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "capability"),
+    [
+        pytest.param("avd", "Pixel_8_API_34", "appium:avd", id="avd"),
+        pytest.param("platform_version", "14", "appium:platformVersion", id="platform-version"),
+        pytest.param("device_name", "Pixel 8", "appium:deviceName", id="device-name"),
+        pytest.param("new_command_timeout_s", 30, "appium:newCommandTimeout", id="idle-timeout"),
+    ],
+)
+def test_a_setting_reaches_its_capability(tmp_path, field, value, capability):
+    assert capabilities(tmp_path, **{field: value})[capability] == value
+
+
+def test_a_missing_app_fails_before_any_server_is_contacted(tmp_path):
+    settings = Settings(app_path="apps/missing.apk", appium_url="http://127.0.0.1:9")
+    with pytest.raises(FileNotFoundError, match="make app"):
+        create_driver(settings, project_root=tmp_path)
+
+
+def test_live_tests_run_only_when_the_appium_url_is_set_explicitly(monkeypatch):
+    monkeypatch.chdir("/")  # no .env in the working directory
+    monkeypatch.delenv("APP_APPIUM_URL", raising=False)
+    assert "appium_url" not in Settings().model_fields_set
+
+    monkeypatch.setenv("APP_APPIUM_URL", "http://127.0.0.1:4723")
+    assert "appium_url" in Settings().model_fields_set

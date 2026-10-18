@@ -1,0 +1,12 @@
+    appium_url: str = Field(
+        default="http://127.0.0.1:4723",
+        description="Appium server; the live tests run only when this is set explicitly",
+    )
+    app_path: str = Field(
+        default="apps/android.wdio.native.app.v2.2.0.apk",
+        description="The app under test, relative to the project (`make app` downloads it)",
+    )
+    avd: str = Field(default="", description="Emulator Appium boots when no device is attached")
+    platform_version: str = Field(default="", description="Android version; empty means any")
+    device_name: str = "Android Emulator"
+    new_command_timeout_s: int = Field(default=120, gt=0, description="Idle seconds before quit")

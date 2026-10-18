@@ -1,0 +1,6 @@
+| Screen objects, one class per screen _(confirm)_ | Locators inline in tests | Locators live in one place per screen; a test reads as user intent | One more layer to navigate |
+| Accessibility ids first _(confirm)_ | XPath; resource ids; text | Stable across layouts and shared by Android and iOS; they also prove the app is accessible | Needs the app to set them; text is the documented fallback |
+| Explicit waits only, no sleeps _(confirm)_ | Implicit waits; `sleep` | A wait names the condition it needs, so slow is not flaky and a failure says what never happened | Each screen object method states its own condition |
+| Capabilities built from settings _(confirm)_ | A capabilities JSON per device | One typed place; tested offline; a new device is an environment variable, not a file | Unusual capabilities need a settings field |
+| Live tests skip without `APP_APPIUM_URL` _(confirm)_ | Fail without a device | Push CI and a laptop without an emulator stay green on what they can check | A misconfigured live run reports skips, not failures: read the skip count |
+| Emulator CI only on manual dispatch _(confirm)_ | On every push | An emulator job takes minutes and needs KVM; the offline tier catches most breakage | Device regressions surface only when someone runs it |
