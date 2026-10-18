@@ -13,6 +13,8 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
 
+from core.chrome_launch import with_chrome_args
+
 CHANNEL_ENV = "CHECKS_BROWSER_CHANNEL"
 
 
@@ -41,7 +43,10 @@ def browser_context(
     try:
         try:
             launcher = getattr(pw, browser_name)
-            browser = launcher.launch(channel=channel) if channel else launcher.launch()
+            options: dict[str, Any] = {"channel": channel} if channel else {}
+            if browser_name == "chromium":
+                options["args"] = with_chrome_args()
+            browser = launcher.launch(**options)
             context = browser.new_context(
                 viewport=viewport or {"width": 1280, "height": 800},
                 device_scale_factor=device_scale_factor,
