@@ -14,6 +14,7 @@ from typing import IO
 from testkeel.importers._build import ReportError
 from testkeel.importers.cypress import CypressImporter
 from testkeel.importers.junit import JUnitImporter
+from testkeel.importers.newman import NewmanImporter
 from testkeel.importers.playwright import PlaywrightImporter
 from testkeel.importers.upload import UploadImporter
 from testkeel.model.v1 import TestRecord
@@ -26,6 +27,7 @@ BUILTIN: dict[str, Importer] = {
     PlaywrightImporter.name: PlaywrightImporter(),
     UploadImporter.name: UploadImporter(),
     CypressImporter.name: CypressImporter(),
+    NewmanImporter.name: NewmanImporter(),
 }
 
 

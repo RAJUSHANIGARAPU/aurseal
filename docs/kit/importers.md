@@ -11,6 +11,7 @@ that record. `testkeel report` picks the importer by sniffing the start of each 
 | `playwright` | Playwright's JSON reporter | `reporter: [["json", { outputFile: "results.json" }]]` |
 | `testkeel` | The canonical upload document (`RunUpload` JSON) | the [pytest plugin](#pytest-plugin) |
 | `cypress` | mochawesome JSON (one spec or a `mochawesome-merge` report); the Cypress Module API results | `--reporter mochawesome --reporter-options json=true`; `JSON.stringify(await cypress.run())` |
+| `newman` | Newman's `json` reporter (the run summary) | `newman run collection.json --reporters json --reporter-json-export newman.json` |
 
 ## Status mapping
 
@@ -33,6 +34,17 @@ titles are the suite, the `it` title is the name.
   only after it failed, so the earlier attempts are recorded as failed attempts without
   detail. A failed hook is a `broken` record named after the hook; the tests it stopped
   are `skipped` with reason `not_run`. mochawesome does not name the browser.
+
+## Newman
+
+One record per request and iteration: the collection name is the path, the folders above
+the request are the suite, the request name is the name, and the environment name is the
+configuration. With a data file (more than one iteration) the iteration is the variant,
+so one request is one case with a result per data row.
+
+A request error or a script error is `broken`, a failed assertion `failed` (the message
+names the assertion), a request whose assertions were all skipped `skipped`. A request
+sent again within one iteration (`setNextRequest`) is another attempt of the same record.
 
 ## pytest plugin
 

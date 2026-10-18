@@ -1,0 +1,84 @@
+{
+  "collection": {
+    "info": {
+      "_postman_id": "0f6d1d5e-1111-4222-8333-944455556666",
+      "name": "ACME Shop API",
+      "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "item": [
+      {
+        "id": "f-orders", "name": "Orders",
+        "item": [
+          {"id": "r-create", "name": "create order [SHOP-21]",
+           "request": {"url": "https://shop.example.test/orders", "method": "POST"}},
+          {"id": "r-get", "name": "get order",
+           "request": {"url": "https://shop.example.test/orders/1", "method": "GET"}}
+        ]
+      },
+      {"id": "r-health", "name": "health",
+       "request": {"url": "https://shop.example.test/health", "method": "GET"}},
+      {"id": "r-refund", "name": "refund",
+       "request": {"url": "https://shop.example.test/refunds", "method": "POST"}},
+      {"id": "r-legacy", "name": "legacy export",
+       "request": {"url": "https://shop.example.test/export", "method": "GET"}}
+    ]
+  },
+  "environment": {"id": "e1", "name": "staging", "values": []},
+  "globals": {"id": "g1", "values": []},
+  "run": {
+    "stats": {
+      "iterations": {"total": 2, "pending": 0, "failed": 0},
+      "requests": {"total": 10, "pending": 0, "failed": 1},
+      "assertions": {"total": 12, "pending": 0, "failed": 2}
+    },
+    "timings": {"responseAverage": 120, "started": 1767607200000, "completed": 1767607203000},
+    "executions": [
+      {"cursor": {"position": 0, "iteration": 0, "length": 5, "cycles": 2, "ref": "c1"},
+       "item": {"id": "r-create", "name": "create order [SHOP-21]"},
+       "response": {"code": 201, "status": "Created", "responseTime": 140},
+       "assertions": [{"assertion": "status is 201", "skipped": false}]},
+      {"cursor": {"position": 1, "iteration": 0, "length": 5, "cycles": 2, "ref": "c2"},
+       "item": {"id": "r-get", "name": "get order"},
+       "response": {"code": 200, "status": "OK", "responseTime": 80},
+       "assertions": [
+         {"assertion": "status is 200", "skipped": false},
+         {"assertion": "total is 30", "skipped": false,
+          "error": {"name": "AssertionError", "index": 1, "test": "total is 30",
+                    "message": "expected 31 to deeply equal 30"}}
+       ]},
+      {"cursor": {"position": 2, "iteration": 0, "length": 5, "cycles": 2, "ref": "c3"},
+       "item": {"id": "r-health", "name": "health"},
+       "requestError": {"code": "ECONNREFUSED", "message": "connect ECONNREFUSED 127.0.0.1:80"}},
+      {"cursor": {"position": 3, "iteration": 0, "length": 5, "cycles": 2, "ref": "c4"},
+       "item": {"id": "r-refund", "name": "refund"},
+       "response": {"code": 200, "status": "OK", "responseTime": 95},
+       "testScript": [{"error": {"name": "ReferenceError", "message": "body is not defined"}}]},
+      {"cursor": {"position": 4, "iteration": 0, "length": 5, "cycles": 2, "ref": "c5"},
+       "item": {"id": "r-legacy", "name": "legacy export"},
+       "response": {"code": 200, "status": "OK", "responseTime": 30},
+       "assertions": [{"assertion": "csv header", "skipped": true}]},
+      {"cursor": {"position": 0, "iteration": 1, "length": 5, "cycles": 2, "ref": "c6"},
+       "item": {"id": "r-create", "name": "create order [SHOP-21]"},
+       "response": {"code": 201, "status": "Created", "responseTime": 150},
+       "assertions": [{"assertion": "status is 201", "skipped": false}]},
+      {"cursor": {"position": 1, "iteration": 1, "length": 5, "cycles": 2, "ref": "c7"},
+       "item": {"id": "r-get", "name": "get order"},
+       "response": {"code": 200, "status": "OK", "responseTime": 70},
+       "assertions": [{"assertion": "status is 200", "skipped": false},
+                      {"assertion": "total is 30", "skipped": false}]},
+      {"cursor": {"position": 2, "iteration": 1, "length": 5, "cycles": 2, "ref": "c8"},
+       "item": {"id": "r-health", "name": "health"},
+       "response": {"code": 503, "status": "Service Unavailable", "responseTime": 12},
+       "assertions": [{"assertion": "status is 200", "skipped": false,
+                       "error": {"name": "AssertionError", "message": "expected 503 to equal 200"}}]},
+      {"cursor": {"position": 2, "iteration": 1, "length": 5, "cycles": 2, "ref": "c9"},
+       "item": {"id": "r-health", "name": "health"},
+       "response": {"code": 200, "status": "OK", "responseTime": 10},
+       "assertions": [{"assertion": "status is 200", "skipped": false}]},
+      {"cursor": {"position": 3, "iteration": 1, "length": 5, "cycles": 2, "ref": "c10"},
+       "item": {"id": "r-refund", "name": "refund"},
+       "response": {"code": 200, "status": "OK", "responseTime": 90}}
+    ],
+    "failures": []
+  }
+}
