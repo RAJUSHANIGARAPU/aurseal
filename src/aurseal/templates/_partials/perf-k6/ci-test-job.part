@@ -3,7 +3,7 @@
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       - uses: astral-sh/setup-uv@v10.2.0
         with:
           python-version: "{{ python_version }}"
@@ -16,18 +16,18 @@
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
-      - uses: grafana/setup-k6-action@v1
+      - uses: actions/checkout@v7.0.1
+      - uses: grafana/setup-k6-action@v1.2.2
         with:
           k6-version: "2.3.0"
       # handleSummary writes into reports/, and k6 does not create directories.
       - run: mkdir -p reports
-      - uses: grafana/run-k6-action@v1
+      - uses: grafana/run-k6-action@v1.5.0
         env:
           TARGET_URL: {{ target_url }}
         with:
           path: k6/scenarios/smoke.js
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@v7.0.1
         if: {% raw %}${{ !cancelled() }}{% endraw %}
         with:
           name: reports

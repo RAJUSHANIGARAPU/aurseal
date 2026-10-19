@@ -35,8 +35,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.0.0
         with:
           python-version: "3.11"
           cache: "pip"
@@ -52,7 +52,7 @@ jobs:
           python -m traceability release decide
           --release "$RELEASE" --candidate "$CANDIDATE"
           --commit "$GITHUB_SHA" --reports reports/ --plan "$PLAN"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7.0.1
         if: always()
         with:
           name: release-verdict

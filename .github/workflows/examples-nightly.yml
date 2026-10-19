@@ -33,14 +33,14 @@ jobs:
       run:
         working-directory: examples/web-ui-saucedemo
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
       - uses: astral-sh/setup-uv@v10.2.0
       - run: uv sync --locked
       - name: Live suite
         id: live
         continue-on-error: true
         run: uv run pytest -n auto -o log_cli=true
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7.0.1
         if: always()
         with:
           name: example-web-ui-saucedemo
@@ -59,14 +59,14 @@ jobs:
       run:
         working-directory: examples/api-rest-restful-booker
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
       - uses: astral-sh/setup-uv@v10.2.0
       - run: uv sync --locked
       - name: Live suite
         id: live
         continue-on-error: true
         run: uv run pytest -n auto -o log_cli=true
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7.0.1
         if: always()
         with:
           name: example-api-rest-restful-booker
@@ -85,14 +85,14 @@ jobs:
       run:
         working-directory: examples/graphql-countries
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
       - uses: astral-sh/setup-uv@v10.2.0
       - run: uv sync --locked
       - name: Live suite
         id: live
         continue-on-error: true
         run: uv run pytest -n auto -o log_cli=true
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7.0.1
         if: always()
         with:
           name: example-graphql-countries
@@ -115,14 +115,14 @@ jobs:
       run:
         working-directory: examples/a11y-w3c-bad
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
       - uses: astral-sh/setup-uv@v10.2.0
       - run: uv sync --locked
       - name: Live suite
         id: live
         continue-on-error: true
         run: uv run pytest -n auto -o log_cli=true
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7.0.1
         if: always()
         with:
           name: example-a11y-w3c-bad
@@ -148,8 +148,8 @@ jobs:
       run:
         working-directory: examples/perf-k6-quickpizza
     steps:
-      - uses: actions/checkout@v4
-      - uses: grafana/setup-k6-action@v1
+      - uses: actions/checkout@v7.0.1
+      - uses: grafana/setup-k6-action@v1.2.2
         with:
           k6-version: "2.3.0"
       - uses: astral-sh/setup-uv@v10.2.0
@@ -166,7 +166,7 @@ jobs:
         id: local
         continue-on-error: true
         run: make load APP_TARGET_URL=http://localhost:3333
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7.0.1
         if: always()
         with:
           name: example-perf-k6-quickpizza
@@ -192,7 +192,7 @@ jobs:
       run:
         working-directory: examples/perf-locust-quickpizza
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
       - uses: astral-sh/setup-uv@v10.2.0
       - run: uv sync --locked
       - name: Wait for quickpizza-local
@@ -203,7 +203,7 @@ jobs:
         id: local
         continue-on-error: true
         run: make load APP_TARGET_URL=http://localhost:3333
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7.0.1
         if: always()
         with:
           name: example-perf-locust-quickpizza
