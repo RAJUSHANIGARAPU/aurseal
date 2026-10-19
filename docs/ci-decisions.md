@@ -200,6 +200,33 @@ chosen: it changes how every one of the suite's test modules is imported (256 of
 import helpers as `tests.<path>`) to work around one empty file. Keep `mypy_path = "src"` for the package. The
 mutation runner still refuses to copy a root `__init__.py`, for repositories that have one.
 
+## Runner image
+
+**Rule.** Every job, in this repository's workflows and in the workflows the templates
+generate, runs on `ubuntu-24.04`, never `ubuntu-latest`. Every action is pinned to an exact
+release tag (`actions/checkout@v7.0.1`, not `@v7`) that runs on Node 24 and was published
+at least 14 days before it was adopted; `pypa/gh-action-pypi-publish` stays on a commit
+SHA. `python -m tools.action_refs` (in `package.yml`) fails on a ref that does not exist.
+
+**Prevents.** The image changing under an unrelated change. From 2026-10-19 GitHub moves
+`ubuntu-latest` to Ubuntu 26.04 over several weeks
+([runner-images#14748](https://github.com/actions/runner-images/issues/14748)), so
+`ubuntu-latest` would give two different images to two runs of the same commit. On 26.04
+the pinned `playwright==1.58.0` resolves the host as `ubuntu26.04-x64`, a platform it has
+no browser builds or system-dependency list for (`hostPlatform.ts` at v1.58.0; 1.61.0 is
+the first release that lists 26.04), and the default `python3` is 3.14 instead of 3.12. The Playwright
+browser caches are keyed on `runner.os` alone, so on a cache hit `--with-deps` is skipped
+and a 24.04 cache would be restored onto a 26.04 runner with none of its system libraries.
+A moving major tag (`@v7`) would also pick up a release published days earlier.
+
+**Change safely.** Follow-up, as of 2026-10-19: move to `ubuntu-26.04` once `playwright` is
+pinned at a release that supports it (1.61.0 or later); in the same change add the image (`env.ImageOS`) to the
+Playwright cache keys and run `tests/package` against the generated projects on the new
+image. To bump an action, pick the newest release whose `action.yml` says
+`using: node24` and that is at least 14 days old, change the template, re-render the
+snapshots (`UPDATE_TEMPLATE_SNAPSHOTS=1`) and the examples' manifest files, and run
+`GITHUB_TOKEN=$(gh auth token) python -m tools.action_refs`.
+
 ## Leak check
 
 **Rule.** `leak-check.yml` runs `python -m aurseal.leakgate` on every pull request (tree,

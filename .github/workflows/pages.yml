@@ -33,7 +33,7 @@ concurrency:
 jobs:
   build:
     name: Build the site
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: read
@@ -109,7 +109,7 @@ jobs:
     name: Publish to GitHub Pages
     needs: build
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       pages: write

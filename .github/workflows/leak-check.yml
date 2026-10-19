@@ -37,7 +37,7 @@ jobs:
   leak-check:
     name: Leak check
     if: github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7.0.1

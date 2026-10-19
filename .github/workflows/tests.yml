@@ -96,13 +96,15 @@ env:
 # NIGHTLY_ENABLED=false a scheduled run does nothing but the `nightly` line (and the
 # secret scan, which lives in secret-scan.yml and nothing may skip).
 # Why: docs/ci-decisions.md#nightly
+# Jobs run on ubuntu-24.04, not ubuntu-latest, which moves to Ubuntu 26.04 from
+# 2026-10-19. Why: docs/ci-decisions.md#runner-image
 jobs:
   # Scheduled runs only: one summary line saying what this nightly could not run, or that
   # the nightly is switched off.
   nightly:
     name: Nightly note
     if: github.event_name == 'schedule'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
       prefix: ${{ steps.note.outputs.prefix }}
@@ -128,7 +130,7 @@ jobs:
   offline:
     name: Offline suite
     if: "!startsWith(github.ref, 'refs/heads/bringup/') && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
 
     steps:
@@ -289,7 +291,7 @@ jobs:
     if: "!startsWith(github.ref, 'refs/heads/bringup/') && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')"
     # Unit lane first: a red framework suite stops the run before the live site is touched.
     needs: offline
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     # Per-target login secrets live in a GitHub Environment of the same name.
     environment: ${{ inputs.env || 'qa' }}
@@ -468,7 +470,7 @@ jobs:
     name: Checks with optional engines
     if: "!startsWith(github.ref, 'refs/heads/bringup/') && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')"
     needs: offline
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7.0.1
@@ -510,7 +512,7 @@ jobs:
     name: Visual regression
     if: "!startsWith(github.ref, 'refs/heads/bringup/') && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')"
     needs: offline
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     # Image tag == the playwright== pin in requirements.txt (gate.workflow_lint checks it).
     container:
@@ -540,7 +542,7 @@ jobs:
   visual-baselines:
     name: Take visual baselines
     if: github.event_name == 'workflow_dispatch' && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     container:
       image: mcr.microsoft.com/playwright/python:v1.58.0-jammy
@@ -574,7 +576,7 @@ jobs:
   security:
     name: Security checks
     if: "!startsWith(github.ref, 'refs/heads/bringup/') && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7.0.1
@@ -591,7 +593,7 @@ jobs:
     name: Generated tests awaiting review
     if: "!startsWith(github.ref, 'refs/heads/bringup/') && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')"
     needs: offline
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     continue-on-error: true
     steps:
@@ -631,7 +633,7 @@ jobs:
     name: Platform suite
     if: "!startsWith(github.ref, 'refs/heads/bringup/') && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')"
     needs: offline
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7.0.1
@@ -677,7 +679,7 @@ jobs:
     name: Smoke on ${{ matrix.browser }}
     if: (github.ref == 'refs/heads/main' || github.event_name == 'schedule' || inputs.browser_matrix || contains(inputs.lanes, 'browser-matrix')) && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')
     needs: offline
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     environment: ${{ inputs.env || 'qa' }}
     strategy:
@@ -755,7 +757,7 @@ jobs:
       ((github.event_name == 'workflow_dispatch' && inputs.run_token_lane) ||
       (github.event_name == 'schedule' && github.ref == 'refs/heads/main' &&
       needs.nightly.outputs.render_token == 'true'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
       RUN_TRUST: fail
@@ -802,7 +804,7 @@ jobs:
   results-history:
     needs: [offline, browser]
     if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main' && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: write
@@ -845,7 +847,7 @@ jobs:
   dashboard:
     needs: [offline, browser]
     if: always() && !startsWith(github.ref, 'refs/heads/bringup/') && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7.0.1
@@ -879,7 +881,7 @@ jobs:
   baseline:
     needs: [offline, browser]
     if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main' && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/download-artifact@v8.0.1
@@ -895,7 +897,7 @@ jobs:
   pr-feedback:
     needs: [offline, browser]
     if: always() && github.event_name == 'pull_request' && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: read
@@ -929,7 +931,7 @@ jobs:
   bringup:
     name: Bring-up run
     if: startsWith(github.ref, 'refs/heads/bringup/') && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     environment: qa
     env:
@@ -985,7 +987,7 @@ jobs:
     name: Publish evidence
     needs: [offline, browser, checks, visual, visual-baselines, drafts, platform, browser-matrix, render, bringup]
     if: always() && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     outputs:
       description: ${{ steps.describe.outputs.description }}
@@ -1026,7 +1028,7 @@ jobs:
     name: Notify
     needs: [publish, offline, browser, checks, visual, drafts, platform, browser-matrix, render, bringup]
     if: always() && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7.0.1

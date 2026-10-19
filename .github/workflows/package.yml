@@ -22,10 +22,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Jobs run on ubuntu-24.04, not ubuntu-latest, which moves to Ubuntu 26.04 from
+# 2026-10-19. Why: docs/ci-decisions.md#runner-image
 jobs:
   package:
     name: Lint, types and wheel
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7.0.1
@@ -63,7 +65,7 @@ jobs:
 
   generated-projects:
     name: Generated projects (all dependencies)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # A render suite that hangs (a gevent/xdist deadlock in Locust, a browser that never
     # starts) must fail in minutes, not hold a runner for six hours.
     timeout-minutes: 20

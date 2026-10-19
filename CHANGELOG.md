@@ -28,6 +28,8 @@ All notable changes to the `aurseal` package are recorded here. The format follo
 - Generated projects' CI pins every action to an exact release tag that runs on Node 24
   (`actions/checkout@v7.0.1`, `actions/upload-artifact@v7.0.1`,
   `actions/download-artifact@v8.0.1`, ...) instead of a moving major tag.
+- Generated projects' CI runs on `ubuntu-24.04` instead of `ubuntu-latest`, which GitHub
+  moves to Ubuntu 26.04 from 2026-10-19.
 
 ### Deprecated
 
