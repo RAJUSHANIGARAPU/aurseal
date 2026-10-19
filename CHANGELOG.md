@@ -25,6 +25,9 @@ All notable changes to the `aurseal` package are recorded here. The format follo
   `~/.config/aurseal/`.
 - The version is written once, in `src/aurseal/__init__.py`; `pyproject.toml` reads it
   from there.
+- Generated projects' CI pins every action to an exact release tag that runs on Node 24
+  (`actions/checkout@v7.0.1`, `actions/upload-artifact@v7.0.1`,
+  `actions/download-artifact@v8.0.1`, ...) instead of a moving major tag.
 
 ### Deprecated
 

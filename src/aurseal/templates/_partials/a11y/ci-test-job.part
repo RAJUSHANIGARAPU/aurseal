@@ -8,14 +8,14 @@
       image: mcr.microsoft.com/playwright/python:v1.58.0-noble
       options: --ipc=host
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       - uses: astral-sh/setup-uv@v10.2.0
         with:
           python-version: "{{ python_version }}"
       - run: uv sync --locked
       - name: Tests
         run: uv run pytest -n auto -o log_cli=true
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@v7.0.1
         if: {% raw %}${{ !cancelled() }}{% endraw %}
         with:
           name: reports

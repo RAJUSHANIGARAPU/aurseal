@@ -3,7 +3,7 @@
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       - uses: astral-sh/setup-uv@v10.2.0
         with:
           python-version: "{{ python_version }}"
@@ -18,7 +18,7 @@
     env:
       PYTHONPATH: src
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       - uses: astral-sh/setup-uv@v10.2.0
         with:
           python-version: "{{ python_version }}"
@@ -28,7 +28,7 @@
         run: uv run locust --config profiles/smoke.conf --host {{ target_url }}
       - name: SLO check
         run: uv run python -m {{ package_name }}.slo smoke
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@v7.0.1
         if: {% raw %}${{ !cancelled() }}{% endraw %}
         with:
           name: reports

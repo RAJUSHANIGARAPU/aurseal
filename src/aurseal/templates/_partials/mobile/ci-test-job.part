@@ -3,7 +3,7 @@
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       - uses: astral-sh/setup-uv@v10.2.0
         with:
           python-version: "{{ python_version }}"
@@ -11,7 +11,7 @@
       # No emulator here: the offline tier runs and the live tests skip themselves.
       - name: Tests
         run: uv run pytest -n auto -o log_cli=true
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@v7.0.1
         if: {% raw %}${{ !cancelled() }}{% endraw %}
         with:
           name: reports
@@ -27,12 +27,12 @@
     env:
       APP_APPIUM_URL: http://127.0.0.1:4723
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       - uses: astral-sh/setup-uv@v10.2.0
         with:
           python-version: "{{ python_version }}"
       - run: uv sync --locked
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@v7.0.0
         with:
           node-version: "22"
       - name: Install Appium and the UiAutomator2 driver
@@ -52,14 +52,14 @@
           mkdir -p reports
           nohup appium --address 127.0.0.1 --port 4723 > reports/appium.log 2>&1 &
       - name: Live tests on an emulator
-        uses: reactivecircus/android-emulator-runner@v2
+        uses: reactivecircus/android-emulator-runner@v2.38.0
         with:
           api-level: 34
           arch: x86_64
           target: google_apis
           disable-animations: true
           script: uv run pytest -m "not offline" -o log_cli=true
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@v7.0.1
         if: {% raw %}${{ !cancelled() }}{% endraw %}
         with:
           name: emulator-reports

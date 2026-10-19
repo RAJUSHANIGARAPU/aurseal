@@ -108,8 +108,8 @@ jobs:
       prefix: ${{ steps.note.outputs.prefix }}
       render_token: ${{ steps.note.outputs.render_token }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.0.0
         with:
           python-version: "3.11"
       - name: Scheduled-run note
@@ -133,10 +133,10 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7.0.0
         with:
           python-version: "3.11"
           cache: "pip"
@@ -176,7 +176,7 @@ jobs:
       # Why: docs/ci-decisions.md#external-config
       - name: Check out the external configuration
         continue-on-error: true
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
         with:
           repository: ${{ vars.EXT_CONFIG_REPO || github.repository }}
           ref: ${{ vars.EXT_CONFIG_REF || github.event.repository.default_branch }}
@@ -242,7 +242,7 @@ jobs:
 
       - name: Upload the catalogue
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: catalogue
           path: reports/catalogue/
@@ -261,7 +261,7 @@ jobs:
 
       - name: Upload results bundle
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: results-offline
           path: reports/results/
@@ -274,7 +274,7 @@ jobs:
 
       - name: Upload evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: evidence-offline
           path: evidence/
@@ -306,10 +306,10 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7.0.0
         with:
           python-version: "3.11"
           cache: "pip"
@@ -357,7 +357,7 @@ jobs:
         run: echo "version=$(pip show playwright | grep Version | cut -d' ' -f2)" >> $GITHUB_OUTPUT
 
       - name: Cache Playwright Chrome
-        uses: actions/cache@v4
+        uses: actions/cache@v6.1.0
         id: pw-cache
         with:
           path: ~/.cache/ms-playwright
@@ -442,7 +442,7 @@ jobs:
 
       - name: Upload results bundle
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: results-browser
           path: reports/results/
@@ -455,7 +455,7 @@ jobs:
 
       - name: Upload evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: evidence-browser
           path: evidence/
@@ -471,8 +471,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.0.0
         with:
           python-version: "3.11"
           cache: "pip"
@@ -497,7 +497,7 @@ jobs:
         run: python -m gate.evidence stage --job checks
       - name: Upload evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: evidence-checks
           path: evidence/
@@ -517,7 +517,7 @@ jobs:
       image: mcr.microsoft.com/playwright/python:v1.58.0-jammy
       options: --ipc=host
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
       - name: Install dependencies (with the check engines)
         run: pip install -r requirements.txt -r requirements-checks.txt
       - name: Run Visual Examples
@@ -529,7 +529,7 @@ jobs:
         run: python -m gate.evidence stage --job visual
       - name: Upload evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: evidence-visual
           path: evidence/
@@ -546,13 +546,13 @@ jobs:
       image: mcr.microsoft.com/playwright/python:v1.58.0-jammy
       options: --ipc=host
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
       - run: pip install -r requirements.txt -r requirements-checks.txt
       - name: Take baselines
         run: pytest tests/demo_examples/visual -m demo_ui --browser-channel=chromium
         env:
           VISUAL_UPDATE: "1"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7.0.1
         with:
           name: visual-baselines
           path: visual_baselines/
@@ -562,7 +562,7 @@ jobs:
         run: python -m gate.evidence stage --job visual-baselines
       - name: Upload evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: evidence-visual-baselines
           path: evidence/
@@ -577,8 +577,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.0.0
         with:
           python-version: "3.13"
       - name: Install dependencies
@@ -595,8 +595,8 @@ jobs:
     timeout-minutes: 15
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.0.0
         with:
           python-version: "3.11"
           cache: "pip"
@@ -617,7 +617,7 @@ jobs:
         run: python -m gate.evidence stage --job drafts
       - name: Upload evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: evidence-drafts
           path: evidence/
@@ -634,8 +634,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.0.0
         with:
           python-version: "3.11"
           cache: "pip"
@@ -664,7 +664,7 @@ jobs:
         run: python -m gate.evidence stage --job platform
       - name: Upload evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: evidence-platform
           path: evidence/
@@ -695,8 +695,8 @@ jobs:
       BROWSER: ${{ matrix.browser }}
       TEST_ENV: ${{ inputs.env || 'qa' }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.0.0
         with:
           python-version: "3.11"
           cache: "pip"
@@ -711,7 +711,7 @@ jobs:
       - name: Get Playwright version
         id: pw-version
         run: echo "version=$(pip show playwright | grep Version | cut -d' ' -f2)" >> $GITHUB_OUTPUT
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6.1.0
         id: pw-cache
         with:
           path: ~/.cache/ms-playwright
@@ -735,7 +735,7 @@ jobs:
         run: python -m gate.evidence stage --job "browser-matrix--$BROWSER"
       - name: Upload evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: evidence-browser-matrix--${{ matrix.browser }}
           path: evidence/
@@ -763,8 +763,8 @@ jobs:
       RENDER_REQUIRED: "true"
       AUTH_MODE: ${{ github.event_name == 'schedule' && 'token' || inputs.auth_mode }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.0.0
         with:
           python-version: "3.11"
           cache: "pip"
@@ -790,7 +790,7 @@ jobs:
         run: python -m gate.evidence stage --job render
       - name: Upload evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: evidence-render
           path: evidence/
@@ -808,12 +808,12 @@ jobs:
       contents: write
     concurrency: results-history
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.0.0
         with:
           python-version: "3.11"
       - run: pip install -r requirements.txt
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8.0.1
         with:
           pattern: results-*
           path: artifacts/
@@ -848,12 +848,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.0.0
         with:
           python-version: "3.11"
       - run: pip install -r requirements.txt
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8.0.1
         with:
           pattern: results-*
           path: artifacts/
@@ -869,7 +869,7 @@ jobs:
         run: python -m results dashboard --out reports/dashboard/
       - name: Render living docs
         run: python -m results livedocs --out reports/dashboard/living-docs/
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7.0.1
         with:
           name: dashboard
           path: reports/dashboard/
@@ -882,10 +882,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8.0.1
         with:
           path: baseline/
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7.0.1
         with:
           name: main-baseline
           path: baseline/
@@ -902,13 +902,13 @@ jobs:
       pull-requests: write
       actions: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.0.0
         with:
           python-version: "3.11"
           cache: "pip"
       - run: pip install -r requirements.txt
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8.0.1
         with:
           path: run-reports/
       - name: Latest main baseline (absent is fine, the comment says so)
@@ -937,10 +937,10 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7.0.0
         with:
           python-version: "3.11"
           cache: "pip"
@@ -971,7 +971,7 @@ jobs:
 
       - name: Upload evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: evidence-bringup
           path: evidence/
@@ -990,14 +990,14 @@ jobs:
     outputs:
       description: ${{ steps.describe.outputs.description }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.0.0
         with:
           python-version: "3.11"
           cache: "pip"
       - run: pip install -r requirements.txt
       - name: Download every evidence artefact (none is tolerated)
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8.0.1
         with:
           pattern: evidence-*
           path: evidence-in/
@@ -1012,7 +1012,7 @@ jobs:
         env:
           TARGET_ENV: ${{ inputs.env || 'qa' }}
           PREFIX: ${{ github.event_name == 'schedule' && 'nightly' || '' }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7.0.1
         with:
           name: published-report
           path: reports/published/
@@ -1029,13 +1029,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.0.0
         with:
           python-version: "3.11"
           cache: "pip"
       - run: pip install -r requirements.txt
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8.0.1
         with:
           pattern: evidence-*
           path: evidence-in/
