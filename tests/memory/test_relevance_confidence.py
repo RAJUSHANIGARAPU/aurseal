@@ -26,8 +26,9 @@ def _record(
     *,
     outcome: str = "resolved",
     days_old: int = 0,
+    timestamp: str | None = None,
 ) -> MemoryRecord:
-    ts = (datetime.now(tz=timezone.utc) - timedelta(days=days_old)).isoformat()
+    ts = timestamp or (datetime.now(tz=timezone.utc) - timedelta(days=days_old)).isoformat()
     return MemoryRecord(
         id=uuid.uuid4().hex,
         test_id="tests/test_orders.py::test_create_order",
@@ -50,7 +51,18 @@ def _record(
 # ------------------------------------------------------------------
 
 
-def test_an_absent_endpoint_earns_no_credit_over_a_real_one():
+_FROZEN_NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
+
+
+class _FrozenDatetime(datetime):
+    """``datetime`` whose ``now()`` is fixed, so recency is identical for every record."""
+
+    @classmethod
+    def now(cls, tz=None):  # type: ignore[override]
+        return _FROZEN_NOW if tz else _FROZEN_NOW.replace(tzinfo=None)
+
+
+def test_an_absent_endpoint_earns_no_credit_over_a_real_one(monkeypatch):
     """The reported numbers, as a test.
 
     Every from_pytest_report record has endpoint="" (summarizer.py:115). For a
@@ -58,11 +70,16 @@ def test_an_absent_endpoint_earns_no_credit_over_a_real_one():
     took the whole 0.50 endpoint weight: the pytest record came out at 0.70
     against 0.20 for a record on a real, domain-matching endpoint.
     """
+    # Recency reads the wall clock; two reads microseconds apart decided this
+    # comparison by ~1e-12 and made it flaky. Freeze the clock and give both
+    # records the same timestamp so only the endpoint weighting is compared.
+    monkeypatch.setattr("memory.retriever.datetime", _FrozenDatetime)
+    stamp = _FROZEN_NOW.isoformat()
     r = MemoryRetriever()
     error = "connection reset while creating an order"
 
-    endpoint_less = r.score(_record(endpoint=""), error, "")
-    real_endpoint = r.score(_record(endpoint="/api/orders"), error, "")
+    endpoint_less = r.score(_record(endpoint="", timestamp=stamp), error, "")
+    real_endpoint = r.score(_record(endpoint="/api/orders", timestamp=stamp), error, "")
 
     assert endpoint_less <= real_endpoint
     assert endpoint_less < 0.7
