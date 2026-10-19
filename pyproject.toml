@@ -76,8 +76,7 @@ only-include = ["src/aurseal", "LICENSE", "README.md", "pyproject.toml"]
 [tool.mypy]
 python_version = "3.11"
 strict = true
-# The repository root has an __init__.py; without these the package would be read as
-# <root>.src.aurseal instead of aurseal.
+# src layout: the package is read from src as aurseal, wherever mypy is run from.
 mypy_path = "src"
 explicit_package_bases = true
 plugins = ["pydantic.mypy"]

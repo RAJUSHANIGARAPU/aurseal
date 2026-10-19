@@ -177,6 +177,29 @@ trusted publishing (`id-token: write` on the publish jobs alone, environment `py
 its wheel check is the same `tools/wheel_check.py` that `package.yml` runs. Process:
 [Releasing](kit/releasing.md).
 
+## Repository root
+
+**Rule.** The repository root is a directory on the import path (`pythonpath = .` in
+`pytest.ini`), never a package: it has no `__init__.py`. The top-level directories
+(`core`, `gate`, `tests`, ...) are the packages, and pytest keeps its default `prepend`
+import mode, under which `tests/...` modules are imported as `tests....` and the root
+`conftest.py` as `conftest`. `tests/test_repo_root.py` fails if a root `__init__.py`
+comes back, and checks the name the root conftest is imported under.
+
+**Prevents.** With a root `__init__.py`, pytest's rootdir-based package discovery names
+every module after the checkout directory. Once the repository was named after its
+installed package, CI checked out to `.../aurseal/aurseal` and pytest imported the root
+conftest as `aurseal.conftest`, inside the installed `aurseal` package, so collection
+stopped with `ModuleNotFoundError` before any test ran. The same happened to anyone who
+cloned the repository under that name, and a clone under any other name produced
+different module names from the same tree.
+
+**Change safely.** Do not add `__init__.py` at the root to make an import work; import
+from the top-level package (`from core.x import y`). `--import-mode=importlib` was not
+chosen: it changes how every one of the suite's test modules is imported (256 of them
+import helpers as `tests.<path>`) to work around one empty file. Keep `mypy_path = "src"` for the package. The
+mutation runner still refuses to copy a root `__init__.py`, for repositories that have one.
+
 ## Leak check
 
 **Rule.** `leak-check.yml` runs `python -m aurseal.leakgate` on every pull request (tree,

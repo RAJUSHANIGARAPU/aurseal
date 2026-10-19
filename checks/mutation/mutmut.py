@@ -51,9 +51,10 @@ _COPY_IGNORE = shutil.ignore_patterns(
 )
 
 
-#: Never copied next to the mutants. ``__init__.py``: the repository root is a package, and
-#: with that file beside them pytest imports the *unmutated* copy one level up, so no test ever
-#: reaches a mutant. ``conftest.py``: the root conftest imports the framework's own plugins
+#: Never copied next to the mutants. ``__init__.py``: a repository whose root is a package
+#: would make pytest import the *unmutated* copy one level up, so no test ever reaches a
+#: mutant (this repository's root is not one; the guard is for any repository scanned).
+#: ``conftest.py``: the root conftest imports the framework's own plugins
 #: (and the packages under test) before mutmut's per-test switching applies. ``tests`` and the
 #: config files mutmut copies itself.
 _NEVER_COPY = frozenset(
@@ -201,9 +202,9 @@ def run(config: MutationConfig, scope: PackageScope, *, repo: Path, work_root: P
     version = mutmut_version()
     if version is None:
         raise MutmutUnavailable("mutmut is not installed (pip install -r requirements-checks.txt)")
-    # Not named after the package: the repository root is itself a package (it has an
-    # ``__init__.py``), so pytest imports the copy under its directory name, and a copy
-    # called ``checks`` would shadow the real ``checks`` package.
+    # Not named after the package: if the copied root were a package, pytest would import
+    # the copy under its directory name, and a copy called ``checks`` would shadow the real
+    # ``checks`` package.
     work = prepare_workdir(repo, work_root / f"mutmut-{scope.name}", scope, config)
     try:
         proc = _call(["run", "--max-children", str(config.max_children)], work, config.timeout_s)
