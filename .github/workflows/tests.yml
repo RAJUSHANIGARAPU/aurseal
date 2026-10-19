@@ -197,6 +197,8 @@ jobs:
           EXT_CONFIG_SENTINEL: ${{ vars.EXT_CONFIG_SENTINEL || 'subscription.machine.yaml' }}
           EXT_CONFIG_REQUIRED: ${{ inputs.require_config_binding && 'true' || 'false' }}
 
+      # The checkout directory is named after the repository; module names must not depend
+      # on it. Why: docs/ci-decisions.md#repository-root
       - name: Run Offline Tests
         run: pytest tests/ -n auto -m "not demo_ui and not draft and not render_check"
         env:
