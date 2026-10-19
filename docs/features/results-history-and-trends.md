@@ -103,7 +103,7 @@ group so two runs never push at once):
   results-history:
     needs: [offline, browser]
     if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     concurrency: results-history

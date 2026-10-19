@@ -1,6 +1,6 @@
   test:
     needs: lint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7.0.1
@@ -22,7 +22,7 @@
   emulator:
     needs: lint
     if: {% raw %}${{ github.event_name == 'workflow_dispatch' }}{% endraw %}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
       APP_APPIUM_URL: http://127.0.0.1:4723

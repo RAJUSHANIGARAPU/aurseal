@@ -1,6 +1,6 @@
   test:
     needs: lint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     # Browsers come from the image, pinned to the Playwright version in pyproject.toml,
     # instead of being downloaded or cached on every run.

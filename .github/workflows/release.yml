@@ -32,7 +32,7 @@ jobs:
   # Runs a plan, then the strict verdict. The verdict step's exit code is the gate
   # (1 NO_GO, 3 NO_VERDICT). tests.yml stays the CI-selection reference.
   verdict:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7.0.1

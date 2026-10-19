@@ -20,7 +20,7 @@ jobs:
   web-ui-saucedemo:
     name: web-ui-saucedemo (live)
     if: github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     continue-on-error: true
     # Browsers come from the image, pinned to the example's playwright== version.
@@ -50,7 +50,7 @@ jobs:
   api-rest-restful-booker:
     name: api-rest-restful-booker (live)
     if: github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     continue-on-error: true
     outputs:
@@ -76,7 +76,7 @@ jobs:
   graphql-countries:
     name: graphql-countries (live)
     if: github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     continue-on-error: true
     outputs:
@@ -102,7 +102,7 @@ jobs:
   a11y-w3c-bad:
     name: a11y-w3c-bad (live)
     if: github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     continue-on-error: true
     # Browsers come from the image, pinned to the example's playwright== version.
@@ -134,7 +134,7 @@ jobs:
   perf-k6-quickpizza:
     name: perf-k6-quickpizza (live smoke, local load)
     if: github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     continue-on-error: true
     services:
@@ -178,7 +178,7 @@ jobs:
   perf-locust-quickpizza:
     name: perf-locust-quickpizza (local load)
     if: github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     continue-on-error: true
     services:
@@ -214,7 +214,7 @@ jobs:
     name: One issue per failing example
     needs: [web-ui-saucedemo, api-rest-restful-booker, graphql-countries, a11y-w3c-bad, perf-k6-quickpizza, perf-locust-quickpizza]
     if: always() && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
       issues: write
