@@ -45,7 +45,7 @@ jobs:
           count=$(gh pr list --state open --json headRefName \
             -q '[.[] | select(.headRefName | startswith("repair/"))] | length')
           echo "count=$count" >> "$GITHUB_OUTPUT"
-      - uses: actions/setup-python@v7.0.0
+      - uses: actions/setup-python@v7.1.0
         if: steps.open.outputs.count == '0'
         with:
           python-version: "3.13"

@@ -111,7 +111,7 @@ jobs:
       render_token: ${{ steps.note.outputs.render_token }}
     steps:
       - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-python@v7.0.0
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.11"
       - name: Scheduled-run note
@@ -138,7 +138,7 @@ jobs:
         uses: actions/checkout@v7.0.1
 
       - name: Setup Python
-        uses: actions/setup-python@v7.0.0
+        uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.11"
           cache: "pip"
@@ -244,7 +244,7 @@ jobs:
 
       - name: Upload the catalogue
         if: always()
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: catalogue
           path: reports/catalogue/
@@ -263,7 +263,7 @@ jobs:
 
       - name: Upload results bundle
         if: always()
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: results-offline
           path: reports/results/
@@ -276,7 +276,7 @@ jobs:
 
       - name: Upload evidence
         if: always()
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: evidence-offline
           path: evidence/
@@ -311,7 +311,7 @@ jobs:
         uses: actions/checkout@v7.0.1
 
       - name: Setup Python
-        uses: actions/setup-python@v7.0.0
+        uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.11"
           cache: "pip"
@@ -444,7 +444,7 @@ jobs:
 
       - name: Upload results bundle
         if: always()
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: results-browser
           path: reports/results/
@@ -457,7 +457,7 @@ jobs:
 
       - name: Upload evidence
         if: always()
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: evidence-browser
           path: evidence/
@@ -474,7 +474,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-python@v7.0.0
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.11"
           cache: "pip"
@@ -499,7 +499,7 @@ jobs:
         run: python -m gate.evidence stage --job checks
       - name: Upload evidence
         if: always()
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: evidence-checks
           path: evidence/
@@ -531,7 +531,7 @@ jobs:
         run: python -m gate.evidence stage --job visual
       - name: Upload evidence
         if: always()
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: evidence-visual
           path: evidence/
@@ -554,7 +554,7 @@ jobs:
         run: pytest tests/demo_examples/visual -m demo_ui --browser-channel=chromium
         env:
           VISUAL_UPDATE: "1"
-      - uses: actions/upload-artifact@v7.0.1
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: visual-baselines
           path: visual_baselines/
@@ -564,7 +564,7 @@ jobs:
         run: python -m gate.evidence stage --job visual-baselines
       - name: Upload evidence
         if: always()
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: evidence-visual-baselines
           path: evidence/
@@ -580,7 +580,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-python@v7.0.0
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.13"
       - name: Install dependencies
@@ -598,7 +598,7 @@ jobs:
     continue-on-error: true
     steps:
       - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-python@v7.0.0
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.11"
           cache: "pip"
@@ -619,7 +619,7 @@ jobs:
         run: python -m gate.evidence stage --job drafts
       - name: Upload evidence
         if: always()
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: evidence-drafts
           path: evidence/
@@ -637,7 +637,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-python@v7.0.0
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.11"
           cache: "pip"
@@ -666,7 +666,7 @@ jobs:
         run: python -m gate.evidence stage --job platform
       - name: Upload evidence
         if: always()
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: evidence-platform
           path: evidence/
@@ -698,7 +698,7 @@ jobs:
       TEST_ENV: ${{ inputs.env || 'qa' }}
     steps:
       - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-python@v7.0.0
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.11"
           cache: "pip"
@@ -737,7 +737,7 @@ jobs:
         run: python -m gate.evidence stage --job "browser-matrix--$BROWSER"
       - name: Upload evidence
         if: always()
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: evidence-browser-matrix--${{ matrix.browser }}
           path: evidence/
@@ -766,7 +766,7 @@ jobs:
       AUTH_MODE: ${{ github.event_name == 'schedule' && 'token' || inputs.auth_mode }}
     steps:
       - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-python@v7.0.0
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.11"
           cache: "pip"
@@ -792,7 +792,7 @@ jobs:
         run: python -m gate.evidence stage --job render
       - name: Upload evidence
         if: always()
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: evidence-render
           path: evidence/
@@ -811,11 +811,11 @@ jobs:
     concurrency: results-history
     steps:
       - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-python@v7.0.0
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.11"
       - run: pip install -r requirements.txt
-      - uses: actions/download-artifact@v8.0.1
+      - uses: actions/download-artifact@v8.0.2
         with:
           pattern: results-*
           path: artifacts/
@@ -851,11 +851,11 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-python@v7.0.0
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.11"
       - run: pip install -r requirements.txt
-      - uses: actions/download-artifact@v8.0.1
+      - uses: actions/download-artifact@v8.0.2
         with:
           pattern: results-*
           path: artifacts/
@@ -871,7 +871,7 @@ jobs:
         run: python -m results dashboard --out reports/dashboard/
       - name: Render living docs
         run: python -m results livedocs --out reports/dashboard/living-docs/
-      - uses: actions/upload-artifact@v7.0.1
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: dashboard
           path: reports/dashboard/
@@ -884,10 +884,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - uses: actions/download-artifact@v8.0.1
+      - uses: actions/download-artifact@v8.0.2
         with:
           path: baseline/
-      - uses: actions/upload-artifact@v7.0.1
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: main-baseline
           path: baseline/
@@ -905,12 +905,12 @@ jobs:
       actions: read
     steps:
       - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-python@v7.0.0
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.11"
           cache: "pip"
       - run: pip install -r requirements.txt
-      - uses: actions/download-artifact@v8.0.1
+      - uses: actions/download-artifact@v8.0.2
         with:
           path: run-reports/
       - name: Latest main baseline (absent is fine, the comment says so)
@@ -942,7 +942,7 @@ jobs:
         uses: actions/checkout@v7.0.1
 
       - name: Setup Python
-        uses: actions/setup-python@v7.0.0
+        uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.11"
           cache: "pip"
@@ -973,7 +973,7 @@ jobs:
 
       - name: Upload evidence
         if: always()
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: evidence-bringup
           path: evidence/
@@ -993,13 +993,13 @@ jobs:
       description: ${{ steps.describe.outputs.description }}
     steps:
       - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-python@v7.0.0
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.11"
           cache: "pip"
       - run: pip install -r requirements.txt
       - name: Download every evidence artefact (none is tolerated)
-        uses: actions/download-artifact@v8.0.1
+        uses: actions/download-artifact@v8.0.2
         with:
           pattern: evidence-*
           path: evidence-in/
@@ -1014,7 +1014,7 @@ jobs:
         env:
           TARGET_ENV: ${{ inputs.env || 'qa' }}
           PREFIX: ${{ github.event_name == 'schedule' && 'nightly' || '' }}
-      - uses: actions/upload-artifact@v7.0.1
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: published-report
           path: reports/published/
@@ -1032,12 +1032,12 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-python@v7.0.0
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.11"
           cache: "pip"
       - run: pip install -r requirements.txt
-      - uses: actions/download-artifact@v8.0.1
+      - uses: actions/download-artifact@v8.0.2
         with:
           pattern: evidence-*
           path: evidence-in/
