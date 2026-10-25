@@ -14,13 +14,13 @@ from pathlib import Path
 from checks._outcome import CheckOutcome, exit_code
 from checks._sink import JsonlSink
 from checks.security.allowlist import Allowlist
-from checks.security.scan import DEFAULT_ALLOWLIST, DEFAULT_LOCKFILE, KIND, TOOLS, scan
+from checks.security.scan import DEFAULT_ALLOWLIST, DEFAULT_LOCKFILES, KIND, TOOLS, scan
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m checks.security")
     parser.add_argument("--tools", default=",".join(TOOLS))
-    parser.add_argument("--lockfile", default=str(DEFAULT_LOCKFILE))
+    parser.add_argument("--lockfile", action="append", default=None, help="pip-audit input")
     parser.add_argument("--allowlist", default=str(DEFAULT_ALLOWLIST))
     parser.add_argument("--path", action="append", default=None, help="bandit target")
     parser.add_argument("--no-record", action="store_true")
@@ -33,7 +33,7 @@ def main(argv: list[str] | None = None) -> int:
     else:
         outcome = scan(
             requested,
-            lockfile=Path(args.lockfile),
+            lockfile=[Path(p) for p in args.lockfile] if args.lockfile else DEFAULT_LOCKFILES,
             allowlist=allowlist,
             bandit_paths=[Path(p) for p in args.path] if args.path else None,
             sink=None if args.no_record else JsonlSink(),

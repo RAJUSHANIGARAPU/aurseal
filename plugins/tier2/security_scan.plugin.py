@@ -53,7 +53,11 @@ class SecurityScanPlugin(BasePlugin):
         outcome = security_scan.scan(
             requested,
             root=root,
-            lockfile=Path(context.get("lockfile") or security_scan.DEFAULT_LOCKFILE),
+            lockfile=(
+                Path(context["lockfile"])
+                if context.get("lockfile")
+                else security_scan.DEFAULT_LOCKFILES
+            ),
             allowlist=allowlist,
             sink=sink,
         )

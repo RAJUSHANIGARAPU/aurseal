@@ -3,7 +3,7 @@
 
 # results.io.junit: hardened XML parsing for JUnit imports (the stdlib parser behind a
 # DOCTYPE/ENTITY guard is used when absent).
-defusedxml>=0.7.1
+defusedxml==0.7.1
 
 # qaplatform: the REST API server (qaplatform/http/app.py) and its tests
 # (tests/qaplatform_http, collected only when these are installed). Pinned, not ranged:

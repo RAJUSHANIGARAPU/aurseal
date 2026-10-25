@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 from checks._sink import MemorySink
+from checks.security import scan as scan_module
 from checks.security import tools
 from checks.security.allowlist import AllowEntry, Allowlist
 from checks.security.model import SecurityFinding, Severity, ToolRun
@@ -213,6 +214,34 @@ class TestRunnersWithoutTools:
         lock.write_text("x==1\n")
         run = tools.run_pip_audit(lock, report=tmp_path / "p.json")
         assert not run.ran and "network down" in run.reason
+
+    def test_pip_audit_reads_every_lock_file_and_names_a_missing_one(self, tmp_path, monkeypatch):
+        seen = {}
+
+        def run(cmd, cwd=None):
+            seen["cmd"] = cmd
+            Path(cmd[cmd.index("-o") + 1]).write_text('{"dependencies": []}')
+            return subprocess.CompletedProcess(cmd, 0, "", "")
+
+        monkeypatch.setattr(tools, "_module_cli", lambda module: ["python", "-m", module])
+        monkeypatch.setattr(tools, "_run", run)
+        monkeypatch.setattr(tools, "_version", lambda cmd: None)
+        first, second = tmp_path / "a.txt", tmp_path / "b.txt"
+        first.write_text("x==1\n")
+        assert "b.txt" in tools.run_pip_audit([first, second], report=tmp_path / "p.json").reason
+        second.write_text("y==2\n")
+        assert tools.run_pip_audit([first, second], report=tmp_path / "p.json").ran
+        assert seen["cmd"][3:7] == ["-r", str(first), "-r", str(second)]
+
+    def test_every_requirements_file_is_audited_and_fully_pinned(self):
+        """A requirements file left out of the audit is invisible to the security gate."""
+        audited = {p.name for p in scan_module.DEFAULT_LOCKFILES}
+        present = {p.name for p in scan_module.REPO_ROOT.glob("requirements*.txt")}
+        assert present - audited == {"requirements.txt"}
+        for path in scan_module.DEFAULT_LOCKFILES:
+            lines = path.read_text(encoding="utf-8").splitlines()
+            loose = [ln for ln in lines if ln.split("#")[0].strip() and "==" not in ln]
+            assert not loose, f"{path.name}: pip-audit --no-deps needs exact pins: {loose}"
 
     def test_default_bandit_targets_skip_tests_and_venv(self, tmp_path):
         for name in ("pkg", "tests", ".venv", "docs"):
