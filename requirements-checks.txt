@@ -4,7 +4,7 @@
 # released at least two weeks before it was added.
 SQLAlchemy==2.0.36  # checks.db.SqlAlchemyProbe: any non-SQLite database
 axe-playwright-python==0.1.8  # accessibility: bundles axe-core 4.12.1 (MPL-2.0)
-pillow==12.3.0  # visual regression: image decode and pixel diff (MIT-CMU)
+pillow==13.0.0  # visual regression: image decode and pixel diff (MIT-CMU)
 bandit==1.9.4  # security: static analysis of first-party code (Apache-2.0)
 pip-audit==2.10.1  # security: known vulnerabilities in the pinned lock file (Apache-2.0)
 mutmut==3.8.0  # mutation testing, nightly only (BSD-3-Clause)

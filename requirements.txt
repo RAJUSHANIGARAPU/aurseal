@@ -6,8 +6,7 @@ cfgv==3.5.0
 charset-normalizer==3.4.4
 distlib==0.4.4
 execnet==2.1.2
-filelock==4.2.1; python_version >= "3.11"
-filelock==3.24.3; python_version < "3.11"
+filelock==4.2.1
 greenlet==3.3.1
 identify==2.6.16
 idna==3.20
