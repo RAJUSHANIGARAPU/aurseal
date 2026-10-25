@@ -57,7 +57,7 @@ api.delete(f"items/{created.location_id}")
 
 ```python
 r = api.post("orders", json={"sku": "A-1"})
-assert r.is_success, r          # failure message shows status, URL and body
+assert r.is_success, r  # failure message shows status, URL and body
 order_id = r.location_id
 ```
 
@@ -66,12 +66,15 @@ order_id = r.location_id
 ```python
 from api.clients.http_engine import Part
 
-api.post_multipart("documents", [
-    Part.json("meta", {"title": "Quarterly report"}),
-    Part.file("file", "report.pdf", "application/pdf", pdf_bytes),
-])
+api.post_multipart(
+    "documents",
+    [
+        Part.json("meta", {"title": "Quarterly report"}),
+        Part.file("file", "report.pdf", "application/pdf", pdf_bytes),
+    ],
+)
 
-pdf = api.get_bytes("documents/42/content")   # raises ApiError on non-2xx
+pdf = api.get_bytes("documents/42/content")  # raises ApiError on non-2xx
 ```
 
 `get_bytes` sends `Accept: application/octet-stream` by default. Pass
@@ -137,7 +140,7 @@ from api.clients.versioned_retry import query_version_matcher
 api = HttpEngine(
     "https://api.example.test/v1/",
     versioned=query_version_matcher(exclude=("/preview/",)),
-    version_field="version",     # JSON field holding the entity version
+    version_field="version",  # JSON field holding the entity version
     max_retries=2,
     backoff_s=5.0,
 )
@@ -196,7 +199,11 @@ error differently. There are no environment variables.
 ```python
 from api.clients.route_probe import NotFoundShapes
 
-shapes = NotFoundShapes(gateway_keys=frozenset({"trace"}), error_key="code",
-                        error_text="NO_ROUTE", service_keys=frozenset({"reason"}))
+shapes = NotFoundShapes(
+    gateway_keys=frozenset({"trace"}),
+    error_key="code",
+    error_text="NO_ROUTE",
+    service_keys=frozenset({"reason"}),
+)
 classify_not_found(r, shapes)
 ```

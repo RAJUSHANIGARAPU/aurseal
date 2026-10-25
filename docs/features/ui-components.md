@@ -46,7 +46,9 @@ with it after a `.` or `-`. `by_path(page, path)` uses the same rule as a
 ```python
 from ui.components.exact_attribute import by_path
 
-by_path(page, "customer.email")   # matches form.customer.email, not ...email-error or ...emailAddress
+by_path(
+    page, "customer.email"
+)  # matches form.customer.email, not ...email-error or ...emailAddress
 ```
 
 ## Field reading
@@ -330,7 +332,9 @@ Prefer an API delete when the system offers one.
 from ui.components.submit_outcome import submit_and_capture
 
 outcome = submit_and_capture(
-    page, "Next", "/api/person/submit",
+    page,
+    "Next",
+    "/api/person/submit",
     advanced=lambda p: p.get_by_role("heading", name="Address").is_visible(),
 )
 assert outcome.rejected, outcome.describe()

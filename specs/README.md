@@ -32,8 +32,8 @@ Or invoke `TestGenerator` directly from a Python script or Claude Code command:
 from core.ai.test_generator import TestGenerator
 
 gen = TestGenerator()
-code = gen.generate_from_trace()          # from a Playwright trace ZIP
-code = gen.generate_page_object(...)      # from a spec description
+code = gen.generate_from_trace()  # from a Playwright trace ZIP
+code = gen.generate_page_object(...)  # from a spec description
 ```
 
 ### Stage 3 — Healer (`autonomous_ui`)

@@ -108,7 +108,7 @@ assert (renewal.net, renewal.tax) == (expected.net, expected.tax), explain_index
 reports everything:
 
 ```python
-rows = support.as_rows(transactions)   # dates parsed, inclusive end dates
+rows = support.as_rows(transactions)  # dates parsed, inclusive end dates
 problems = [
     *lc.renewal_row_starts_on(rows, old_term_end),
     *lc.contiguous(rows),
@@ -284,8 +284,9 @@ surface signalled a refusal. Each probe asserts its expected outcome:
 **How to use it.**
 
 ```python
-result = run_probe(demo_http, load_fixture("customer-matrix"), {**base(tag), "SHARE": 21},
-                   today=support.TODAY)
+result = run_probe(
+    demo_http, load_fixture("customer-matrix"), {**base(tag), "SHARE": 21}, today=support.TODAY
+)
 assert result.refused_at == "subscribe", result.describe()
 ```
 
@@ -356,11 +357,15 @@ terms' share.
 **How to use it.**
 
 ```python
-factory = PrerequisiteFactory(replay, [
-    Prerequisite("reseller", load_fixture("reseller"), depends_on=("reseller_terms",)),
-    Prerequisite("reseller_terms", load_fixture("reseller-terms"),
-                 params={"share_percent": 4.5}),
-])
+factory = PrerequisiteFactory(
+    replay,
+    [
+        Prerequisite("reseller", load_fixture("reseller"), depends_on=("reseller_terms",)),
+        Prerequisite(
+            "reseller_terms", load_fixture("reseller-terms"), params={"share_percent": 4.5}
+        ),
+    ],
+)
 built = factory.provision("reseller")
 ```
 

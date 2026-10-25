@@ -132,6 +132,7 @@ def step_screenshot_page(page):
 ```python
 import allure
 
+
 def test_checkout(page):
     with allure.step("Open the basket"):
         page.goto("https://shop.example.test/basket")

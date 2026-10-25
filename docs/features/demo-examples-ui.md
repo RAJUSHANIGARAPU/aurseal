@@ -70,10 +70,12 @@ example closes a company subscription through the screen and checks the stored
 customer's account wins) and one paid by direct debit (its own account wins).
 
 ```python
-source, payee = support.first_complete([
-    ("subscription", {"account": view["payment_method"].get("account"), "holder": holder}),
-    ("customer", {"account": customer["payout_account"], "holder": customer["display_name"]}),
-])
+source, payee = support.first_complete(
+    [
+        ("subscription", {"account": view["payment_method"].get("account"), "holder": holder}),
+        ("customer", {"account": customer["payout_account"], "holder": customer["display_name"]}),
+    ]
+)
 ```
 
 Test: `test_cancellation_ui.py::test_the_credit_goes_to_the_first_complete_payee[payout-account|debit-account]`.
@@ -90,10 +92,19 @@ subscription confirmed. The screen's amounts are compared with the captured calc
 response and the stored subscription.
 
 ```python
-run = SubscriptionWizardFlow(page, demo_sut.base_url).create(WizardInput(
-    partner["number"], customer["number"], "Team plan (TEAM)", date(2026, 3, 1),
-    workspace_type="TRAINING", data_region="EU-NORTH", net="45.00", tax_rate="20",
-    commission="10"))
+run = SubscriptionWizardFlow(page, demo_sut.base_url).create(
+    WizardInput(
+        partner["number"],
+        customer["number"],
+        "Team plan (TEAM)",
+        date(2026, 3, 1),
+        workspace_type="TRAINING",
+        data_region="EU-NORTH",
+        net="45.00",
+        tax_rate="20",
+        commission="10",
+    )
+)
 assert run.screening_status == "verified"
 assert run.amounts["gross"] == Decimal("54.00")
 ```
@@ -255,7 +266,8 @@ proves the other address fields are untouched, on screen and over the API.
 form = CustomerMaintenance(page, base_url).open_new()
 form.fill_identity(display_name="Harbourline Studio", customer_type="COMPANY")
 form.set_address(line1="2 Pier Steps", postal_code="PS 12", city="Gullhaven")
-form.set_email("studio@harbourline.example"); form.save()
+form.set_email("studio@harbourline.example")
+form.save()
 ```
 
 Test: `test_customer_maintenance.py::test_create_edit_and_read_back_a_customer`.
@@ -437,8 +449,13 @@ ran with (also visible on the screen's fault banner, `DemoPage.active_faults()`)
 Signatures are keyed to the oracle's wording, not to the defect id.
 
 ```python
-still_reproduces("BUG-202", r"tax \S+ is not the half-up rounding \S+ of net x rate",
-                 oracle, exercised=control, closed=False)
+still_reproduces(
+    "BUG-202",
+    r"tax \S+ is not the half-up rounding \S+ of net x rate",
+    oracle,
+    exercised=control,
+    closed=False,
+)
 ```
 
 Tests: `test_price_form.py::test_negative_price_detector_closed[healthy|negative-price-accepted]`,

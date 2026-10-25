@@ -22,14 +22,14 @@ without the minus would read a refund as a charge.
 ```python
 from oracles import amounts
 
-amounts.parse_amount("-€ 1.380,00")               # Decimal('-1380.00')
-amounts.parse_amount("($12.00)", "en_US")         # Decimal('-12.00')
-amounts.amount_after_label(text, "Total due")     # first amount after the label, or None
-amounts.find_amounts(text)                        # every amount; dates are masked first
-amounts.find_dates(text, "en_US")                 # impossible dates are skipped
+amounts.parse_amount("-€ 1.380,00")  # Decimal('-1380.00')
+amounts.parse_amount("($12.00)", "en_US")  # Decimal('-12.00')
+amounts.amount_after_label(text, "Total due")  # first amount after the label, or None
+amounts.find_amounts(text)  # every amount; dates are masked first
+amounts.find_dates(text, "en_US")  # impossible dates are skipped
 amounts.date_after_label(text, "Due date")
-amounts.parse_json_amount(0.1)                    # Decimal('0.1'), no float artefacts
-amounts.format_amount(Decimal("-1234.5"))         # '-1.234,50'
+amounts.parse_json_amount(0.1)  # Decimal('0.1'), no float artefacts
+amounts.format_amount(Decimal("-1234.5"))  # '-1.234,50'
 ```
 
 An unknown locale raises `ValueError`. Pass a custom `NumberFormat` for any
@@ -45,9 +45,9 @@ install hint, and the rest of `oracles` still works.
 ```python
 from oracles import pdf_text
 
-text = pdf_text.extract_text("reports/invoice.pdf")   # or raw bytes
+text = pdf_text.extract_text("reports/invoice.pdf")  # or raw bytes
 pdf_text.extract_amounts(pdf_bytes, "en_US")
-pdf_text.available()                                   # False when pypdf is absent
+pdf_text.available()  # False when pypdf is absent
 ```
 
 Install it with `pip install pypdf`.
@@ -66,7 +66,7 @@ validation message.
 ```python
 from oracles.field_text import carries_no_value, strip_label_echo
 
-strip_label_echo("Country * Country Netherland", "Country")    # 'Netherland'
+strip_label_echo("Country * Country Netherland", "Country")  # 'Netherland'
 if carries_no_value(scraped, "Legal form", phrases=["is required", "invalid value"]):
     pytest.fail("the field holds no value")
 ```
@@ -126,12 +126,18 @@ Any other name raises `ValueError` listing the two.
 ```python
 from oracles import placeholder_scan as ps
 
-source = ps.package_source_text(docx_bytes)  # body, headers, footers; markup stripped so split runs rejoin
-ps.placeholder_paths(source)                 # ['buyer.city', 'amount', ...] in order, repeats kept
-ps.damaged_placeholders(source)              # e.g. '{ buyer.city }}' -- would print verbatim
-ps.conditional_blocks(source)                # [Conditional(guard, has_alternative)], an else counts only for its own block
-ps.value_filters(source)                     # ValueFilter(text, left_quote, right_quote); .uses_typographic_quote, .quotes_disagree
-ps.top_level_names(source)                   # first path segments read, never this/true/false
+source = ps.package_source_text(
+    docx_bytes
+)  # body, headers, footers; markup stripped so split runs rejoin
+ps.placeholder_paths(source)  # ['buyer.city', 'amount', ...] in order, repeats kept
+ps.damaged_placeholders(source)  # e.g. '{ buyer.city }}' -- would print verbatim
+ps.conditional_blocks(
+    source
+)  # [Conditional(guard, has_alternative)], an else counts only for its own block
+ps.value_filters(
+    source
+)  # ValueFilter(text, left_quote, right_quote); .uses_typographic_quote, .quotes_disagree
+ps.top_level_names(source)  # first path segments read, never this/true/false
 ps.undeclared_paths(source, schema, loop_aliases={"line": "order.lines"})
 ```
 
@@ -146,12 +152,18 @@ the file as unscanned rather than clean.
 ```python
 from oracles import template_structure as ts
 
-cov = ts.manifest_coverage(deployed_names, manifest_names,
-                           quarantine=["legacy-letter"], exempt_prefixes=["ledger-"])
-assert cov.ok, cov            # undescribed, stale quarantine entries, duplicate names
+cov = ts.manifest_coverage(
+    deployed_names, manifest_names, quarantine=["legacy-letter"], exempt_prefixes=["ledger-"]
+)
+assert cov.ok, cov  # undescribed, stale quarantine entries, duplicate names
 
-findings = ts.validate_template("invoice", docx_bytes, syntax="mustache",
-                                schema=payload_schema, known_formats={"dd-MM-yyyy", "0.00"})
+findings = ts.validate_template(
+    "invoice",
+    docx_bytes,
+    syntax="mustache",
+    schema=payload_schema,
+    known_formats={"dd-MM-yyyy", "0.00"},
+)
 # kinds: UNREADABLE, BAD-DELIMITER, CURLY-QUOTE, UNKNOWN-FILTER, UNDECLARED-PATH
 
 results = ts.check_rendered(entries, render=my_render, extract=pdf_text.extract_text)
@@ -187,11 +199,14 @@ from decimal import Decimal
 from oracles import daycount as dc
 
 p = dc.Period(date(2030, 3, 15), date(2030, 4, 14), termination=date(2030, 3, 31))
-dc.candidate_refunds(p, Decimal("90.00"))   # one figure per convention, negative
-dc.describe_match(p, Decimal("90.00"), observed)   # never treats a tie as evidence for one convention
+dc.candidate_refunds(p, Decimal("90.00"))  # one figure per convention, negative
+dc.describe_match(
+    p, Decimal("90.00"), observed
+)  # never treats a tie as evidence for one convention
 
-dc.assert_pro_rata_refund("order A-1", p, Decimal("90.00"), observed,
-                          refund_tax=observed_tax, tax_rate=Decimal("0.20"))
+dc.assert_pro_rata_refund(
+    "order A-1", p, Decimal("90.00"), observed, refund_tax=observed_tax, tax_rate=Decimal("0.20")
+)
 ```
 
 The bounds assertion checks four things:
@@ -208,10 +223,12 @@ The bounds assertion checks four things:
 ```python
 from oracles.period_window import Window, choose_mid_period_date, last_booked_period
 
-period = last_booked_period(rows)          # [(start, end, state)], state "BOOKED" by default
-chosen = choose_mid_period_date(period, days_into=45, blocked=scheduled_windows, valid_to=end_of_validity)
+period = last_booked_period(rows)  # [(start, end, state)], state "BOOKED" by default
+chosen = choose_mid_period_date(
+    period, days_into=45, blocked=scheduled_windows, valid_to=end_of_validity
+)
 if not chosen:
-    pytest.skip(chosen.reason)              # NoWindow says which rule ruled it out
+    pytest.skip(chosen.reason)  # NoWindow says which rule ruled it out
 ```
 
 The chosen date is strictly inside the period. If `days_into` falls outside
@@ -222,10 +239,12 @@ it, the midpoint is used instead.
 ```python
 from oracles.charges import ChargeSchedule, sign_matches
 
-schedule = ChargeSchedule({1: Decimal("0.05"), 3: Decimal("0.03"), 12: Decimal("0")}, tax_rate=Decimal("0.20"))
-schedule.compute(Decimal("10.10"), 1)          # net/tax/total, half-up to cents
-schedule.installment_delta(old, new, 3)        # exact
-schedule.period_delta_ceiling(old, new, 3)     # an upper bound, not an expected value
+schedule = ChargeSchedule(
+    {1: Decimal("0.05"), 3: Decimal("0.03"), 12: Decimal("0")}, tax_rate=Decimal("0.20")
+)
+schedule.compute(Decimal("10.10"), 1)  # net/tax/total, half-up to cents
+schedule.installment_delta(old, new, 3)  # exact
+schedule.period_delta_ceiling(old, new, 3)  # an upper bound, not an expected value
 ```
 
 ## Ledger schedule checks
@@ -255,9 +274,14 @@ assert check.recomputed, check.describe()
 ```python
 from oracles.reconciliation import reconcile
 
-result = reconcile(document_text, ledger_legs,
-                   {"Net amount": "net", "Tax": "tax", "Total": "total"},
-                   locale="en_GB", compare_magnitudes=True, expected_sign=-1)
+result = reconcile(
+    document_text,
+    ledger_legs,
+    {"Net amount": "net", "Tax": "tax", "Total": "total"},
+    locale="en_GB",
+    compare_magnitudes=True,
+    expected_sign=-1,
+)
 assert result.ok, result.describe()
 ```
 
@@ -278,12 +302,16 @@ deliberately *not* treated as rejections:
 from oracles.rejection import Bound, RejectionSignals, appeared_since
 
 signals = RejectionSignals(
-    entered="150", allowed=Bound.at_most("100"), read_back=field_value,
+    entered="150",
+    allowed=Bound.at_most("100"),
+    read_back=field_value,
     inline_errors=appeared_since(errors_before, errors_after),
     page_alerts=appeared_since(alerts_before, alerts_after),
-    control_invalid=aria_invalid, api_status=last_status, state_changed=moved,
+    control_invalid=aria_invalid,
+    api_status=last_status,
+    state_changed=moved,
 )
-assert signals.entered_is_out_of_bound()       # precondition
+assert signals.entered_is_out_of_bound()  # precondition
 assert signals.rejected, signals.describe()
 ```
 
@@ -308,8 +336,13 @@ rules = [
     dh.required_when("kind", "REFUND", ["payee.account"], "refund-payee"),
     dh.stale_by_uuid7("draft_id", max_age=timedelta(days=2)),
 ]
-scanner = dh.Scanner(dh.GetOnlyApi.over(api), dh.select_rules(rules, "all"),
-                     items_path="items", page_size=100, max_pages=10)
+scanner = dh.Scanner(
+    dh.GetOnlyApi.over(api),
+    dh.select_rules(rules, "all"),
+    items_path="items",
+    page_size=100,
+    max_pages=10,
+)
 report = scanner.scan("records")
 assert report.complete and not report.findings, report.describe()
 ```
@@ -326,7 +359,9 @@ answer in the right shape. A transport failure is a failure, never a skip.
 from oracles import data_health as dh, smoke
 
 checks = [
-    smoke.SmokeCheck("version", "version", (smoke.status_is(200), smoke.json_path_non_blank("version"))),
+    smoke.SmokeCheck(
+        "version", "version", (smoke.status_is(200), smoke.json_path_non_blank("version"))
+    ),
     smoke.SmokeCheck("listing", "items", (smoke.json_path_is_list("items"),), params={"size": 1}),
 ]
 results = smoke.run_smoke(dh.GetOnlyApi.over(api), checks)
@@ -441,10 +476,12 @@ whole, and double-quoted values may hold anything. So
 ```python
 from oracles.activity_export import ColumnMap, read_activity_export
 
-columns = ColumnMap(actor=("who", "mail"), method=("request", "verb"),
-                    path=("request", "url"), status="status")
-rows = read_activity_export(api.get_bytes("audit/exports/7/download"),
-                            entry="activity.csv", columns=columns)
+columns = ColumnMap(
+    actor=("who", "mail"), method=("request", "verb"), path=("request", "url"), status="status"
+)
+rows = read_activity_export(
+    api.get_bytes("audit/exports/7/download"), entry="activity.csv", columns=columns
+)
 assert any(r.method == "DELETE" and r.path == "/api/items/9" for r in rows)
 ```
 
@@ -470,9 +507,10 @@ and expected code (`CodeMatch.converted`). `state(mapped)` sums that up as
 ```python
 from oracles.code_mapping import CodeMapping, MigrationState
 
-mapping = CodeMapping.load("data/plan-codes.json")    # {"Standard cover": "PLN-110", ...}
-terms = mapping.mapped_terms("SUB-000123", entity["plan_terms"],
-                             description_key="description", code_key="code")
+mapping = CodeMapping.load("data/plan-codes.json")  # {"Standard cover": "PLN-110", ...}
+terms = mapping.mapped_terms(
+    "SUB-000123", entity["plan_terms"], description_key="description", code_key="code"
+)
 assert mapping.state(terms) is MigrationState.MIGRATED, "\n".join(map(str, terms))
 ```
 
@@ -638,9 +676,10 @@ record a test is looking for. A naive cut-off is refused too.
 ```python
 from oracles.time_window import parse_instant, produced_since
 
-deployed = parse_instant(os.environ["DEPLOYED_AT"])          # e.g. 2031-05-04T10:00:00Z
-new_files = produced_since(details["files"], "statement", deployed,
-                           type_key="type", time_key="created_at")
+deployed = parse_instant(os.environ["DEPLOYED_AT"])  # e.g. 2031-05-04T10:00:00Z
+new_files = produced_since(
+    details["files"], "statement", deployed, type_key="type", time_key="created_at"
+)
 ```
 
 **Configuration.** `type_key` / `time_key` (defaults `type` / `created_at`);

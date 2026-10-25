@@ -370,20 +370,24 @@ Write a listener or reporter in your runner that:
 ```python
 from qaplatform.client import PlatformClient
 
-client = PlatformClient(base_url, token, project="demo")      # requests-based, timeout 30 s
-run = client.create_run("nightly", external_id=ci_run_id, expected_count=40,
-                        provenance={"commit": sha, "branch": branch})
-client.push_results(run["run_id"], results)                    # list of test-result dicts; batched
+client = PlatformClient(base_url, token, project="demo")  # requests-based, timeout 30 s
+run = client.create_run(
+    "nightly",
+    external_id=ci_run_id,
+    expected_count=40,
+    provenance={"commit": sha, "branch": branch},
+)
+client.push_results(run["run_id"], results)  # list of test-result dicts; batched
 client.push_junit(run["run_id"], "reports/junit.xml")
 client.push_verdicts(run["run_id"], "reports/verdicts/verdicts.jsonl")
-summary = client.finish_run(run["run_id"])                     # summary["integrity"]["verdict"]
+summary = client.finish_run(run["run_id"])  # summary["integrity"]["verdict"]
 for row in client.verdicts(run_id=run["run_id"], ticket="BUG-142"):  # follows cursors
     ...
 client.traceability(requirement="REQ-12")
 client.release_verdict("2.4.0")
 req = client.request_run("regression", environment="staging")
 client.wait_for_run_request(req["id"], timeout_s=3600)
-client.health()                                                # never raises on 503
+client.health()  # never raises on 503
 ```
 
 Errors raise `qaplatform.errors` classes mapped from the problem document: `BadRequest`

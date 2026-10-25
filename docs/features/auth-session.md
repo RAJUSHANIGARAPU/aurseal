@@ -112,7 +112,9 @@ result = login_once(
     browser,
     cache,
     lambda page: UniversalLoginPage(page).login(
-        settings.login_url, settings.username, settings.password,
+        settings.login_url,
+        settings.username,
+        settings.password,
         app_url=settings.post_login_url,
     ),
 )
@@ -153,8 +155,8 @@ Other rules:
 ```python
 from core.auth.session_token_store import jwt_is_usable, jwt_expiry
 
-jwt_expiry(token)                 # 1767225600.0, or None
-jwt_is_usable(token, margin_s=60) # False within the last minute
+jwt_expiry(token)  # 1767225600.0, or None
+jwt_is_usable(token, margin_s=60)  # False within the last minute
 ```
 
 ## Session refresh
@@ -177,8 +179,9 @@ after the context exists leaves the page unauthenticated.
 ```python
 from core.auth.session import SessionToken
 
-session = SessionToken(acquire=fetch_token, cache=cache, mode=settings.mode,
-                       supplied_token=settings.supplied_token)
+session = SessionToken(
+    acquire=fetch_token, cache=cache, mode=settings.mode, supplied_token=settings.supplied_token
+)
 headers = {"Authorization": f"Bearer {session.token()}"}
 ```
 
@@ -294,8 +297,8 @@ set or run. A locked or missing store backend counts as "not found".
 ```python
 from core.auth.secrets import lookup_secret, require_secret
 
-secret = lookup_secret("AUTH_CLIENT_SECRET")      # None when nowhere
-secret = require_secret("AUTH_CLIENT_SECRET")     # raises SecretNotFound with guidance
+secret = lookup_secret("AUTH_CLIENT_SECRET")  # None when nowhere
+secret = require_secret("AUTH_CLIENT_SECRET")  # raises SecretNotFound with guidance
 ```
 
 Store a secret once:

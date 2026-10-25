@@ -219,6 +219,7 @@ NO_MATCH). Demo users: `demo-admin` / `demo-clerk`, password `demo-password`; cl
 # conftest.py
 from demo_sut.pytest_plugin import demo_control, demo_http, demo_seed, demo_sut  # noqa: F401
 
+
 def test_credit(demo_sut, demo_control, demo_seed):
     demo_control.freeze("2026-06-03T09:00:00Z")
     sub = demo_seed.subscription(start_date="2026-06-01")

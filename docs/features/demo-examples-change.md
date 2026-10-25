@@ -111,8 +111,8 @@ following change starts from a record that changed under an existing subscriptio
 ```python
 from api.clients.billing_client import BillingClient
 
-billing = BillingClient(demo_http)                      # HttpEngine on <base>/api/
-customer = billing.customer_of(subscription_id)         # resolves the holder's record
+billing = BillingClient(demo_http)  # HttpEngine on <base>/api/
+customer = billing.customer_of(subscription_id)  # resolves the holder's record
 billing.update_customer(customer["id"], type="COMPANY", display_name="Fernvale Co")
 draft = billing.open_draft(subscription_id, "change", changes={"customer_id": successor_id})
 billing.accept_ownership(draft["id"])
@@ -140,7 +140,7 @@ field blank) or `FAIL` (a gap on data this run built), and `fields_to_compare` r
 fields a before/after comparison may judge.
 
 ```python
-blank = blank_derived_fields(before["holder"])          # e.g. ["phone"]
+blank = blank_derived_fields(before["holder"])  # e.g. ["phone"]
 gap = classify_baseline_gap(blank, built_this_run=target.was_seeded)
 for field in fields_to_compare(blank, gap):
     assert after["holder"][field] == before["holder"][field]

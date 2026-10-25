@@ -71,7 +71,13 @@ artifact_policy.register(config)
 ```
 
 ```python
-from core.artifact_policy import RetentionPolicy, finalize_videos, finish_trace, page_videos, worth_keeping
+from core.artifact_policy import (
+    RetentionPolicy,
+    finalize_videos,
+    finish_trace,
+    page_videos,
+    worth_keeping,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -82,12 +88,19 @@ def enable_artifacts(context, request, browser_name):
     keep = worth_keeping(request.node)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     name = request.node.name
-    finish_trace(context, policy.keep_trace(keep), artifact_names.trace_path(name, browser_name, stamp))
+    finish_trace(
+        context, policy.keep_trace(keep), artifact_names.trace_path(name, browser_name, stamp)
+    )
     videos = page_videos(context)  # read the handles before closing
-    context.close()                # closing flushes the video files
-    finalize_videos(videos, policy.keep_video(keep), [
-        artifact_names.video_path(name, browser_name, stamp, i, len(videos)) for i in range(len(videos))
-    ])
+    context.close()  # closing flushes the video files
+    finalize_videos(
+        videos,
+        policy.keep_video(keep),
+        [
+            artifact_names.video_path(name, browser_name, stamp, i, len(videos))
+            for i in range(len(videos))
+        ],
+    )
 ```
 
 ### Configuration
@@ -124,7 +137,7 @@ recorder processes.
 ```python
 from core.bounded_close import aclose_within, close_within
 
-close_within("tunnel", tunnel.stop)                      # thread-safe resource
+close_within("tunnel", tunnel.stop)  # thread-safe resource
 await aclose_within("browser", browser.close, timeout_s=5)  # async Playwright
 ```
 
@@ -226,8 +239,10 @@ two runs a week apart look identical.
 ```python
 from core.provenance import CheckoutProvenance
 
-specs = CheckoutProvenance(prefix="SPEC_REPO", default_sibling="shared-specs", marker_file="openapi.yaml")
-specs.as_environment("Specs")   # {"Specs.Ref": "origin/main", "Specs.Commit": "0123abcd"}
+specs = CheckoutProvenance(
+    prefix="SPEC_REPO", default_sibling="shared-specs", marker_file="openapi.yaml"
+)
+specs.as_environment("Specs")  # {"Specs.Ref": "origin/main", "Specs.Commit": "0123abcd"}
 ```
 
 To get these rows into the Allure Environment panel:

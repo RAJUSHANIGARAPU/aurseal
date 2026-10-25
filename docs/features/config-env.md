@@ -29,11 +29,11 @@ up later as a `KeyError` on `base_url`.
 ```python
 from core.config_reader import ConfigReader
 
-config = ConfigReader("qa")             # or ConfigReader(None): TEST_ENV, then qa
+config = ConfigReader("qa")  # or ConfigReader(None): TEST_ENV, then qa
 base_url = config.get_base_url()
 timeout = config.get_int("playwright.timeout.ms", 30000)
 headless = config.get_bool("headless", True)
-where = config.source_of("base_url")    # "env", "env_file", "file" or None
+where = config.source_of("base_url")  # "env", "env_file", "file" or None
 ```
 
 `config.get(key)` without a default raises `KeyError` naming the environment and
@@ -45,11 +45,14 @@ For tests, inject the sources instead of touching the real environment:
 ```python
 from core.config_reader import ConfigReader, ConfigSources
 
-config = ConfigReader("qa", sources=ConfigSources(
-    os_env={"BASE_URL": "https://override.example.test"},
-    env_file={},
-    file_config={"base_url": "https://qa.example.test"},
-))
+config = ConfigReader(
+    "qa",
+    sources=ConfigSources(
+        os_env={"BASE_URL": "https://override.example.test"},
+        env_file={},
+        file_config={"base_url": "https://qa.example.test"},
+    ),
+)
 ```
 
 ### Configuration
@@ -87,8 +90,9 @@ always has a value and `TEST_ENV` never takes effect. Set the default to `None`:
 
 ```python
 def pytest_addoption(parser):
-    parser.addoption("--env", action="store", default=None,
-                     help="qa | staging (default: $TEST_ENV or qa)")
+    parser.addoption(
+        "--env", action="store", default=None, help="qa | staging (default: $TEST_ENV or qa)"
+    )
 ```
 
 `ConfigReader(None)` resolves the same way, so the `config` fixture does not change.
@@ -250,8 +254,8 @@ from core.config_consistency import check_environments, same_host_family
 
 problems = check_environments(
     json.load(open("config/environments.json")),
-    aliases={"example-cdn.test": "example.test"},   # optional
-    required=["api_base_url"],                      # keys every env must have
+    aliases={"example-cdn.test": "example.test"},  # optional
+    required=["api_base_url"],  # keys every env must have
 )
 assert problems == [], "\n".join(problems)
 

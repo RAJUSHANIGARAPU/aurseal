@@ -22,8 +22,12 @@ are told apart by `api.clients.route_probe.classify_not_found` with the demo's s
 **Configuration.** The body shapes are a `NotFoundShapes`:
 
 ```python
-NotFoundShapes(gateway_keys=frozenset({"source", "path"}), error_key="error",
-               error_text="no_route", service_keys=frozenset({"resource", "id"}))
+NotFoundShapes(
+    gateway_keys=frozenset({"source", "path"}),
+    error_key="error",
+    error_text="no_route",
+    service_keys=frozenset({"resource", "id"}),
+)
 ```
 
 ## Fix delta judged per environment

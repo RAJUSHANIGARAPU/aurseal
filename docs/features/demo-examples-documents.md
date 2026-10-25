@@ -161,9 +161,13 @@ oracle whose failure carries the signature, a control, and the fault-on/fault-of
 
 ```python
 detector_pair.judge(
-    demo_control, ticket=oracles.AMOUNT_DEFECT, signature=oracles.AMOUNT_SIGNATURE,
+    demo_control,
+    ticket=oracles.AMOUNT_DEFECT,
+    signature=oracles.AMOUNT_SIGNATURE,
     oracle=lambda: oracles.assert_period_charge_formatted(text, expected),
-    exercised=exercised, fault="doc_amount_unformatted", fault_on=True,
+    exercised=exercised,
+    fault="doc_amount_unformatted",
+    fault_on=True,
 )
 ```
 

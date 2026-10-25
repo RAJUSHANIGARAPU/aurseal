@@ -37,6 +37,7 @@ report claim something nobody measured.
 ```python
 from oracles import data_health as dh
 
+
 def supplier_resolves(record):
     r = api.get(f"suppliers/{record['supplier_id']}")
     if r.status == 404:
@@ -44,6 +45,7 @@ def supplier_resolves(record):
     if not r.is_success:
         return [dh.Unverified(f"supplier lookup answered HTTP {r.status}")]
     return []
+
 
 creator = lambda rec: rec.get("created_by")
 scanner = dh.Scanner(

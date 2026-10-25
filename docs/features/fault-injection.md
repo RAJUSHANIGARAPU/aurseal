@@ -46,12 +46,16 @@ from api.clients.http_engine import HttpEngine
 from checks.faults.oracles import error_is_shown, recovers_after
 from checks.faults.spec import FaultSpec
 
+
 @pytest.mark.chaos
 def test_orders_screen_survives_a_503(page, faults):
     handle = faults.browser(page, [FaultSpec("status", "**/api/orders", method="GET")])
     page.goto(url)
     faults.note(error_is_shown(page.get_by_test_id("error-banner"))).check()
-    faults.note(recovers_after(handle, page.reload, lambda: page.get_by_role("table").is_visible())).check()
+    faults.note(
+        recovers_after(handle, page.reload, lambda: page.get_by_role("table").is_visible())
+    ).check()
+
 
 @pytest.mark.chaos
 def test_client_retries_after_a_reset(faults):

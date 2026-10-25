@@ -179,7 +179,7 @@ The policy:
 ```python
 from gate.lanes import gate_command, gate_marker_expression, unit_lane_command
 
-unit_lane_command()           # ['pytest', '-m', 'unit', '-n', 'auto']
+unit_lane_command()  # ['pytest', '-m', 'unit', '-n', 'auto']
 gate_marker_expression("smoke", {})
 # '(smoke) and not unit and not on_demand and not slow'
 gate_command(env={})
@@ -197,6 +197,7 @@ in the same place. Tests join a group explicitly:
 import pytest
 
 pytestmark = pytest.mark.journey_group("checkout")
+
 
 def test_pay_by_card(checkout_page): ...
 def test_pay_by_voucher(checkout_page): ...
@@ -246,11 +247,13 @@ wall of red that says nothing about the product and keeps load off a failing env
 ```python
 from gate.circuit_breaker import default_breaker
 
+
 def test_rejects_malformed_order(circuit_breaker, api):
     # This test provokes a 500 on purpose: declare it, scoped to this thread and block.
     with circuit_breaker.expect_server_error("/orders/submit", "malformed payload"):
         response = api.submit_order({"items": None})
     assert response.status_code == 500
+
 
 # Feed responses from a client or a browser listener:
 default_breaker().record("browser", "GET", "https://shop.example.test/cart", 503)
@@ -326,9 +329,11 @@ lane can never arm another.
 ```python
 from gate.requirement import require_or_skip, require_verdict_or_skip
 
+
 def test_render_invoice(renderer):
     require_or_skip(renderer.reachable(), "renderer not reachable")
     ...
+
 
 def test_discount_rule_covered(fixture_pool):
     if not fixture_pool.has("expired-voucher"):
@@ -355,10 +360,11 @@ half-populated checkout.
 ```python
 from gate.requirement import require_checkout
 
+
 def test_routes_match_config():
     root = require_checkout(
-        "CONFIG_CHECKOUT",           # where the checkout is
-        "CONFIG_BINDING_REQUIRED",   # true => fail instead of skip
+        "CONFIG_CHECKOUT",  # where the checkout is
+        "CONFIG_BINDING_REQUIRED",  # true => fail instead of skip
         expected=("flows", "settings.yml"),
         fallback="../shop-config",
     )
@@ -383,6 +389,7 @@ from gate.read_only import ReadOnlyClient, find_write_calls
 client = ReadOnlyClient.over(requests.Session(), "https://api.example.test/v1")
 client.get("/orders/42", timeout=10)
 
+
 def test_inspection_code_cannot_write():
     assert find_write_calls(["inspection/"]) == []
 ```
@@ -405,8 +412,9 @@ from gate.preflight import CheckSpec, Disposition, Kind, run_preflight
 
 SPECS = [
     CheckSpec("no open draft", Kind.SAFETY, lambda s: not s["order"]["draft_open"]),
-    CheckSpec("fully paid", Kind.SUITABILITY, lambda s: s["order"]["balance"] == 0,
-              need="fully_paid"),
+    CheckSpec(
+        "fully paid", Kind.SUITABILITY, lambda s: s["order"]["balance"] == 0, need="fully_paid"
+    ),
 ]
 report = run_preflight(client, "ORD-42", {"order": "/orders/42"}, SPECS, needs=["fully_paid"])
 if report.disposition is not Disposition.USE:
@@ -425,11 +433,13 @@ environment's pool. Rows carry the run id and are attributed to the running test
 ```python
 from gate.provenance import record_fixture
 
+
 @pytest.mark.seeded
 def test_refund(order_factory):
     order = order_factory.create()
     record_fixture("fresh", "orders/basic.json", entity_id=order.id)
     ...
+
 
 @pytest.fixture(scope="module")
 def shared_customer(request, pool):
@@ -461,6 +471,7 @@ after it has already blinded CI. `gate.workflow_lint` checks the cheap, decidabl
 ```python
 from gate.workflow_lint import lint_workflows
 
+
 def test_workflows_are_sane():
     findings = lint_workflows(".github/workflows", {"tests.yml": ["offline"]})
     assert findings == [], "\n".join(map(str, findings))
@@ -485,6 +496,7 @@ each chain up in the base file and in the base merged with each overlay:
 
 ```python
 from gate.data_keys import audit
+
 
 def test_every_data_key_exists():
     result = audit(
