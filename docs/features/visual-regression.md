@@ -84,6 +84,6 @@ Plugin context: `routes` (`{name: url}` or a list of URLs, named from their path
 Visual tests are brittle by nature (fonts, animations, dynamic data). Masks and a fixed
 browser container reduce, not remove, the upkeep. Baselines grow the repository, so keep them to
 key screens. Committed baselines exist for `chromium-darwin` and `chromium-linux`; the Linux set
-is taken inside the CI image (`mcr.microsoft.com/playwright/python:v1.58.0-jammy`, amd64), so a
+is taken inside the CI image (`mcr.microsoft.com/playwright/python:v1.58.0-noble`, amd64), so a
 Playwright bump in CI means retaking it there (the `visual-baselines` job). Approval is a human judgement:
 the tool only proves that pixels changed.
