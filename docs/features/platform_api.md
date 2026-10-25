@@ -91,11 +91,14 @@ from qaplatform.client import PlatformClient
 
 client = PlatformClient("http://127.0.0.1:8765", token, "default")
 run = client.create_run("nightly", external_id="ci-1042", expected_count=2)
-client.push_results(run["run_id"], [
-    {"test_id": "cart::adds_item", "outcome": "passed", "requirements": ["REQ-7"]},
-    {"test_id": "cart::removes_item", "outcome": "failed", "message": "expected 0, got 1"},
-])
-print(client.finish_run(run["run_id"])["integrity"])   # {'verdict': 'PASS', ...}
+client.push_results(
+    run["run_id"],
+    [
+        {"test_id": "cart::adds_item", "outcome": "passed", "requirements": ["REQ-7"]},
+        {"test_id": "cart::removes_item", "outcome": "failed", "message": "expected 0, got 1"},
+    ],
+)
+print(client.finish_run(run["run_id"])["integrity"])  # {'verdict': 'PASS', ...}
 ```
 
 ## Honest limits

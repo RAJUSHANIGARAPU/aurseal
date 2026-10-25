@@ -29,7 +29,7 @@ Builds an interactive knowledge graph of this codebase using [graphifyy](https:/
 from core.graphify import GraphifyClient, KnowledgeGraphQuery
 
 client = GraphifyClient()
-client.build()                               # or client.update()
+client.build()  # or client.update()
 
 qe = KnowledgeGraphQuery(client)
 print(qe.find_test_coverage_gaps())

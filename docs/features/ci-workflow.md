@@ -240,7 +240,7 @@ removed after the tests and is in `.gitignore`.
 ```python
 from gate.external_config import bound_checkout
 
-path, commit = bound_checkout()   # skips, or fails when EXT_CONFIG_REQUIRED=true
+path, commit = bound_checkout()  # skips, or fails when EXT_CONFIG_REQUIRED=true
 ```
 
 ### Configuration

@@ -17,17 +17,23 @@ or let the engine record them:
 ```python
 from test_data.cleanup import CleanupLedger, CreationRule
 
+
 def test_rename_order(api, cleanup_ledger):
     # explicit
     r = api.post("orders", json={"sku": "A-1"})
     cleanup_ledger.record("order", r.json()["id"], lambda: api.delete(f"orders/{r.json()['id']}"))
 
+
 @pytest.fixture
 def tracked_api(api):
     # automatic: every successful matching create is recorded
-    ledger = CleanupLedger([
-        CreationRule("order", "POST", r"/orders$", lambda i: api.delete(f"orders/{i}"), id_path="id"),
-    ])
+    ledger = CleanupLedger(
+        [
+            CreationRule(
+                "order", "POST", r"/orders$", lambda i: api.delete(f"orders/{i}"), id_path="id"
+            ),
+        ]
+    )
     api.observe(ledger.observer)
     yield api
     ledger.discard_all()
@@ -107,11 +113,14 @@ per factory.
 ```python
 from test_data.factory import Prerequisite, PrerequisiteFactory
 
-factory = PrerequisiteFactory(seeder, [
-    Prerequisite("pricelist", Fixture.load("fixtures/pricelist.json")),
-    Prerequisite("customer", Fixture.load("fixtures/customer.json"), depends_on=("pricelist",)),
-])
-built = factory.provision("customer")      # builds pricelist first
+factory = PrerequisiteFactory(
+    seeder,
+    [
+        Prerequisite("pricelist", Fixture.load("fixtures/pricelist.json")),
+        Prerequisite("customer", Fixture.load("fixtures/customer.json"), depends_on=("pricelist",)),
+    ],
+)
+built = factory.provision("customer")  # builds pricelist first
 customer_id = built["customer"]["id"]
 ```
 
@@ -163,13 +172,13 @@ pool = ReusePool(
     lambda: api.get("orders", params={"size": 100}).json()["items"],
     fit=lambda o: o["status"] == "active" and not o["locked"],
     label=lambda o: o["number"],
-    preference=lambda o: o["line_count"],     # lowest first
+    preference=lambda o: o["line_count"],  # lowest first
 )
 try:
     targets = select_targets(seed_config, pool, seed=lambda: build_order(), limit=3)
 except NoTarget as exc:
     pytest.skip(str(exc))
-for t in targets:   # t.entity, t.label, t.was_seeded
+for t in targets:  # t.entity, t.label, t.was_seeded
     ...
 ```
 
@@ -202,7 +211,7 @@ resolver = LiveResolver(
     selectable=lambda r: r["state"] == "active",
     fallback_prefix="Test ",
 )
-supplier = resolver.resolve("suppliers", "Example Supplies Ltd")   # AmbiguousMatch on duplicates
+supplier = resolver.resolve("suppliers", "Example Supplies Ltd")  # AmbiguousMatch on duplicates
 ```
 
 The caller supplies `name_of`, `id_of` and `selectable`. Results are cached
@@ -218,7 +227,7 @@ recursively; scalars and arrays are replaced.
 from test_data import loader
 
 data = loader.load("checkout", env="staging")
-data.get("user.tier")                 # KeyError names both files when missing
+data.get("user.tier")  # KeyError names both files when missing
 data.get("user.coupon", default=None)
 ```
 
@@ -239,9 +248,14 @@ from test_data import fixture_contract as fc
 
 rules = [
     fc.Required("name"),
-    fc.CarriesRunTag("name"),                          # contains ${SEED_TAG}
-    fc.When("delivery", "post", "addresses[].purpose",
-            lambda purposes: "postal" in purposes, "no postal address"),
+    fc.CarriesRunTag("name"),  # contains ${SEED_TAG}
+    fc.When(
+        "delivery",
+        "post",
+        "addresses[].purpose",
+        lambda purposes: "postal" in purposes,
+        "no postal address",
+    ),
     fc.AtMost("addresses[].primary", 1, bool),
 ]
 assert fc.check(fixtures, rules) == []
@@ -271,6 +285,7 @@ honest state: `automated` (names its `test`), `planned` (says what it is `waitin
 from test_data.scenario_manifest import CaseManifest
 
 M = CaseManifest.load("cases/order-changes.json")
+
 
 @pytest.mark.parametrize("case", M.params())
 def test_order_change(case): ...
@@ -316,7 +331,8 @@ which test, rejected and why, unsuitable for this test, or not found.
 ```python
 from test_data.allocator import ListingPage, PreflightResult, TargetPicker, claim_for
 
-allocator = TargetPicker()          # one per worker is fine; the files are shared
+allocator = TargetPicker()  # one per worker is fine; the files are shared
+
 
 def page(n):
     r = api.get("orders", params={"page": n, "size": 100})
@@ -325,14 +341,21 @@ def page(n):
     body = r.json()
     return ListingPage([(o["number"], o["version_id"]) for o in body["items"]], body["last"])
 
+
 def preflight(number, version_id):
     order = api.get(f"orders/{version_id}").json()
     if order["draft_open"]:
         return PreflightResult(False, "open draft", unsafe=True)
     return PreflightResult(order["status"] == "active", f"status {order['status']}")
 
-outcome = claim_for(allocator, seed_config.allowlist.identifiers, request.node.name,
-                    lookup_page=page, preflight=preflight)
+
+outcome = claim_for(
+    allocator,
+    seed_config.allowlist.identifiers,
+    request.node.name,
+    lookup_page=page,
+    preflight=preflight,
+)
 if outcome.claim is None:
     pytest.skip(outcome.explanation)
 ```
@@ -364,8 +387,13 @@ Replenishment fails only when nothing was seeded. It refuses to run under a
 from test_data.pool import replenish, replenish_settings
 
 count, booked = replenish_settings()
-result = replenish(count, lambda booked: seed_subscription(booked=booked),
-                   booked=booked, label=lambda s: s["number"], config=seed_config)
+result = replenish(
+    count,
+    lambda booked: seed_subscription(booked=booked),
+    booked=booked,
+    label=lambda s: s["number"],
+    config=seed_config,
+)
 print(result.path, result.seeded, result.failures)
 ```
 

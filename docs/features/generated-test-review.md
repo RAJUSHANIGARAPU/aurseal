@@ -11,9 +11,9 @@ evidence. The code lives in `traceability/review.py`; the lane rule in `gate/lan
 ```python
 # Generated test awaiting review: remove the draft marker in a reviewed PR to approve.
 pytestmark = pytest.mark.draft(
-    generator='spec',
-    source='specs/subscription.md',
-    generated_at='2026-01-01T00:00:00.000Z',
+    generator="spec",
+    source="specs/subscription.md",
+    generated_at="2026-01-01T00:00:00.000Z",
 )
 ```
 

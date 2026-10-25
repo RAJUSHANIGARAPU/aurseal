@@ -161,7 +161,9 @@ replay books nothing.
 **Example.**
 
 ```python
-FixtureSeeder(engine).replay(Fixture.load(PROCESS_FIXTURE), {"subscription_id": 7, "until": "2026-04-15"})
+FixtureSeeder(engine).replay(
+    Fixture.load(PROCESS_FIXTURE), {"subscription_id": 7, "until": "2026-04-15"}
+)
 ```
 
 ## Ledger grid matches the captured schedule

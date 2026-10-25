@@ -44,8 +44,9 @@ from checks.load import LoadProfile, run_load
 from checks._sink import JsonlSink
 
 profile = LoadProfile.from_json("checks/load/profiles/smoke.json")
-outcome = run_load(["http://127.0.0.1:8765/api/health"], profile, Path("reports/load"),
-                   sink=JsonlSink())
+outcome = run_load(
+    ["http://127.0.0.1:8765/api/health"], profile, Path("reports/load"), sink=JsonlSink()
+)
 assert outcome.status == "pass", outcome.reason
 ```
 

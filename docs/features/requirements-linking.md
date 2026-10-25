@@ -35,9 +35,9 @@ a module (`pytestmark`). Ids from every level are merged and sorted.
 ```python
 pytestmark = pytest.mark.requirement("REQ-2")
 
+
 @pytest.mark.requirement("REQ-3")
-def test_cancellation_refunds_the_unused_days():
-    ...
+def test_cancellation_refunds_the_unused_days(): ...
 ```
 
 Every id is checked twice:

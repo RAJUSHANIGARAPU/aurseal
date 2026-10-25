@@ -74,6 +74,7 @@ gate), or explicitly with `-p results.pytest_plugin`.
 ```python
 from results.evidence import attach
 
+
 def test_checkout(page, request):
     ...
     attach(request, "screenshot", "reports/screenshots/checkout.png")

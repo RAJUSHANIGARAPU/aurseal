@@ -49,7 +49,7 @@ from test_data.synthetic import Profile, SyntheticGenerator, SyntheticParams, pr
 
 profile = Profile.from_json("test_data/profiles/customer.json")
 records = SyntheticGenerator(seed=7).generate(profile, 10, mode="invalid")
-results = probe(profile.endpoint, http, records)       # http: HttpEngine(base_url)
+results = probe(profile.endpoint, http, records)  # http: HttpEngine(base_url)
 
 # As a factory prerequisite: values plus the coordinates that reproduce them
 Prerequisite("customer", fixture, params=SyntheticParams(profile, "boundary", 7, 3).as_params())

@@ -74,8 +74,14 @@ problem, never skipped. `violations(results)` gives one line per problem:
 from oracles import message_rules as mr
 
 amt = lambda q: mr.segment_value("AMT", 1, qualifier=q)
-rules = [mr.totals_balance("invoice total", amt("TOT"), [amt("NET"), amt("TAX")],
-                           reason="the receiver rejects an unbalanced total")]
+rules = [
+    mr.totals_balance(
+        "invoice total",
+        amt("TOT"),
+        [amt("NET"), amt("TAX")],
+        reason="the receiver rejects an unbalanced total",
+    )
+]
 assert mr.violations(mr.evaluate(segments, rules)) == []
 ```
 
@@ -102,8 +108,10 @@ just after a hand-off. The rule holds when:
 ```python
 before = outbound.overview(sub_id)
 ...  # the hand-off
-assert stored_once(before, outbound.overview(sub_id),
-                   handoff_succeeded=True, expected_type="CHANGE") == []
+assert (
+    stored_once(before, outbound.overview(sub_id), handoff_succeeded=True, expected_type="CHANGE")
+    == []
+)
 ```
 
 **Configuration.** Keyword arguments `recipient`, `fresh_statuses` and the key names

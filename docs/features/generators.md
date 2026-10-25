@@ -30,8 +30,8 @@ fails on those, so a test can report them as findings.
 from generators.workflow_model import load
 
 d = load("demo_sut/config/subscription.machine.yaml")
-d.states["draft"].actions        # ('submit', 'activate')
-d.problems()                     # []
+d.states["draft"].actions  # ('submit', 'activate')
+d.problems()  # []
 ```
 
 **Configuration.** None. `WorkflowError` is raised only for input that is not a workflow at
@@ -150,6 +150,7 @@ the cases that need screens, so the definition-only ones still run without a bro
 ```python
 CASES = generate_cases(load(MACHINE), known_missing={("active", "renew"): "BUG-7"})
 
+
 @pytest.mark.parametrize("case", CASES)
 def test_config(case, my_adapter):
     run_case(case, my_adapter)
@@ -190,6 +191,7 @@ from generators.yaml_suite import pytest_generate_tests  # noqa: F401
 WORKFLOW_FILES = ["demo_sut/config/subscription.machine.yaml"]
 WORKFLOW_KNOWN_DEFECTS = {"subscription": {"suspended": "BUG-101"}}
 WORKFLOW_ADAPTER_MARKS = [pytest.mark.demo_ui]
+
 
 def test_generated(yaml_case, my_adapter):
     run_case(yaml_case, my_adapter)

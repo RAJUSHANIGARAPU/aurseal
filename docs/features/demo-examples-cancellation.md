@@ -33,12 +33,12 @@ is never judged fee-free.
 ```python
 from oracles.ledger_checks import ChargeLegs
 
-legs = ChargeLegs.of(cancel_tx)          # field names configurable: price_net="premium", ...
-legs.fee_leg_present                     # False when neither fee field is in the payload
-legs.unexplained_total                   # total - price net - price tax, None if unreadable
-legs.fee_legs_explain_total()            # fee legs account for the unexplained money
-legs.charges_no_fee()                    # no fee on the legs and none hidden in the total
-legs.describe()                          # one line for an assertion message
+legs = ChargeLegs.of(cancel_tx)  # field names configurable: price_net="premium", ...
+legs.fee_leg_present  # False when neither fee field is in the payload
+legs.unexplained_total  # total - price net - price tax, None if unreadable
+legs.fee_legs_explain_total()  # fee legs account for the unexplained money
+legs.charges_no_fee()  # no fee on the legs and none hidden in the total
+legs.describe()  # one line for an assertion message
 ```
 
 **Configuration.** `tolerance` (default one cent) on `charges_no_fee` and
@@ -130,8 +130,12 @@ defects never land in the run's real verdict evidence.
 
 ```python
 detector_pair.judge(
-    demo_control, ticket="DEMO-102", signature=r"DEMO-102: the credit legs add up to",
-    oracle=oracle, exercised=exercised, fault="refund_legs_rounded_independently",
+    demo_control,
+    ticket="DEMO-102",
+    signature=r"DEMO-102: the credit legs add up to",
+    oracle=oracle,
+    exercised=exercised,
+    fault="refund_legs_rounded_independently",
     fault_on=True,
 )
 ```

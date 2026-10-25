@@ -66,7 +66,7 @@ with sync_playwright() as pw:
     with open_capture(client, session["id"], context):
         page = context.new_page()
         page.goto("https://staging.example.test/checkout")
-        page.wait_for_event("close", timeout=0)      # explore, then close the window
+        page.wait_for_event("close", timeout=0)  # explore, then close the window
 client.end_session(session["id"], "expired cards rejected correctly; retries not tried")
 ```
 

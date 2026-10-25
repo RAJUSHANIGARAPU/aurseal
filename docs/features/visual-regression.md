@@ -37,6 +37,7 @@ An existing baseline is never overwritten by an update run; changing one goes th
 ```python
 from checks.visual.assertions import assert_matches_baseline
 
+
 def test_invoice_screen(page):
     page.goto(url)
     assert_matches_baseline(page, "invoice-screen", mask=[page.locator("[data-testid=clock]")])

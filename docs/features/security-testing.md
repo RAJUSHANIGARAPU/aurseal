@@ -47,6 +47,7 @@ gitleaks git . --config .gitleaks.toml --redact --no-banner   # the CI secrets s
 
 ```python
 from checks.security.scan import scan
+
 outcome = scan(["bandit", "pip-audit"])
 ```
 

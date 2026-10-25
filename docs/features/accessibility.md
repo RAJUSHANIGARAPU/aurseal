@@ -37,6 +37,7 @@ Inside any UI test:
 ```python
 from checks.a11y.assertions import assert_accessible, load_known
 
+
 def test_checkout_page_is_accessible(page):
     page.goto(url)
     assert_accessible(page, manifest=load_known("tests/a11y/a11y.manifest.json"))

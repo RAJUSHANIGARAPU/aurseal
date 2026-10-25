@@ -31,11 +31,13 @@ the write safe:
 ```python
 from autonomous_ui.locator_store import LocatorStore
 
-store = LocatorStore("ui/locators/wiki_locators.json")      # mode from HEAL_AUTOPERSIST
-write = store.update("search_input", {"type": "role", "role": "searchbox"}, reason="test id removed")
-write.persisted     # False by default: a proposal was filed
-store.pending()     # {"search_input": {"current": ..., "proposed": ..., "reason": ..., "proposed_at": ...}}
-store.apply_pending(["search_input"])   # after review: move it into the registry
+store = LocatorStore("ui/locators/wiki_locators.json")  # mode from HEAL_AUTOPERSIST
+write = store.update(
+    "search_input", {"type": "role", "role": "searchbox"}, reason="test id removed"
+)
+write.persisted  # False by default: a proposal was filed
+store.pending()  # {"search_input": {"current": ..., "proposed": ..., "reason": ..., "proposed_at": ...}}
+store.apply_pending(["search_input"])  # after review: move it into the registry
 ```
 
 `apply_pending` skips a proposal whose `current` no longer matches the registry:
@@ -144,10 +146,10 @@ set but not executable the call fails as `cli_missing`.
 ```python
 from api.llm.claude_client import ClaudeLLMClient
 
-client = ClaudeLLMClient()                  # AI_TRANSPORT decides
+client = ClaudeLLMClient()  # AI_TRANSPORT decides
 result = client.complete_result(prompt)
 if not result.ok:
-    print("no model answer:", result.failure)   # e.g. "transport_disabled: AI_TRANSPORT=none"
+    print("no model answer:", result.failure)  # e.g. "transport_disabled: AI_TRANSPORT=none"
 ```
 
 ### Configuration
