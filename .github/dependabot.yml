@@ -15,7 +15,8 @@ updates:
       python-minor-and-patch:
         update-types: [minor, patch]
         # A ruff minor release reformats files; it comes on its own with the reformat.
-        exclude-patterns: [ruff]
+        # pytest-playwright is pre-1.0, so a minor can break the browser fixtures: its own PR too.
+        exclude-patterns: [ruff, pytest-playwright]
     ignore:
       # The browser containers in tests.yml are pinned to this tag; workflow_lint fails a mismatch.
       - dependency-name: playwright
