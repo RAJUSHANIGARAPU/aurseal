@@ -179,6 +179,7 @@ def _pii(line: str, path: str = "src/a.py", home: str | None = None) -> list[str
         f"x{AT}users.noreply.github.com",
         f"jane{AT}quuxmail.test",
         f"noreply{AT}github.com",
+        f"support{AT}github.com",
         f"ops{AT}shop.example",
     ],
 )
