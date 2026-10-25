@@ -1,0 +1,87 @@
+name: Repair
+
+# When a main-branch run of Tests fails, try a fix and open it as a pull request; never push
+# to main. tools/repair.py documents the scope and what a proposal may not change.
+on:
+  workflow_run:
+    workflows: [Tests]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "Id of the failed run to repair"
+        required: true
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  # Starts Tests on the repair branch: a pull request opened with GITHUB_TOKEN triggers no run.
+  actions: write
+
+jobs:
+  repair:
+    name: Repair a failed main run
+    if: >-
+      vars.REPAIR_ENABLED != 'false' && (github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.event != 'pull_request'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      RUN_ID: ${{ inputs.run_id || github.event.workflow_run.id }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - name: Stop when a repair pull request is already open
+        id: open
+        run: |
+          count=$(gh pr list --state open --json headRefName \
+            -q '[.[] | select(.headRefName | startswith("repair/"))] | length')
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-python@v7.0.0
+        if: steps.open.outputs.count == '0'
+        with:
+          python-version: "3.13"
+      - if: steps.open.outputs.count == '0'
+        run: pip install -r requirements.txt -r requirements-checks.txt
+      - name: Read the failed run
+        if: steps.open.outputs.count == '0'
+        run: gh run view "$RUN_ID" --log-failed > "$RUNNER_TEMP/failed.log"
+      - name: Apply ruff's own fixes
+        if: steps.open.outputs.count == '0'
+        run: |
+          ruff check --fix --quiet . || true
+          ruff format --quiet .
+      - name: Propose and verify a fix
+        id: repair
+        if: steps.open.outputs.count == '0'
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          REPAIR_MODEL: ${{ vars.REPAIR_MODEL || 'anthropic/claude-sonnet-5.5' }}
+          REPAIR_SCOPE: ${{ vars.REPAIR_SCOPE || 'lint' }}
+        run: python -m tools.repair --log "$RUNNER_TEMP/failed.log" --summary "$RUNNER_TEMP/repair.md"
+      - name: Offline suite on the fix
+        if: steps.repair.outputs.status == 'fixed'
+        run: pytest tests/ -n auto -m "not demo_ui and not draft and not render_check"
+      - name: Open the pull request
+        if: steps.repair.outputs.status == 'fixed'
+        run: |
+          branch="repair/run-$RUN_ID"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git commit -qam "fix: repair main run $RUN_ID"
+          git push -q origin "$branch"
+          gh pr create --base main --head "$branch" \
+            --title "fix: repair main run $RUN_ID" --body-file "$RUNNER_TEMP/repair.md"
+          gh workflow run tests.yml --ref "$branch"
+      - name: Summary
+        if: always() && steps.repair.outcome != 'skipped'
+        run: cat "$RUNNER_TEMP/repair.md" >> "$GITHUB_STEP_SUMMARY"
