@@ -23,7 +23,16 @@ TOOLS = ("gitleaks", "bandit", "pip-audit")
 FINDING_TABLE = "metric_security_finding"
 SCAN_TABLE = "metric_security_scan"
 DEFAULT_ALLOWLIST = REPO_ROOT / "security" / "allowlist.yml"
-DEFAULT_LOCKFILE = REPO_ROOT / "requirements-lock.txt"
+# Every fully pinned requirements file; requirements.txt repeats the lock file.
+DEFAULT_LOCKFILES = tuple(
+    REPO_ROOT / name
+    for name in (
+        "requirements-lock.txt",
+        "requirements-checks.txt",
+        "requirements-platform.txt",
+        "requirements-docs.txt",
+    )
+)
 DEFAULT_GITLEAKS_CONFIG = REPO_ROOT / ".gitleaks.toml"
 REPORT_DIR = REPO_ROOT / "reports" / "security"
 
@@ -33,7 +42,7 @@ def run_tool(
     *,
     root: Path,
     out_dir: Path,
-    lockfile: Path,
+    lockfile: Path | Sequence[Path],
     bandit_paths: Sequence[Path] | None,
     gitleaks_config: Path | None,
 ) -> ToolRun:
@@ -52,7 +61,7 @@ def scan(
     *,
     root: Path = REPO_ROOT,
     out_dir: Path = REPORT_DIR,
-    lockfile: Path = DEFAULT_LOCKFILE,
+    lockfile: Path | Sequence[Path] = DEFAULT_LOCKFILES,
     allowlist: Allowlist | None = None,
     bandit_paths: Sequence[Path] | None = None,
     gitleaks_config: Path | None = DEFAULT_GITLEAKS_CONFIG,

@@ -10,7 +10,7 @@ blind to real ones) and a pip-audit call whose result never changed the status.
 |---|---|---|
 | **gitleaks** 8.30.1 (binary) | the whole git history (`gitleaks git`), secrets redacted in output | any leak not allowed by `.gitleaks.toml` |
 | **bandit** 1.9.4 | first-party packages (top-level directories with `__init__.py`; `tests/`, `.venv`, generated code excluded) | medium+ severity at medium+ confidence |
-| **pip-audit** 2.10.1 | `requirements-lock.txt`, exactly as pinned (`--no-deps --disable-pip`) | any known vulnerability, with or without a fixed version |
+| **pip-audit** 2.10.1 | `requirements-lock.txt`, `-checks`, `-platform` and `-docs`, exactly as pinned (`--no-deps --disable-pip`) | any known vulnerability, with or without a fixed version |
 
 Every finding is normalised to `SecurityFinding(tool, rule_id, severity, location, fingerprint)`.
 Fingerprints are stable: bandit's uses the rule, file and a hash of the flagged line (not its

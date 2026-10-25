@@ -228,20 +228,22 @@ def parse_pip_audit(raw: object) -> list[SecurityFinding]:
     return list(findings.values())
 
 
-def run_pip_audit(lockfile: Path, *, report: Path) -> ToolRun:
-    """Audit a fully pinned requirements file against the public vulnerability database.
+def run_pip_audit(lockfiles: Path | Sequence[Path], *, report: Path) -> ToolRun:
+    """Audit fully pinned requirements files against the public vulnerability database.
 
     Needs network. ``--no-deps --disable-pip`` audits exactly the pinned set without
     building an environment.
     """
+    lockfiles = [lockfiles] if isinstance(lockfiles, Path) else list(lockfiles)
     cli = _module_cli("pip_audit")
     if cli is None:
         return ToolRun("pip-audit", ran=False, reason="pip-audit is not installed")
-    if not lockfile.is_file():
-        return ToolRun("pip-audit", ran=False, reason=f"no lock file at {lockfile}")
+    if missing := [str(p) for p in lockfiles if not p.is_file()]:
+        return ToolRun("pip-audit", ran=False, reason=f"no lock file at {', '.join(missing)}")
     report.parent.mkdir(parents=True, exist_ok=True)
     report.unlink(missing_ok=True)
-    cmd = [*cli, "-r", str(lockfile), "--no-deps", "--disable-pip", "--format", "json"]
+    cmd = [*cli, *(arg for p in lockfiles for arg in ("-r", str(p)))]
+    cmd += ["--no-deps", "--disable-pip", "--format", "json"]
     cmd += ["--progress-spinner", "off", "-o", str(report)]
     try:
         proc = _run(cmd)
