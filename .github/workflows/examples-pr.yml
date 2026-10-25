@@ -46,7 +46,7 @@ jobs:
         working-directory: examples/${{ matrix.example }}
     steps:
       - uses: actions/checkout@v7.0.1
-      - uses: astral-sh/setup-uv@v10.2.0
+      - uses: astral-sh/setup-uv@v10.3.2
       - run: uv sync --locked
       - name: Chromium and its system libraries
         if: matrix.browser
@@ -64,7 +64,7 @@ jobs:
           fi
       - name: Suite against the local target
         run: make test-local
-      - uses: actions/upload-artifact@v7.0.1
+      - uses: actions/upload-artifact@v7.0.2
         if: always()
         with:
           name: example-${{ matrix.example }}-local
