@@ -17,9 +17,10 @@ Status, per attempt (one setup/call/teardown pass):
 * skip -> skipped; ``xfail`` -> skipped with reason ``xfail``;
 * ``xpass`` -> passed with reason ``xpass``; a strict ``xpass`` fails the test -> failed
   with reason ``xpass_strict``;
-* pytest-rerunfailures logs every failed attempt with outcome ``rerun``: each one closes
-  an attempt, so a test that passed on its second run is one passed record with
-  ``flaky_in_run``.
+* pytest-rerunfailures logs every failed attempt with outcome ``rerun``. An attempt
+  closes at its teardown report, or when the next setup starts without one (releases
+  before 16.7 log no teardown for a rerun attempt), so a test that passed on its second
+  run is one passed record with ``flaky_in_run``.
 
 Duration is setup + call + teardown of the attempt. Under pytest-xdist the controller
 writes the file from the reports the workers send; the workers write nothing.
@@ -150,6 +151,8 @@ class Recorder:
 
     def pytest_runtest_logreport(self, report: pytest.TestReport) -> None:
         test = self._test(report)
+        if report.when == "setup" and test.open:  # the previous attempt logged no teardown
+            self._close(test)
         attempt = test.current
         test.open = True
         attempt.duration += report.duration or 0.0
@@ -179,7 +182,7 @@ class Recorder:
         elif outcome == "skipped":  # skipped in setup (skip marker, skipif, xfail(run=False))
             reason = "xfail" if hasattr(report, "wasxfail") else None
             attempt.set(Status.SKIPPED, message, reason)
-        if outcome == "rerun" or report.when == "teardown":
+        if report.when == "teardown":
             self._close(test)
 
     def _close(self, test: _Test) -> None:

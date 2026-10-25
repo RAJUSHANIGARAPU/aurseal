@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 
 import pytest
 
 from aurseal.importers import registry
 from aurseal.model.identity import fingerprint
 from aurseal.model.v1 import RunUpload, Status
-from aurseal.pytest_plugin import split_nodeid
+from aurseal.pytest_plugin import Recorder, split_nodeid
 
 pytest_plugins = ["pytester"]
 
@@ -147,6 +148,34 @@ def test_reruns_are_attempts_of_one_record(pytester):
     red = records[("", "test_always_red", None)]
     assert [a.status for a in red.attempts] == [Status.FAILED, Status.FAILED]
     assert red.status is Status.FAILED and not red.flaky_in_run
+
+
+# pytest-rerunfailures before 16.7 logs no teardown for a rerun attempt; 16.7 and later do.
+@pytest.mark.parametrize(
+    "rerun_attempt",
+    [
+        [("setup", "passed"), ("call", "rerun")],
+        [("setup", "passed"), ("call", "rerun"), ("teardown", "passed")],
+    ],
+    ids=["rerun-without-teardown", "rerun-with-teardown"],
+)
+def test_a_rerun_closes_one_attempt_with_or_without_its_teardown(tmp_path, rerun_attempt):
+    recorder = Recorder(tmp_path / "upload.json")
+    last = [("setup", "passed"), ("call", "passed"), ("teardown", "passed")]
+    for when, outcome in rerun_attempt + last:
+        recorder.pytest_runtest_logreport(
+            SimpleNamespace(
+                nodeid="test_x.py::test_flaky",
+                when=when,
+                outcome=outcome,
+                duration=0.0,
+                longrepr="AssertionError: first run fails" if outcome == "rerun" else None,
+                user_properties=[],
+            )
+        )
+    (record,) = recorder.upload().records
+    assert [a.status for a in record.attempts] == [Status.FAILED, Status.PASSED]
+    assert record.status is Status.PASSED and record.flaky_in_run
 
 
 def test_explicit_ids_and_parameters(pytester):
