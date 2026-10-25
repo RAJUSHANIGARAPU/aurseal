@@ -6,6 +6,7 @@ output from mutmut 3.8.0. mutmut is never started here.
 
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 
 import pytest
@@ -153,6 +154,61 @@ class TestConfig:
         assert "source_paths = " in table and "pytest_add_cli_args_test_selection" in table
         assert "paths_to_mutate" not in table and "--disable-mutation-types" not in table
         assert '"addopts="' in table
+
+    def test_every_test_that_spawns_python_is_deselected(self):
+        """mutmut stops at the first clean-run failure, so one missed test leaves no score."""
+        config = MutationConfig.from_pyproject(DEFAULT_CONFIG)
+        missing = [
+            test_id
+            for scope in config.packages
+            for test_id in _spawning_tests(scope.tests)
+            if test_id not in scope.deselect
+        ]
+        assert not missing, f"add to the package's deselect in {DEFAULT_CONFIG.name}: {missing}"
+
+
+ROOT = Path(__file__).resolve().parents[3]
+SPAWNERS = {"run", "Popen", "check_output", "check_call", "call"}
+
+
+def _spawns_directly(node: ast.AST) -> bool:
+    for call in ast.walk(node):
+        if not isinstance(call, ast.Call) or not isinstance(call.func, ast.Attribute):
+            continue
+        if call.func.attr == "runpytest_subprocess":
+            return True
+        if call.func.attr in SPAWNERS and "sys.executable" in ast.unparse(call):
+            return True
+    return False
+
+
+def _spawning_tests(test_dirs) -> list[str]:
+    """Tests that start Python themselves or through a helper in the same module."""
+    found = []
+    for test_dir in test_dirs:
+        for path in sorted((ROOT / test_dir).rglob("test_*.py")):
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            funcs = {
+                n.name: n
+                for n in ast.walk(tree)
+                if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef)
+            }
+            spawning = {name for name, f in funcs.items() if _spawns_directly(f)}
+            grew = True
+            while grew:
+                grew = False
+                for name, f in funcs.items():
+                    called = {
+                        c.func.id
+                        for c in ast.walk(f)
+                        if isinstance(c, ast.Call) and isinstance(c.func, ast.Name)
+                    }
+                    if name not in spawning and called & spawning:
+                        spawning.add(name)
+                        grew = True
+            rel = path.relative_to(ROOT).as_posix()
+            found += [f"{rel}::{n}" for n in sorted(spawning) if n.startswith("test_")]
+    return found
 
 
 class TestWorkdir:
