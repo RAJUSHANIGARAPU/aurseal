@@ -27,7 +27,8 @@ _EMAIL_RE = re.compile(
 )
 _RESERVED_DOMAINS = {"example.com", "example.org", "example.net"}
 _RESERVED_SUFFIXES = (".example", ".test", ".invalid", ".localhost")
-_PUBLIC_ADDRESSES = {"noreply@github.com"}
+# support@github.com: the Signed-off-by trailer of every Dependabot commit.
+_PUBLIC_ADDRESSES = {"noreply@github.com", "support@github.com"}
 _PUBLIC_SUFFIXES = ("@users.noreply.github.com",)
 
 IBAN_LENGTHS = {
