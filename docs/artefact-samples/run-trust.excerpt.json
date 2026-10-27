@@ -20,6 +20,8 @@
     "scripts/artefact_samples/sample_suite.py::test_a_failing_expectation": {
       "cleared": false,
       "defect": null,
+      "failed_attempts": 0,
+      "first_failure": "",
       "markers": [],
       "nodeid": "scripts/artefact_samples/sample_suite.py::test_a_failing_expectation",
       "outcome": "failed",
@@ -28,6 +30,8 @@
     "scripts/artefact_samples/sample_suite.py::test_a_letter_renders_its_greeting": {
       "cleared": false,
       "defect": null,
+      "failed_attempts": 0,
+      "first_failure": "",
       "markers": [],
       "nodeid": "scripts/artefact_samples/sample_suite.py::test_a_letter_renders_its_greeting",
       "outcome": "passed",
@@ -36,6 +40,8 @@
     "scripts/artefact_samples/sample_suite.py::test_purpose_line_is_present": {
       "cleared": false,
       "defect": "BUG-7",
+      "failed_attempts": 0,
+      "first_failure": "",
       "markers": [
         "known_defect"
       ],
@@ -46,6 +52,8 @@
     "scripts/artefact_samples/sample_suite.py::test_skipped_without_a_target": {
       "cleared": false,
       "defect": null,
+      "failed_attempts": 0,
+      "first_failure": "",
       "markers": [],
       "nodeid": "scripts/artefact_samples/sample_suite.py::test_skipped_without_a_target",
       "outcome": "skipped",
