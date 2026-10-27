@@ -228,6 +228,9 @@ jobs:
         env:
           REQUIREMENTS_STRICT: "true"
 
+      - name: Requirement ids in prose are linked (shrink-only baseline)
+        run: python -m traceability links --check-prose --baseline traceability/prose-baseline.txt
+
       - name: Test plans
         run: python -m traceability plan lint plans/
 

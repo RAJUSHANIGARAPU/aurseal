@@ -38,6 +38,15 @@ def open_db(path: str | None):
 def _links(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser("links", help="requirement links: check ids, show or store them")
     p.add_argument("--check", action="store_true", help="collect-only check of every marker id")
+    p.add_argument(
+        "--check-prose",
+        action="store_true",
+        help="ids named in a test's name, docstring or param id must also be marker links",
+    )
+    p.add_argument("--baseline", help="with --check-prose: tolerated '<test> <id>' lines")
+    p.add_argument(
+        "--write-baseline", action="store_true", help="with --check-prose: rewrite the baseline"
+    )
     p.add_argument("--strict", action="store_true", help="exit 1 on any bad id (or set strict env)")
     p.add_argument("--rootdir", default=".", help="suite root to collect")
     p.add_argument("--reports", help="show the case-links file(s) of a finished run")
@@ -50,8 +59,11 @@ def _links_run(args: argparse.Namespace) -> int:
     from traceability._util import env_flag
     from traceability.requirements import STRICT_ENV, Registry
 
+    if args.check_prose:
+        return _links_prose(args)
     if args.check:
         from traceability.collect import collect
+        from traceability.matrix import CONTAINER_KINDS
 
         result = collect(Path(args.rootdir), args.pytest_args)
         strict = args.strict or env_flag(STRICT_ENV)
@@ -59,9 +71,22 @@ def _links_run(args: argparse.Namespace) -> int:
         linked = sum(1 for item in result.items if item.get("requirements"))
         for b in bad:
             print(f"{b['nodeid']}: {b['id']} ({b['problem']})")
+        # Report only, never fails: a link to an epic is too coarse to be the requirement.
+        registry = Registry.load(rootdir=Path(args.rootdir))
+        coarse = [
+            (item["nodeid"], req, entry.kind)
+            for item in result.items
+            for req in item.get("requirements") or ()
+            if (entry := registry.get(req)) is not None and entry.kind in CONTAINER_KINDS
+        ]
+        for nodeid, req, kind in coarse:
+            print(f"{nodeid}: {req} (link too coarse: kind {kind}, not a requirement)")
         for err in result.errors:
             print(f"collection: {err}", file=sys.stderr)
-        print(f"{len(result.items)} tests, {linked} linked, {len(bad)} bad requirement id(s)")
+        print(
+            f"{len(result.items)} tests, {linked} linked, {len(bad)} bad requirement id(s), "
+            f"{len(coarse)} too coarse (report only)"
+        )
         if result.errors:
             return 2
         return 1 if bad and strict else 0
@@ -79,8 +104,36 @@ def _links_run(args: argparse.Namespace) -> int:
             return 0
         print_json(doc.to_json())
         return 0
-    print("links: pass --check or --reports", file=sys.stderr)
+    print("links: pass --check, --check-prose or --reports", file=sys.stderr)
     return 2
+
+
+def _links_prose(args: argparse.Namespace) -> int:
+    from traceability.collect import collect
+    from traceability.prose import DEFAULT_BASELINE, load_baseline, ratchet, violations
+    from traceability.prose import write_baseline as write_prose_baseline
+
+    result = collect(Path(args.rootdir), ["-p", "traceability._prose_ids", *args.pytest_args])
+    for err in result.errors:
+        print(f"collection: {err}", file=sys.stderr)
+    if result.errors:
+        return 2
+    found = violations(result.items)
+    baseline = Path(args.baseline) if args.baseline else Path(args.rootdir) / DEFAULT_BASELINE
+    if args.write_baseline:
+        write_prose_baseline(found, baseline)
+        print(f"prose baseline written: {len(found)} tolerated mention(s) -> {baseline}")
+        return 0
+    outcome = ratchet(found, load_baseline(baseline))
+    for line in outcome.new:
+        print(f"PROSE-ONLY ID: {line} (add the requirement marker)")
+    for line in outcome.stale:
+        print(f"STALE BASELINE LINE, delete it: {line}")
+    print(
+        f"{len(result.items)} tests, {len(found)} prose-only id(s), {outcome.tolerated} in the "
+        f"baseline, {len(outcome.new)} new, {len(outcome.stale)} stale"
+    )
+    return 0 if outcome.ok else 1
 
 
 # ---------------------------------------------------------------------- matrix (G-004)
