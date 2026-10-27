@@ -19,7 +19,7 @@ its configuration (environment variables and defaults) and a short example.
 | [ui-components.md](ui-components.md) | Dropdowns, date and value entry with read-back, wizard submit, field reader, reference picker, selector priority model, submit outcome capture, test-id screen object |
 | [healing.md](healing.md) | Locator store with heal proposals, heal event log, model client transport selection |
 | [data-health.md](data-health.md) | Read-only data-health scan report (unverified column, creator split) and its entry point |
-| [release-tooling.md](release-tooling.md) | Promotion diff between two version manifests |
+| [release-tooling.md](release-tooling.md) | Promotion diff between two version manifests, config preflight (records a new config would reject), hotfix merge-back report, release lead time |
 | [demo-sut.md](demo-sut.md) | In-repo demo subscription service: lifecycle machine, fault switches, clock, fixtures |
 | [generators.md](generators.md) | Workflow YAML model, state graph, spec writer, config-driven/path cases, zero-code factory, generate/convert CLI, trace-to-fixture |
 | [demo-examples.md](demo-examples.md) | Demo examples index; generator examples |

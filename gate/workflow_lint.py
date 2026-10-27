@@ -470,11 +470,11 @@ def parse_check(
 
 def actionlint_check(
     paths: Sequence[str | Path],
-    which: Callable[[str], str | None] = shutil.which,
+    which: Callable[[str], str | None] | None = None,
     runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
 ) -> CheckResult:
     """Run actionlint when it is installed; abstain (not pass) when it is not."""
-    binary = which("actionlint")
+    binary = (which or shutil.which)("actionlint")
     if binary is None:
         return CheckResult("abstained", detail="actionlint is not installed: not checked")
     completed = runner(
