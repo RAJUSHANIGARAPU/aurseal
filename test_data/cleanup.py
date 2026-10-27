@@ -15,6 +15,12 @@ Two ways in:
   :class:`api.clients.http_engine.HttpEngine` with :class:`CreationRule` s, and
   every successful matching create is recorded without the test doing anything.
 
+* owned - ``ledger.record_owned("message", msg_id, discard, guard)`` for an item
+  the system produced for the test (not created by its own call). ``guard``
+  re-reads the item and returns a refusal (:func:`test_data.ownership.refusal`)
+  or ``None``; it runs right before ``discard``, and a refusal is logged and
+  reported instead of deleting.
+
 Only items this ledger recorded are ever touched. One ledger per test
 (the ``cleanup_ledger`` fixture in :mod:`test_data.pytest_plugin`), so nothing
 leaks between tests or xdist workers.
@@ -42,6 +48,7 @@ class LedgerEntry:
     kind: str
     ident: str
     discard: Callable[[], Any]
+    guard: Callable[[], str | None] | None = None
 
 
 @dataclass(frozen=True)
@@ -77,6 +84,8 @@ class CreationRule:
 class CleanupReport:
     discarded: list[str] = field(default_factory=list)
     failed: list[str] = field(default_factory=list)
+    refused: list[str] = field(default_factory=list)
+    """Owned items the guard would not let go: left in place, logged with the reason."""
 
     @property
     def clean(self) -> bool:
@@ -95,6 +104,19 @@ class CleanupLedger:
             if any(e.kind == kind and e.ident == ident for e in self._entries):
                 return
             self._entries.append(LedgerEntry(kind, ident, discard))
+
+    def record_owned(
+        self,
+        kind: str,
+        ident: str,
+        discard: Callable[[], Any],
+        guard: Callable[[], str | None],
+    ) -> None:
+        """Record a system-produced item; ``guard`` must return ``None`` before it is discarded."""
+        with self._lock:
+            if any(e.kind == kind and e.ident == ident for e in self._entries):
+                return
+            self._entries.append(LedgerEntry(kind, ident, discard, guard))
 
     def forget(self, kind: str, ident: str) -> None:
         """Drop an entry the test already disposed of itself (e.g. it deleted it as the act)."""
@@ -127,6 +149,12 @@ class CleanupLedger:
         for entry in entries:
             label = f"{entry.kind}:{entry.ident}"
             try:
+                if entry.guard is not None:
+                    reason = entry.guard()
+                    if reason:
+                        logger.warning("not discarding %s: %s", label, reason)
+                        report.refused.append(f"{label}: {reason}")
+                        continue
                 outcome = entry.discard()
             except Exception as exc:  # noqa: BLE001 - a cleanup must never mask the test result
                 logger.warning("could not discard %s: %s — it may still exist", label, exc)
@@ -140,7 +168,10 @@ class CleanupLedger:
                 report.discarded.append(label)
         if entries:
             logger.info(
-                "cleanup: %d discarded, %d failed", len(report.discarded), len(report.failed)
+                "cleanup: %d discarded, %d failed, %d refused by their guard",
+                len(report.discarded),
+                len(report.failed),
+                len(report.refused),
             )
         return report
 

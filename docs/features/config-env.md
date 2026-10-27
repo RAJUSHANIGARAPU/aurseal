@@ -219,6 +219,7 @@ page.set_default_timeout(profile.timeout_ms)
 | `auth_mode` (`AUTH_MODE`) | `none` | `none` | `none` | see the auth page |
 | `read_only` (`READ_ONLY`) | `false` | `false` | `true` | staging is a read-only smoke target |
 | `api_assertions_enabled` | `true` | `true` | `true` | run API-side assertions |
+| `business_timezone` (`BUSINESS_TIMEZONE`) | `UTC` | `UTC` | `UTC` | zone the service computes its calendar days in; `core.clock.today()` and `core.clock.local_date()` use it (optional, `UTC` when unset) |
 
 ### Example
 

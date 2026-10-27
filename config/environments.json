@@ -13,6 +13,7 @@
     "auth_mode": "none",
     "read_only": false,
     "api_assertions_enabled": true,
+    "business_timezone": "UTC",
     "credentials": {
       "username_var": "LOGIN_USERNAME",
       "password_var": "LOGIN_PASSWORD",
@@ -33,6 +34,7 @@
     "auth_mode": "none",
     "read_only": false,
     "api_assertions_enabled": true,
+    "business_timezone": "UTC",
     "credentials": {
       "username_var": "LOGIN_USERNAME",
       "password_var": "LOGIN_PASSWORD",
@@ -53,6 +55,7 @@
     "auth_mode": "none",
     "read_only": true,
     "api_assertions_enabled": true,
+    "business_timezone": "UTC",
     "credentials": {
       "username_var": "LOGIN_USERNAME",
       "password_var": "LOGIN_PASSWORD",

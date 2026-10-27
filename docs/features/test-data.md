@@ -217,6 +217,29 @@ supplier = resolver.resolve("suppliers", "Example Supplies Ltd")  # AmbiguousMat
 The caller supplies `name_of`, `id_of` and `selectable`. Results are cached
 per kind and name for the life of the resolver.
 
+### Pinned records: by business key, no fallback
+
+A test that depends on one specific record resolves it by a unique business
+key, never by display name, and never falls back. `select_by_key(candidates,
+kind, key, *, key_of, selectable)` raises `KeyNotFound` ("refresh the pinned
+key") for zero matches and `AmbiguousMatch` with the ids for more than one.
+`LiveResolver.resolve_key(kind, key)` caches per `(kind, key)`; give the
+resolver `list_pages` (pages oldest first) and it stops reading at the first
+page that carries the key.
+
+```python
+resolver = LiveResolver(list_all, list_pages=pages_oldest_first)
+partner = resolver.resolve_key("partners", "PAR-D1-7")
+```
+
+### Input labels from the served code list
+
+`test_data/codelists.py::require_offered(label, values)` checks a constant
+input label against the code list the service serves and raises a
+`HarnessError` naming the label and what is offered. A stale constant then
+reads as a harness problem, not a product one. Its companion for change
+tests is `choose_other` in `ui/components/dropdown.py`.
+
 ## Data loader with environment overlay
 
 **What it does.** Reads `ui/testdata/<key>.json` and deep-merges
@@ -408,3 +431,47 @@ SEED_MODE=targets ENTITY_ALLOWLIST_FILE=reports/entity-allowlist/replenished.txt
 | `REPLENISH_COUNT` | `5` | Entities to seed |
 | `REPLENISH_BOOKED` | `false` | Seed entities with the first period booked |
 | `path` (argument) | `reports/entity-allowlist/replenished.txt` | Targets file written |
+
+## Time-relative fixtures and the business day
+
+**What it does.** A fixture whose meaning depends on a date ("starts in the
+future") is seeded per run, with a date computed from today in the service's
+business timezone (`business_timezone`, see `core/clock.py`). Anchor dates
+that must fall in a later month to the first of that month with the
+`${RUN_MONTH_START_PLUS_<n>M}` placeholder, so month-end clamping never moves
+them. The rules:
+
+- **Assert the seeded date equals the requested one.** `test_data/aging.py`
+  `assert_seeded_date(requested, seeded, what=...)` raises `SeedError` when the
+  service stored another date; a shifted date is a different fixture.
+- **A hand-made fixture passed by id expires.** `require_still_future(date,
+  today, reason)` abstains (`no_verdict`) once the date is no longer after
+  today, instead of asserting future-only behaviour on a record that is
+  current now.
+
+`"Today"` for `TODAY_TOKEN` and the run-day placeholders is
+`core.clock.today()`: in the business zone, not the runner's. A UTC runner is a
+day behind a service east of UTC between local midnight and the offset.
+
+## Ownership guard for system-produced leftovers
+
+**What it does.** The ledger only touches items a test created through its
+own calls. For something the system produced for the test (a generated
+message, a derived document) use `CleanupLedger.record_owned(kind, id,
+discard, guard)`. The guard re-reads the item right before `discard` and
+returns `test_data.ownership.refusal(...)`: `None` when the key matches
+exactly, it is the only item for that key, it was created at or after the
+run's start minus clock skew, and it is still in an initial state. A refusal is
+logged and listed in `CleanupReport.refused`; the item stays.
+
+```python
+from test_data.ownership import refusal
+
+def guard():
+    rows = api.get("messages", params={"subscription": number}).json()
+    return refusal(msg_id, number, rows, run_started=started, skew=timedelta(minutes=2),
+                   key_of=lambda r: r["subscription_number"], created_of=lambda r: r["created_at"],
+                   state_of=lambda r: r["status"], initial_states={"NEW"})
+
+cleanup_ledger.record_owned("message", msg_id, lambda: api.delete(f"messages/{msg_id}"), guard)
+```

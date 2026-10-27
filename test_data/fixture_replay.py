@@ -17,7 +17,11 @@ replayed in order::
 
 ``${name}`` placeholders are bound, in order of precedence, from values
 captured from earlier responses, the caller's ``params``, and built-in run-day
-dates (``TODAY_TOKEN`` in UTC, ``RUN_DAY_DATE_MINUS_<n>D`` / ``_PLUS_<n>D``).
+dates: ``TODAY_TOKEN``, ``RUN_DAY_DATE_MINUS_<n>D`` / ``_PLUS_<n>D`` and
+``RUN_MONTH_START_PLUS_<n>M`` (the first day of the month ``n`` months ahead).
+"Today" is the business timezone's (:func:`core.clock.today`), not the
+runner's. A date that must lie in a later month is anchored to the first of
+that month, so it never depends on month-end clamping.
 An unbound placeholder fails before anything is sent. When ``version_field`` is
 set, the entity version is read back from every response and threaded into the
 next call as ``${version}``; a version that goes backwards fails loudly.
@@ -41,17 +45,19 @@ import logging
 import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
 from api.clients.http_engine import ApiResponse, HttpEngine
 from api.engine.context_memory import resolve_path
+from core import clock
 
 logger = logging.getLogger(__name__)
 
 _PLACEHOLDER = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_.]*)\}")
 _RUN_DAY_OFFSET = re.compile(r"RUN_DAY_DATE_(MINUS|PLUS)_(\d+)D")
+_RUN_MONTH_START = re.compile(r"RUN_MONTH_START_PLUS_(\d+)M")
 DEFAULT_SKIP_STATUSES = frozenset({400, 404, 409, 422})
 
 
@@ -121,9 +127,15 @@ class SeededEntity:
         return self.values[key]
 
 
+def month_start_plus(day: date, months: int) -> date:
+    """The first day of the month ``months`` after ``day``'s month."""
+    index = day.year * 12 + (day.month - 1) + months
+    return date(index // 12, index % 12 + 1, 1)
+
+
 def run_day_values(today: date | None = None) -> Callable[[str], str | None]:
-    """Resolver for the built-in date placeholders, in UTC so 'today' matches a UTC server."""
-    day = today or datetime.now(timezone.utc).date()
+    """Resolver for the built-in date placeholders; 'today' is the business timezone's."""
+    day = today or clock.today()
 
     def resolve(name: str) -> str | None:
         if name == "TODAY_TOKEN":
@@ -132,6 +144,9 @@ def run_day_values(today: date | None = None) -> Callable[[str], str | None]:
         if m:
             sign = -1 if m.group(1) == "MINUS" else 1
             return (day + timedelta(days=sign * int(m.group(2)))).isoformat()
+        m = _RUN_MONTH_START.fullmatch(name)
+        if m:
+            return month_start_plus(day, int(m.group(1))).isoformat()
         return None
 
     return resolve

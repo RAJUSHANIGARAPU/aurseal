@@ -10,6 +10,10 @@ that exists for one environment only is a default the other one silently
 inherits from code. ``REQUIRED_KEYS`` is that contract, and the offline test
 over the real file holds every environment to it.
 
+``business_timezone`` is optional and defaults to ``UTC``: the zone the service
+under test computes its calendar days in (:mod:`core.clock`). An unknown zone
+name fails here rather than as an off-by-one-day date much later.
+
 Every value still goes through ``ConfigReader``, so ``TIMEOUT_MS=60000`` in the
 shell or in ``.env.<env>`` overrides the committed value exactly like any other
 key.
@@ -19,6 +23,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from core.clock import CONFIG_KEY as BUSINESS_TIMEZONE_KEY
+from core.clock import DEFAULT_ZONE, zone_named
 from core.config_reader import ConfigReader
 
 ARTIFACT_MODES = ("on", "off", "retain-on-failure")
@@ -57,6 +63,7 @@ class EnvProfile:
     ai_timeout_s: int
     read_only: bool
     api_assertions_enabled: bool
+    business_timezone: str = DEFAULT_ZONE
 
     @classmethod
     def from_config(cls, config: ConfigReader) -> EnvProfile:
@@ -71,6 +78,8 @@ class EnvProfile:
             raise ValueError(f"browser={browser!r} for env {config.env}; expected {_BROWSERS}")
         video = _artifact_mode(config, "video")
         tracing = _artifact_mode(config, "tracing")
+        zone = str(config.get(BUSINESS_TIMEZONE_KEY, DEFAULT_ZONE)).strip() or DEFAULT_ZONE
+        zone_named(zone)
         return cls(
             env=config.env,
             base_url=str(config.get("base_url")),
@@ -85,6 +94,7 @@ class EnvProfile:
             ai_timeout_s=_int(config, "ai_timeout_s"),
             read_only=_bool(config, "read_only"),
             api_assertions_enabled=_bool(config, "api_assertions_enabled"),
+            business_timezone=zone,
         )
 
     def playwright_launch_args(self) -> dict:
