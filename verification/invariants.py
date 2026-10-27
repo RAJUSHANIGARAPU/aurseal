@@ -8,17 +8,23 @@ once instead of stopping at the first.
 
     rules = InvariantSet(
         advanced_by("schedule.next_run", months=1),
-        scaled_by("limits.max", factor=1.02, rel_tol=1e-9),
+        scaled_by("limits.max", factor=1.02, rel_tol=1e-9,
+                  readings={"bare factor": lambda old: old * 0.02}),
         non_empty("history"),
         no_item_in_state("tasks", "status", "PENDING", "RETRYING"),
     )
     assert_invariants(before, after, rules)
+
+``readings`` names the known *wrong* models of a value-changing rule. When the rule
+misses, every reading that equals the observed value is appended to the reason
+(``expected 102.0 (100.0 x 1.02), got 2.0 (bare factor)``), so the reader sees which
+mistake was made instead of re-deriving it. ``unchanged`` is always one of them.
 """
 
 from __future__ import annotations
 
 import math
-from collections.abc import Callable, Iterable, Iterator, Sized
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sized
 from dataclasses import dataclass
 from typing import Any
 
@@ -94,30 +100,73 @@ def assert_invariants(
 # factories
 # ------------------------------------------------------------------
 
+Reading = Callable[[Any], Any]
+UNCHANGED = "unchanged"
 
-def advanced_by(path: str, *, months: int = 0, days: int = 0) -> Invariant:
+
+def _readings(extra: Mapping[str, Reading] | None) -> dict[str, Reading]:
+    return {UNCHANGED: lambda old: old, **(extra or {})}
+
+
+def _matching_readings(
+    old: Any, new: Any, readings: Mapping[str, Reading], same: Callable[[Any, Any], bool]
+) -> str:
+    """`` (label, label)`` for every known wrong reading that equals ``new``; "" if none."""
+    labels = []
+    for label, model in readings.items():
+        try:
+            if same(new, model(old)):
+                labels.append(label)
+        except (TypeError, ValueError, ArithmeticError):
+            continue
+    return f" ({', '.join(labels)})" if labels else ""
+
+
+def advanced_by(
+    path: str,
+    *,
+    months: int = 0,
+    days: int = 0,
+    readings: Mapping[str, Reading] | None = None,
+) -> Invariant:
     """``after[path] == before[path] + period`` for a date/datetime field."""
     shift = Shift(months=months, days=days)
+    known = _readings(readings)
 
     def check(before: Any, after: Any) -> str | None:
         old, new = as_temporal(resolve(before, path)), as_temporal(resolve(after, path))
         if old is None or new is None:
             return f"not a date (before={resolve(before, path)!r}, after={resolve(after, path)!r})"
         expected = shift.apply(old)
-        return None if new == expected else f"expected {expected}, got {new} (before {old})"
+        if new == expected:
+            return None
+        named = _matching_readings(old, new, known, lambda a, b: a == b)
+        return f"expected {expected}, got {new}{named} (before {old})"
 
     return Invariant(f"{path} advanced by {shift}", check)
 
 
-def scaled_by(path: str, factor: float, *, abs_tol: float = 0.0, rel_tol: float = 0.0) -> Invariant:
+def scaled_by(
+    path: str,
+    factor: float,
+    *,
+    abs_tol: float = 0.0,
+    rel_tol: float = 0.0,
+    readings: Mapping[str, Reading] | None = None,
+) -> Invariant:
     """``after[path] == before[path] * factor`` within tolerance."""
+    known = _readings(readings)
+
+    def close(a: Any, b: Any) -> bool:
+        return math.isclose(a, b, abs_tol=abs_tol, rel_tol=rel_tol)
 
     def check(before: Any, after: Any) -> str | None:
         old, new = resolve(before, path), resolve(after, path)
         expected = old * factor
-        if math.isclose(new, expected, abs_tol=abs_tol, rel_tol=rel_tol):
+        if close(new, expected):
             return None
-        return f"expected {expected!r} ({old!r} x {factor}), got {new!r}"
+        named = _matching_readings(old, new, known, close)
+        return f"expected {expected!r} ({old!r} x {factor}), got {new!r}{named}"
 
     return Invariant(f"{path} scaled by {factor}", check)
 

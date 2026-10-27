@@ -173,3 +173,68 @@ def test_assert_helper_fails_with_readable_table():
 
 def test_assert_helper_returns_report_when_equivalent():
     assert assert_equivalent(_result(), _result()).equivalent
+
+
+# --- keyed lists ------------------------------------------------------------------
+
+
+def _line(id_, code, period, amount):
+    return {"id": id_, "code": code, "period": period, "amount": amount}
+
+
+def _by_code_and_period(item):
+    return item["code"], item["period"]
+
+
+LEFT = {
+    "lines": [
+        _line(1, "SEATS", "2026-01", 32.5),
+        _line(2, "SSO", "2026-01", 5.0),
+        _line(3, "SEATS", "2026-02", 32.5),
+    ]
+}
+
+
+def test_reordered_keyed_list_is_equivalent():
+    right = {"lines": [LEFT["lines"][2], LEFT["lines"][0], LEFT["lines"][1]]}
+    oracle = EquivalenceOracle(keyed={"lines": _by_code_and_period})
+    assert oracle.compare(LEFT, right).equivalent
+    assert not EquivalenceOracle().compare(LEFT, right).equivalent
+
+
+def test_renumbered_ids_are_equal_when_ignored():
+    right = {"lines": [dict(line, id=line["id"] + 40) for line in reversed(LEFT["lines"])]}
+    oracle = EquivalenceOracle(ignore=["lines[*].id"], keyed={"lines": _by_code_and_period})
+    report = oracle.compare(LEFT, right)
+    assert report.equivalent and len(report.ignored) == 3
+    assert "lines.<SEATS|2026-01>.id" in report.ignored
+
+
+def test_keyed_pairs_recurse_and_name_the_key():
+    right = {"lines": [LEFT["lines"][0], _line(9, "SSO", "2026-01", 6.0), LEFT["lines"][2]]}
+    report = EquivalenceOracle(ignore=["**.id"], keyed={"lines": _by_code_and_period}).compare(
+        LEFT, right
+    )
+    assert [(d.path, d.left, d.right) for d in report.differences] == [
+        ("lines.<SSO|2026-01>.amount", 5.0, 6.0)
+    ]
+
+
+def test_key_on_one_side_only_is_missing():
+    right = {"lines": [*LEFT["lines"][:2], _line(3, "SEATS", "2026-03", 32.5)]}
+    report = EquivalenceOracle(keyed={"lines": _by_code_and_period}).compare(LEFT, right)
+    found = {(d.path, d.kind) for d in report.differences}
+    assert found == {
+        ("lines.<SEATS|2026-02>", DiffKind.MISSING_RIGHT),
+        ("lines.<SEATS|2026-03>", DiffKind.MISSING_LEFT),
+    }
+
+
+def test_duplicate_key_on_one_side_is_a_difference():
+    right = {"lines": [*LEFT["lines"], _line(4, "SSO", "2026-01", 5.0)]}
+    report = EquivalenceOracle(ignore=["**.id"], keyed={"lines": _by_code_and_period}).compare(
+        LEFT, right
+    )
+    (diff,) = report.differences
+    assert diff.kind is DiffKind.DUPLICATE_KEY and diff.path == "lines.<SSO|2026-01>"
+    assert (diff.left, diff.right) == (1, 2)
