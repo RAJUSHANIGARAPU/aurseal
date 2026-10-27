@@ -36,6 +36,19 @@ to a target to find out whether it accepts what it should and rejects what it sh
   writes `ai_generated_tests/synthetic/synthetic_profiles.json` (records and verdicts)
   and one `metric_synthetic_probe` row per record. It no longer writes a test stub.
 
+### Required means not empty
+
+Invalid mode emits, for every required string field, an explicit `""` and an
+all-whitespace value, labelled `required-empty` and `required-empty-whitespace`
+(broken constraint `<field>.required`). An empty string satisfies a presence
+check, so a rule probed only with an absent field can still store a blank
+value. Probe it with both, and pair the probe with a control: the same flow
+with a distinct valid value that no fallback could produce, which must surface
+in the output (otherwise the input does not decide the output and the refusal
+proves nothing). Stop the probe before the step that hands the result to
+downstream processing, and discard its drafts (`test_data/drafts.py`). The
+demo pair is `tests/demo_examples/synthetic/test_required_empty_probe.py`.
+
 ## How to use
 
 ```bash

@@ -55,6 +55,8 @@ FAULTS: dict[str, str] = {
     "reason list jumps back to its first option.",
     "create_throttled_every_other": "Every second subscription create answers 429 and stores "
     "nothing.",
+    "task_title_presence_only": "A task title is checked for presence only, so an empty or "
+    "blank title is stored.",
 }
 
 

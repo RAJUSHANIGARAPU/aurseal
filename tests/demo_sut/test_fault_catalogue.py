@@ -39,7 +39,7 @@ def readme_switches() -> set[str]:
 
 def test_the_readme_table_lists_exactly_the_switches():
     assert readme_switches() == set(FAULTS)
-    assert len(FAULTS) == len(INFRASTRUCTURE) + 19
+    assert len(FAULTS) == len(INFRASTRUCTURE) + 20
 
 
 def _modules(folder: Path) -> list[tuple[Path, ast.Module]]:

@@ -6,8 +6,11 @@
   extremes (right-to-left override, zero-width space, emoji, right-to-left
   script, a 256-character string, 2**53) wherever the profile allows them.
 * ``invalid`` — exactly one constraint broken per record, and the record says
-  which (``broken_constraint``). A named extreme the profile forbids for exactly
-  one reason lands here, labelled with that reason.
+  which (``broken_constraint``). Every required string field also gets two
+  ``required-empty`` variants: an explicit ``""`` and an all-whitespace value.
+  An empty string passes a presence check, so a "required" rule probed only
+  with an absent field can still let a blank one through. A named extreme the
+  profile forbids for exactly one reason lands here, labelled with that reason.
 
 Every record is reproducible from ``(profile, mode, seed, index)`` alone: record
 ``i`` draws from its own ``random.Random`` and, when Faker is installed, a Faker
@@ -41,6 +44,10 @@ STRING_EXTREMES: dict[str, str] = {
     "rtl_script": "יוסף כהן",
     "long_256": "A" * 256,
 }
+
+REQUIRED_EMPTY = "required-empty"
+"""Strategy label of the explicit empty-string variant (the blank one adds ``-whitespace``)."""
+STRING_KINDS = frozenset({"string", "email", "date"})
 
 _WORDS = ("amber", "birch", "cedar", "delta", "ember", "fjord", "garnet", "harbor", "indigo")
 
@@ -251,11 +258,18 @@ def _invalid_cases(spec: FieldSpec) -> list[_Case]:
     cases: list[_Case] = []
     if spec.required:
         cases.append(_Case(name, "missing", None, f"{name}.required"))
+        if spec.kind in STRING_KINDS:
+            blank = " " * max(1, min(3, spec.max_len or 3))
+            cases.append(_Case(name, REQUIRED_EMPTY, _const(""), f"{name}.required"))
+            cases.append(
+                _Case(name, f"{REQUIRED_EMPTY}-whitespace", _const(blank), f"{name}.required")
+            )
     wrong_type = "not-a-number" if spec.kind in ("integer", "number", "boolean") else 12345
     if spec.kind != "choice":
         cases.append(_Case(name, "wrong_type", _const(wrong_type), f"{name}.type"))
     if spec.kind == "string":
-        if spec.min_len:
+        if spec.min_len and not (spec.required and spec.min_len == 1):
+            # min_len 1 on a required field: "too short" is the empty string, covered above.
             cases.append(_Case(name, "too_short", _filled(spec.min_len - 1), f"{name}.min_len"))
         if spec.max_len is not None:
             cases.append(_Case(name, "too_long", _filled(spec.max_len + 1), f"{name}.max_len"))
