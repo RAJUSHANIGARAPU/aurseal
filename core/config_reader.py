@@ -86,10 +86,14 @@ class ConfigReader:
         env_file_dir: str | Path | None = None,
     ) -> None:
         self.env = resolve_env(env, None if sources is None else sources.os_env)
+        # Where the git-ignored per-environment files live (``.env.<env>``, and the user
+        # pool next to it); None when the sources were injected.
+        self.env_file_dir: Path | None = None
         if sources is None:
+            self.env_file_dir = Path(env_file_dir or _REPO_ROOT)
             sources = ConfigSources(
                 os_env=os.environ,
-                env_file=load_env_file(self.env, env_file_dir or _REPO_ROOT),
+                env_file=load_env_file(self.env, self.env_file_dir),
                 file_config=self._load_environment(environments_file or _ENVIRONMENTS_FILE),
             )
         self._sources = sources

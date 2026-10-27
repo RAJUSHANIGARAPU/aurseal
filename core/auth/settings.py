@@ -9,6 +9,10 @@ there is then exactly one answer to "which mode is this run using". When two cal
 sites resolve it two ways, one of them reports a mode the run is not using — and
 the place that reports it is usually the report header a reader trusts most.
 
+The login user is the one exception to "first rung wins": when the environment has a
+user pool (``gate.user_pool``) and the username is not exported, each process leases a
+pool user of its own instead of every process sharing the ``.env.<env>`` one.
+
 Secrets (``password``, ``client_secret``, ``supplied_token``) are excluded from
 ``repr`` so a settings object can be logged.
 """
@@ -35,6 +39,10 @@ class AuthMode(str, Enum):
             if mode.value == text:
                 return mode
         raise ValueError(f"Unknown auth mode {raw!r}; expected one of {[m.value for m in cls]}")
+
+
+# Modes that log in as a user, and so need a username and password of their own.
+LOGIN_MODES = frozenset({AuthMode.UI, AuthMode.PASSWORD})
 
 
 def resolve_auth_mode(config: ConfigReader, default: AuthMode = AuthMode.NONE) -> AuthMode:
@@ -68,12 +76,14 @@ class AuthSettings:
         def text(key: str, default: str = "") -> str:
             return str(config.get(key, default))
 
+        mode = resolve_auth_mode(config)
+        username, password = login_user(config, mode, text("auth_username"), text("auth_password"))
         return cls(
-            mode=resolve_auth_mode(config),
+            mode=mode,
             login_url=login_url,
             post_login_url=text("post_login_url", base_url),
-            username=text("auth_username"),
-            password=text("auth_password"),
+            username=username,
+            password=password,
             client_id=text("auth_client_id"),
             client_secret=text("auth_client_secret"),
             audience=text("auth_audience"),
@@ -108,3 +118,20 @@ class AuthSettings:
             AuthMode.TOKEN: {"SUPPLIED_TOKEN": self.supplied_token},
         }.get(self.mode, {})
         return [name for name, value in required.items() if not value]
+
+
+def login_user(
+    config: ConfigReader, mode: AuthMode, username: str, password: str
+) -> tuple[str, str]:
+    """The login for this process: exported username, else a leased pool user, else as read."""
+    if mode not in LOGIN_MODES or config.source_of("auth_username") == "env":
+        return username, password
+    directory = getattr(config, "env_file_dir", None)
+    if directory is None:
+        return username, password
+    from gate.user_pool import lease_for_process
+
+    lease = lease_for_process(config.env, directory)
+    if lease is None:
+        return username, password
+    return lease.user.username, lease.user.password
