@@ -225,3 +225,43 @@ def test_an_unreadable_body_is_logged_not_silently_empty(monkeypatch):
     outcome = submit_and_capture(_NavigatedPage(), "Generate", "/api/jobs/start", settle_ms=0)
     assert outcome.status == 202 and outcome.body == ""
     assert any("could not be read" in w for w in warnings), warnings
+
+
+# --- preconditions of a refusal at submit ---------------------------------------------
+
+
+def test_an_empty_required_input_means_nothing_is_submitted():
+    page = _Page(_response(422, "seat count is too high"))
+    outcome = submit_and_capture(
+        page, "Next", "/submit", required_filled=lambda p: ["Billing contact", ""]
+    )
+    assert not page.submitted and not outcome.exercised
+    assert "Billing contact" in outcome.not_exercised_reason
+    assert not outcome.rejected
+    assert outcome.describe().startswith("NOT EXERCISED")
+
+
+def test_a_probe_value_gone_before_the_click_is_not_exercised():
+    page = _Page(_response(200, "{}"))
+    outcome = submit_and_capture(
+        page,
+        "Next",
+        "/submit",
+        required_filled=lambda p: [],
+        before_submit=lambda p: "seat count reads 50, typed 5000",
+    )
+    assert not page.submitted and not outcome.exercised
+    assert "typed 5000" in outcome.not_exercised_reason
+
+
+def test_met_preconditions_submit_as_usual():
+    page = _Page(_response(422, "seat count is too high"))
+    outcome = submit_and_capture(
+        page,
+        "Next",
+        "/submit",
+        advanced=lambda p: False,
+        required_filled=lambda p: [],
+        before_submit=lambda p: None,
+    )
+    assert page.submitted and outcome.exercised and outcome.rejected

@@ -15,6 +15,21 @@ than the rule does. ``submit_and_capture`` therefore records all of them at once
 * whether the form **advanced** (a caller-supplied check, e.g. "the next step's
   heading is visible").
 
+A refusal is asserted **at the moment it happens**, and only means something when it is
+about the rule under test. Two preconditions, checked right before the click, make that
+reusable:
+
+* ``required_filled(page)`` returns the names of required inputs that are still empty.
+  Any name means the form would refuse for *that* reason, so the submit is not sent and
+  the outcome is "not exercised";
+* ``before_submit(page)`` returns a reason when the probe value is no longer in its
+  field (the app reformatted, clamped or cleared it). The bad value was never submitted,
+  so again: not exercised.
+
+``SubmitResult.exercised`` carries this to
+:func:`verification.outcome_classifier.submit_rule_outcome`, which turns an unmet
+precondition into an abstention, never into "accepted".
+
 Deciding whether that adds up to a rejection is not done here: ``signals()``
 hands the observations to ``oracles.rejection.RejectionSignals``, which already
 knows the traps (a blank read-back is not a rejection, a pre-existing message is
@@ -51,6 +66,13 @@ class SubmitResult:
     inline_errors: list[str] = field(default_factory=list)
     alerts: list[str] = field(default_factory=list)
     advanced: bool | None = None
+    exercised: bool = True
+    not_exercised_reason: str | None = None
+
+    @classmethod
+    def not_exercised(cls, reason: str) -> SubmitResult:
+        """A precondition failed, so the submit was not sent."""
+        return cls(status=None, exercised=False, not_exercised_reason=reason)
 
     @property
     def responded(self) -> bool:
@@ -82,9 +104,12 @@ class SubmitResult:
 
     @property
     def rejected(self) -> bool:
-        return self.signals().rejected
+        """A positive rejection signal on an exercised submit (never on one not sent)."""
+        return self.exercised and self.signals().rejected
 
     def describe(self) -> str:
+        if not self.exercised:
+            return f"NOT EXERCISED: {self.not_exercised_reason}"
         body = self.body if len(self.body) <= 300 else self.body[:300] + "..."
         return (
             f"status={self.status} advanced={self.advanced} inline={self.inline_errors} "
@@ -118,6 +143,8 @@ def submit_and_capture(
     alerts: str = DEFAULT_ALERTS,
     timeout_ms: int = 15000,
     settle_ms: int = 8000,
+    before_submit: Callable[[object], str | None] | None = None,
+    required_filled: Callable[[object], list[str]] | None = None,
 ) -> SubmitResult:
     """
     Run ``submit`` (a visible button's name, or a callable) and record the outcome.
@@ -127,7 +154,14 @@ def submit_and_capture(
     matching response arrives within ``timeout_ms`` the outcome has
     ``status=None`` — the request may never have been sent, which is itself a
     finding (client-side validation blocked it).
+
+    ``required_filled`` and ``before_submit`` run right before the click; when either
+    reports a problem nothing is clicked and the result is ``exercised=False``.
     """
+    reason = _unmet_precondition(page, before_submit, required_filled)
+    if reason is not None:
+        logger.warning("submit not exercised: %s", reason)
+        return SubmitResult.not_exercised(reason)
     matches = _url_predicate(response_match)
 
     def wanted(response) -> bool:
@@ -169,6 +203,25 @@ def submit_and_capture(
     )
     logger.info("submit outcome: %s", outcome.describe())
     return outcome
+
+
+def _unmet_precondition(
+    page,
+    before_submit: Callable[[object], str | None] | None,
+    required_filled: Callable[[object], list[str]] | None,
+) -> str | None:
+    if required_filled is not None:
+        empty = [name for name in required_filled(page) if name]
+        if empty:
+            return (
+                f"required input(s) still empty: {', '.join(empty)}; the refusal would not "
+                "be about the rule under test"
+            )
+    if before_submit is not None:
+        gone = before_submit(page)
+        if gone:
+            return f"the probe value is no longer in its field: {gone}"
+    return None
 
 
 def discard_draft_if_present(
