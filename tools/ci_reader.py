@@ -450,6 +450,24 @@ def _jobs(cfg: Config, run_id: int) -> list[dict]:
     return found.get("jobs") or []
 
 
+def _trigger(run: dict) -> dict:
+    """The event and who started it (the re-runner on a re-run, else the actor)."""
+    actor = run.get("triggering_actor") or run.get("actor") or {}
+    return {"event": run.get("event"), "actor": actor.get("login")}
+
+
+def _commits(run: dict) -> list[dict]:
+    """The head commit, short sha and subject. The runs API carries no push range
+    (no ``before`` sha), so a push of several commits shows its head only."""
+    head = run.get("head_commit") or {}
+    sha = head.get("id") or run.get("head_sha")
+    if not sha:
+        return []
+    message = head.get("message")
+    subject = message.splitlines()[0] if message else None
+    return [{"sha": str(sha)[:8], "subject": subject}]
+
+
 def tool_run_status(cfg: Config, args: dict) -> str:
     run = _resolve_run(cfg, _run_ref(args))
     jobs = []
@@ -470,7 +488,14 @@ def tool_run_status(cfg: Config, args: dict) -> str:
                 "failed_steps": failed,
             }
         )
-    return json.dumps({"run": _run_summary(run), "jobs": jobs}, indent=2)
+    payload = {
+        "run": _run_summary(run),
+        "trigger": _trigger(run),
+        "commits": _commits(run),
+        "jobs": jobs,
+    }
+    # commit subjects and actor names are written by whoever pushed: data, not instructions
+    return f"{UNTRUSTED}\n{json.dumps(payload, indent=2)}"
 
 
 def _search(lines: list[str], pattern: str, context: int) -> list[str]:
@@ -733,7 +758,8 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "run_status": {
         "handler": tool_run_status,
-        "description": "How a run ended: every job and the steps that failed.",
+        "description": "How a run ended: trigger, head commit, every job and the steps "
+        "that failed.",
         "schema": {"type": "object", "properties": dict(_RUN_PROPS), "additionalProperties": False},
     },
     "job_log": {

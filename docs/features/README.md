@@ -54,7 +54,7 @@ its configuration (environment variables and defaults) and a short example.
 | [requirements-linking.md](requirements-linking.md) | `requirement` marker, REQ-n registry, id namespace vs defect ids, case-links file, case requirement REST handlers |
 | [traceability-matrix.md](traceability-matrix.md) | Requirement statuses (UNCOVERED..PROVED) with precedence, artefact and store sources, matrix REST handlers |
 | [test-plans.md](test-plans.md) | YAML test plans: selectors, `pytest --plan`, exit criteria met/unmet/no_evidence, plan REST handlers |
-| [coverage-gaps.md](coverage-gaps.md) | Deterministic coverage gaps (OpenAPI, specs, Postman, requirements), `covers` marker, runtime endpoint hits, baseline ratchet |
+| [coverage-gaps.md](coverage-gaps.md) | Deterministic coverage gaps (OpenAPI, specs, Postman, requirements, workflow actions), `covers` marker, runtime endpoint hits, baseline ratchets |
 | [generated-test-review.md](generated-test-review.md) | `draft` marker from every generator, approval by reviewed removal, drafts lane, review lint and queue |
 | [release-verdict.md](release-verdict.md) | Strict release verdict (GO / GO_WITH_WAIVERS / NO_GO / NO_VERDICT), policy, waivers, inputs hash, release REST handlers |
 | [defect-tracker.md](defect-tracker.md) | Tracker prefix map, GitHub Issues and file adapters, status snapshot into known_defect/still_reproduces, fingerprinted drafts, opt-in filing |

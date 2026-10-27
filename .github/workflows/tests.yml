@@ -169,6 +169,12 @@ jobs:
           python -m traceability gaps --openapi demo_sut/openapi.json --specs specs
           --requirements --baseline traceability/gap-baseline.json
 
+      # Exit 3 (NOT-MEASURED) when the config dir holds no workflow: unmeasured is not clean.
+      - name: Workflow action gaps (ratchet)
+        run: >
+          python -m traceability workflow-gaps --config-dir demo_sut/config
+          --baseline traceability/workflow-gap-baseline.json
+
       - name: Generated tests are drafts or approved
         run: python -m traceability review lint
 

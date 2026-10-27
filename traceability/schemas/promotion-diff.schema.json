@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.test/schemas/traceability/promotion-diff.schema.json",
+  "title": "Promotion diff",
+  "description": "What promoting one environment's pins onto another would ship and regress, per service. Written by tools/promotion_diff/promotion_diff.py --json --candidate-id ID; documented in docs/features/release-tooling.md. A null means 'not measured', never 'none'.",
+  "type": "object",
+  "required": ["schemaVersion", "candidateId", "from", "to", "generated", "pins", "services",
+               "settingsDrift"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "candidateId": {"type": "string", "minLength": 1},
+    "from": {"type": "string", "description": "source environment (manifest file stem)"},
+    "to": {"type": "string", "description": "target environment (manifest file stem)"},
+    "generated": {"type": "string", "description": "UTC, ISO 8601"},
+    "pins": {
+      "type": "object",
+      "required": ["from", "to"],
+      "properties": {
+        "from": {"$ref": "#/$defs/pinMap"},
+        "to": {"$ref": "#/$defs/pinMap"}
+      }
+    },
+    "services": {"type": "array", "items": {"$ref": "#/$defs/service"}},
+    "settingsDrift": {"type": "array", "items": {"$ref": "#/$defs/settingsDrift"}}
+  },
+  "$defs": {
+    "pinMap": {"type": "object", "additionalProperties": {"type": "string"}},
+    "commit": {
+      "type": "object",
+      "required": ["sha", "subject"],
+      "properties": {
+        "sha": {"type": "string", "pattern": "^[0-9a-f]{40,64}$"},
+        "subject": {"type": "string"}
+      }
+    },
+    "service": {
+      "type": "object",
+      "required": ["service", "fromRef", "toRef", "functional", "regressing", "fixedIn",
+                   "notCompared"],
+      "properties": {
+        "service": {"type": "string"},
+        "fromRef": {"type": ["string", "null"]},
+        "toRef": {"type": ["string", "null"]},
+        "notCompared": {
+          "type": ["string", "null"],
+          "description": "why the service was not compared; when set, every list is empty and means nothing"
+        },
+        "functional": {
+          "type": "array",
+          "description": "what the promotion ships, one entry per key, in order of first appearance",
+          "items": {
+            "type": "object",
+            "required": ["key", "commits", "tests"],
+            "properties": {
+              "key": {"type": "string"},
+              "commits": {"type": "array", "items": {"$ref": "#/$defs/commit"}},
+              "tests": {
+                "type": ["array", "null"],
+                "items": {"type": "string"},
+                "description": "test files that mention the key (a mention, not an assertion); null when no test root was given"
+              }
+            }
+          }
+        },
+        "unkeyed": {"type": "array", "items": {"$ref": "#/$defs/commit"}},
+        "noise": {"type": "integer", "minimum": 0},
+        "regressing": {
+          "type": "array",
+          "description": "target-only commits the promotion would remove; empty when netZero",
+          "items": {
+            "allOf": [{"$ref": "#/$defs/commit"}],
+            "type": "object",
+            "properties": {
+              "tags": {"type": "array", "items": {"type": "string"}},
+              "equivalent": {"type": ["string", "null"], "description": "its counterpart on the default branch"},
+              "fixedTags": {"type": "array", "items": {"type": "string"}}
+            }
+          }
+        },
+        "fixedIn": {
+          "type": ["string", "null"],
+          "description": "lowest version tag carrying an equivalent of every regressing commit; null with regressing non-empty and fixedInChecked true means no released tag carries all of them"
+        },
+        "fixedInChecked": {"type": "boolean"},
+        "targetOnly": {
+          "type": "array",
+          "items": {
+            "allOf": [{"$ref": "#/$defs/commit"}],
+            "type": "object",
+            "properties": {"equivalence": {"type": ["string", "null"]}}
+          }
+        },
+        "alreadyInTarget": {"type": "integer", "minimum": 0},
+        "mergeCommitsUsed": {"type": "boolean"},
+        "netZero": {"type": "boolean"},
+        "downgrade": {"type": "boolean"}
+      }
+    },
+    "settingsDrift": {
+      "type": "object",
+      "required": ["service", "toOnly", "fromOnly", "warnings", "notCompared"],
+      "properties": {
+        "service": {"type": "string"},
+        "fromFile": {"type": ["string", "null"]},
+        "toFile": {"type": ["string", "null"]},
+        "toOnly": {"type": "array", "items": {"type": "string"}},
+        "fromOnly": {"type": "array", "items": {"type": "string"}},
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["line", "side", "message"],
+            "properties": {
+              "line": {"type": "string"},
+              "side": {"enum": ["to", "from"]},
+              "message": {"type": "string"}
+            }
+          }
+        },
+        "notCompared": {"type": ["string", "null"]}
+      }
+    }
+  }
+}

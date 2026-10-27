@@ -26,6 +26,16 @@ docker compose up
 # Release reports (docs/features/release-tooling.md)
 python -m tools.hotfix_mergeback --workspace ~/src --since 2026-10-01   # hotfix tags not on main
 python -m tools.release_leadtime --manifest deploy/production.yaml --deployments deploy/log.csv
+
+# Coverage ratchets (what CI runs; /detect-coverage-gaps runs them with --report-only)
+python -m traceability gaps --openapi demo_sut/openapi.json --specs specs \
+  --requirements --baseline traceability/gap-baseline.json
+python -m traceability workflow-gaps --config-dir demo_sut/config \
+  --baseline traceability/workflow-gap-baseline.json   # GAPS= ACTIONS= NEW= STALE=
+
+# Promotion diff between two environments' version manifests (docs/features/release-tooling.md)
+python tools/promotion_diff/promotion_diff.py --from staging.yaml --to production.yaml \
+  --workspace ~/src --strict [--json --candidate-id rc-1]
 ```
 
 ## Project structure
@@ -75,7 +85,7 @@ into the workflow in the same change — never widen the gate to tolerate the ga
 | `/graphify` | Builds or queries a knowledge graph of this codebase |
 | `/auto-run-fix [-k filter] [env]` | Runs a red selection until 3 consecutive greens, fixing selectors and waits only (manual) |
 | `/create-pr ["title"] [target]` | Pushes the branch and opens a PR with commits, files, test health and healing summary (manual) |
-| `/detect-coverage-gaps [all\|spec\|url]` | Specs, OpenAPI and Postman items without tests; dated report, generates only on a yes |
+| `/detect-coverage-gaps [all\|openapi\|postman]` | The CI coverage ratchets (operations, scenarios, requirements, workflow actions) run report-only; generates only on a yes |
 | `/generate-from-postman <collection.json>` | Postman collection -> pytest API tests (pipeline, then a deterministic fallback) (manual) |
 | `/generate-from-swagger <spec> [feature]` | OpenAPI document -> per-tag API tests: success plus the 400/401/404 each operation can produce, marked `generated_batch(name=...)` (manual) |
 | `/generate-from-ts <recording.spec.ts> [flow]` | Codegen recording -> cleaned page object, test, locator and data files, fixed to 3 passes (manual) |

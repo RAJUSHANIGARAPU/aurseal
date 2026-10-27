@@ -7,7 +7,8 @@ import json
 import pytest
 
 from tests.tools.slash._commands import claude_md_lists, read_command
-from tools.slash import coverage_gaps, prd
+from tools.slash import prd
+from traceability.gaps import SpecSource
 
 SENTENCE = "A signed-in shopper can apply one voucher code at checkout and should see the discount."
 
@@ -42,9 +43,8 @@ def test_inline_one_sentence_is_testable_and_needs_every_group():
 def test_the_spec_is_written_in_the_existing_format(tmp_path):
     path = prd.write("voucher_codes", plan(*prd.GROUPS), tmp_path)
     assert path.name == "voucher-codes.md"
-    parsed = coverage_gaps.parse_spec(path)
-    assert parsed.feature == "voucher_codes"
-    assert [s.name for s in parsed.scenarios] == [f"{g} case" for g in prd.GROUPS]
+    titles = [item.title for item in SpecSource(tmp_path).items()]
+    assert titles == [f"{g} case" for g in prd.GROUPS]
     text = path.read_text(encoding="utf-8")
     for heading in ("### Preconditions", "### Steps", "### Expected", "### Tags"):
         assert heading in text

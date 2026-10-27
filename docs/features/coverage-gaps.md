@@ -3,8 +3,10 @@
 A deterministic report of what is specified but not tested: API operations from an
 OpenAPI document, scenarios from `specs/*.md`, requests from a Postman collection and
 active requirements from the registry. No model calls. The code lives in
-`traceability/gaps.py` and `traceability/endpoint_hits.py`; the `/detect-coverage-gaps`
-slash command reads this report.
+`traceability/gaps.py` and `traceability/endpoint_hits.py`. The `/detect-coverage-gaps`
+slash command has no parser of its own: `tools/slash/coverage_gaps.py` runs the same two
+ratchets as CI (this one and the workflow-action one below) with `--report-only`, and a
+test checks its report equals the CI report for a fixture.
 
 ## Sources and evidence
 
@@ -19,9 +21,9 @@ slash command reads this report.
 
 | Source | Item key | Covered by |
 |---|---|---|
-| `--openapi file.json` | `GET /api/customers/{id}` | `@pytest.mark.covers("GET /api/customers/{id}")` (parameter names do not matter) |
+| `--openapi file.json` or `--openapi https://...` | `GET /api/customers/{id}` | `@pytest.mark.covers("GET /api/customers/{id}")` (parameter names do not matter) |
 | `--specs specs/` | `subscription#cancel-refunds` per `## Scenario` | `covers("spec:subscription#cancel-refunds")`, or a requirement id in the scenario's `### Tags` that a test links |
-| `--postman c.json` | `POST /orders` | `covers("POST /orders")` |
+| `--postman c.json` (or a URL) | `POST /orders` | `covers("POST /orders")` |
 | `--requirements` | `REQ-4` | a test linked to REQ-4 |
 
 Matching is by explicit tag or requirement link only: fuzzy title matching is not done,
@@ -81,8 +83,30 @@ and `gaps.md`. `--db PATH --run-id ID --branch B` also stores the report.
 | `--baseline` | — | accepted gaps file; without it the report never fails |
 | `--report-only` | off | never fail on new gaps |
 
+## Workflow actions
+
+`python -m traceability workflow-gaps` (`traceability/workflow_gaps.py`) lists every
+`(state, action)` pair of the workflow definitions in a config dir (`--config-dir`, else
+`$EXT_CONFIG_PATH`). A pair is named when its action is a string literal, the whole
+literal, in a test module (`test_*.py` / `*_test.py` under `--tests`, default `tests`,
+`ui/tests`, `api/tests`). The ratchet over `traceability/workflow-gap-baseline.json`
+fails on a **new** gap and on a **stale** baseline entry (no longer a gap) until it is
+removed. A config dir that is not bound (not given, missing, without a workflow, or not
+parsing) is **NOT-MEASURED**: the header reads `GAPS=NOT-MEASURED ...`, never 0, and the
+exit code is 3.
+
+```text
+GAPS=0 ACTIONS=16 NEW=0 STALE=0
+```
+
+Writes `workflow-gaps.md` and `workflow-gaps.json` (schema
+`traceability/schemas/workflow-gap-report.schema.json`) under `--out`. Exit 0 clean, 1 new
+or stale, 2 bad input (an unreadable baseline), 3 not measured; `--report-only` always 0.
+`--write-baseline` rewrites the baseline from the current gaps.
+
 ## Honest limits
 
 Runtime hits show an endpoint was exercised, not that a test checked its answer. Spec
 coverage is only as good as the tags: a scenario nobody tagged stays a gap even if some
 test happens to walk it.
+A string literal names a workflow action, nothing more: it may sit in an unrelated test.
