@@ -572,3 +572,74 @@ def test_billing_term_cannot_change_mid_edit():
         EvidenceVerdict("REQ-28 locked billing term")
     )
 ```
+
+## 9. Failure stage of a probe that must never succeed: `stage_of`
+
+### What it does
+
+To learn how far a request gets through a chain of checks (does the account
+lookup pass? the credential check?) without any side effect, send it with a
+credential that can never succeed and classify which check refused it.
+`stage_of(status, body, stages)` returns the first `StageRule(name,
+status_set, body_contains)` that matches, else `OTHER`. `probe_stage(send,
+stages)` sends once and raises `HarnessError` on a 2xx: the probe credential
+was valid, so the probe may have changed something. Pin the rules offline on
+recorded answers (`tests/verification/test_failure_stage.py`).
+
+```python
+from verification.outcome_classifier import StageRule, probe_stage
+
+STAGES = [StageRule("LOOKUP", {404}, ("not found",)), StageRule("CREDENTIAL", {401, 403})]
+assert probe_stage(lambda: api.post("login", json=never_valid), STAGES).name == "CREDENTIAL"
+```
+
+## 10. Boundary sibling control: `assert_boundary`
+
+### What it does
+
+"The boundary value was accepted" proves nothing if the validator never ran.
+`verification/boundary.py::assert_boundary(accept, refuse, *, refusal_matches)`
+runs `refuse()` first: the adjacent invalid value must come back refused with a
+text matching one of `refusal_matches`, otherwise the check abstains
+(`no_verdict("boundary control did not refuse")`) and `accept()` is never
+called. Then `accept()` must succeed. The recorded evidence quotes both values
+and the refusal. The callables may return an `ApiResponse`, a captured message
+or a bool, so API calls and `submit_and_capture` both fit.
+
+```python
+from verification.boundary import assert_boundary
+
+assert_boundary(
+    accept=lambda: api.post("plans", json={**base, "seats": 500}),
+    refuse=lambda: api.post("plans", json={**base, "seats": 501}),
+    refusal_matches=["at most 500 seats"],
+    accepted_value=500,
+    refused_value=501,
+)
+```
+
+## 11. Refusal controls for a destructive endpoint: `delete_contract`
+
+### What it does
+
+`verification/destructive.py::delete_contract(delete, delete_anon, exists, *,
+item_id, impossible_id)` walks one item through what a delete must refuse:
+an anonymous delete answers 401/403 and the item still exists; an id that can
+never exist answers 404; the real delete answers 2xx and the item is gone; a
+repeat answers 404. It returns the findings. A 403 that names the permission
+(`permission_hint`) abstains with "caller lacks permission" instead of passing,
+and an optional `guard` (the ownership check from `test_data/ownership.py`)
+runs before the real delete and abstains on a refusal.
+
+```python
+from verification.destructive import delete_contract
+
+findings = delete_contract(
+    lambda i: api.delete(f"notes/{i}"),
+    lambda i: anonymous.delete(f"notes/{i}"),
+    lambda i: api.get(f"notes/{i}").status == 200,
+    item_id=note_id,
+    impossible_id="00000000-0000-0000-0000-000000000000",
+)
+assert findings == []
+```
