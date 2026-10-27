@@ -41,7 +41,8 @@ closed_regressed    defect is closed and it reproduces again
 
 coverage verdicts: ``proved`` (exercised and asserted: the only release
 evidence), ``recorded`` (observed, not asserted), ``held_empty`` (passed only
-because the data was missing), ``abstained`` (precondition not met, no verdict).
+because the data was missing), ``abstained`` (precondition not met, no verdict),
+``not_applicable`` (out of scope on this environment; ``detail`` names where it is covered).
 
 ``read_verdicts(path=None, run_id=None)`` is the reading side; it tolerates a
 missing file and skips malformed lines.
@@ -91,6 +92,7 @@ class CoverageOutcome(str, Enum):
     RECORDED = "recorded"
     HELD_EMPTY = "held_empty"
     ABSTAINED = "abstained"
+    NOT_APPLICABLE = "not_applicable"
 
 
 class ContractVerdict(str, Enum):

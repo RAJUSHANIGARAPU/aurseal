@@ -65,7 +65,15 @@ from pathlib import Path
 from core.logger import logger
 from gate._env import env_float, env_int, env_str
 from gate.provenance import FixtureRow
-from gate.verdicts import EXPECTED_RED, REACHED, SILENT, VerdictRow
+from gate.verdicts import (
+    COVERAGE,
+    COVERAGE_NOT_APPLICABLE,
+    EXPECTED_RED,
+    NOT_APPLICABLE_PREFIX,
+    REACHED,
+    SILENT,
+    VerdictRow,
+)
 
 # Configuration (environment variables).
 ENFORCEMENT_ENV = "RUN_TRUST"
@@ -199,10 +207,16 @@ class RunTally:
     passed_on_acquired: int = 0
     silences: tuple[Silence, ...] = ()
     detector_silences: tuple[Silence, ...] = ()
+    # Skipped as not applicable on this environment: neither executed nor an abstention.
+    out_of_scope: tuple[Silence, ...] = ()
+
+    @property
+    def in_scope(self) -> int:
+        return self.selected - len(self.out_of_scope)
 
     @property
     def skip_ratio(self) -> float:
-        return 0.0 if self.selected <= 0 else self.skipped / self.selected
+        return 0.0 if self.in_scope <= 0 else self.skipped / self.in_scope
 
 
 @dataclass(frozen=True)
@@ -250,8 +264,24 @@ def build_tally(
     detector_markers = frozenset(detector_markers)
     seeded_markers = frozenset(seeded_markers)
 
+    not_applicable_ids = {
+        r.nodeid
+        for r in verdict_rows
+        if r.kind == COVERAGE and r.verdict == COVERAGE_NOT_APPLICABLE
+    }
+
+    def out_of_scope(t: TestResult) -> bool:
+        return t.outcome is Outcome.SKIPPED and (
+            t.reason.startswith(NOT_APPLICABLE_PREFIX) or t.nodeid in not_applicable_ids
+        )
+
+    scoped_out = tuple(
+        Silence(t.nodeid, "not applicable", t.reason) for t in tests if out_of_scope(t)
+    )
     silences = tuple(
-        Silence(t.nodeid, t.outcome.value, t.reason) for t in tests if t.outcome not in EXECUTED
+        Silence(t.nodeid, t.outcome.value, t.reason)
+        for t in tests
+        if t.outcome not in EXECUTED and not out_of_scope(t)
     )
     executed = sum(1 for t in tests if t.outcome in EXECUTED)
 
@@ -288,6 +318,7 @@ def build_tally(
         passed_on_acquired=on_acquired,
         silences=silences,
         detector_silences=detector_silences,
+        out_of_scope=scoped_out,
     )
 
 
@@ -334,6 +365,8 @@ class RunTrustGate:
             absent.append(f"skip ratio - disabled ({MAX_SKIP_RATIO_ENV} >= 1.0)")
         elif tally.selected <= 0:
             absent.append("skip ratio - nothing was selected (pytest exit code 5 covers this)")
+        elif tally.in_scope <= 0:
+            absent.append("skip ratio - every selected test is out of scope on this environment")
         else:
             applied += 1
             if tally.skip_ratio > t.max_skip_ratio:
@@ -341,7 +374,7 @@ class RunTrustGate:
                     Breach(
                         "SKIP RATIO",
                         f"{_percent(tally.skip_ratio)} abstained "
-                        f"({tally.skipped} of {tally.selected})",
+                        f"({tally.skipped} of {tally.in_scope} in scope)",
                         f"at most {_percent(t.max_skip_ratio)}",
                         MAX_SKIP_RATIO_ENV,
                         "skips exceed the allowed share of the selection - the skip reasons "
@@ -407,6 +440,7 @@ class RunTrustGate:
             _row(
                 f"selected {tally.selected} . executed {tally.executed} . skipped "
                 f"{tally.skipped} ({_percent(tally.skip_ratio)})"
+                + (f" . not applicable {len(tally.out_of_scope)}" if tally.out_of_scope else "")
             )
         )
         box.append(
@@ -430,6 +464,7 @@ class RunTrustGate:
         for title, silences in (
             ("what was skipped, and why:", tally.silences),
             ("detectors that reached no verdict:", tally.detector_silences),
+            ("not applicable here (out of scope, not counted as skips):", tally.out_of_scope),
         ):
             if not silences:
                 continue
@@ -569,6 +604,7 @@ def write_markers(
             "thresholds": thresholds,
             "breaches": [asdict(b) for b in result.breaches],
             "not_applicable": list(result.not_applicable),
+            "out_of_scope": [asdict(s) for s in tally.out_of_scope],
             "tests": {t.nodeid: t.to_json() for t in tests},
         }
         json_path.write_text(json.dumps(body, indent=2), encoding="utf-8")
