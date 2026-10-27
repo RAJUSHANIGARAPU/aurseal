@@ -76,6 +76,10 @@ on:
         description: "Run the render lane (needs auth_mode=token and a token)"
         type: boolean
         default: false
+      changed_services:
+        description: "Changed services; narrows the gate step when SELECTIVE_TESTS=true"
+        type: string
+        default: ""
 
 # One run per ref. A newer pull-request run cancels the superseded one; a default-branch
 # run is never cancelled, because a cancelled run leaves no verdict.
@@ -395,6 +399,7 @@ jobs:
           INPUT_ENTITY_ALLOWLIST: ${{ inputs.entity_allowlist }}
           INPUT_BROWSER_MATRIX: ${{ inputs.browser_matrix }}
           INPUT_RUN_TOKEN_LANE: ${{ inputs.run_token_lane }}
+          INPUT_CHANGED_SERVICES: ${{ inputs.changed_services }}
 
       # Why: docs/ci-decisions.md#credentials
       - name: Login credentials for the target environment
@@ -435,10 +440,29 @@ jobs:
       - name: Point the verdict layer at the snapshot
         run: echo "DEFECT_STATUS_FILE=$PWD/reports/traceability/defect-status.json" >> "$GITHUB_ENV"
 
+      # Opt-in (repository variable SELECTIVE_TESTS=true): narrow the gate step to the tests
+      # the changed services can affect. Every case it cannot apply falls back to the full
+      # step with a one-line reason; a service list with the switch off fails here.
+      # Why: docs/ci-decisions.md#service-selection
+      - name: Service selection
+        id: services
+        run: python -m gate.service_selection ci
+        env:
+          SELECTIVE_TESTS: ${{ vars.SELECTIVE_TESTS }}
+          CHANGED_SERVICES: ${{ inputs.changed_services }}
+          OTHER_FILTER: ${{ steps.inputs.outputs.custom }}
+          SHARD_COUNT: ${{ strategy.job-total || 1 }}
+
       # The default inputs produce exactly this command (pinned by tests/gate/test_run_inputs.py).
       - name: Run Smoke Tests
-        if: steps.inputs.outputs.custom != 'true'
+        if: steps.inputs.outputs.custom != 'true' && steps.services.outputs.selective != 'true'
         run: pytest -m "(smoke or api or contract) and not unit and not on_demand and not slow and not draft and not render_check" -n auto --browser-channel=chrome --junitxml=reports/junit-browser.xml
+
+      - name: Run the gate on the service selection
+        if: steps.inputs.outputs.custom != 'true' && steps.services.outputs.selective == 'true'
+        run: python -m gate.service_selection run
+        env:
+          SERVICE_SELECTION: ${{ steps.services.outputs.expression }}
 
       - name: Run with the dispatch inputs
         if: steps.inputs.outputs.custom == 'true'

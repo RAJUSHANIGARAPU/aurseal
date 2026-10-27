@@ -75,6 +75,7 @@ Data directories (no code): `defects/`, `schemas/`, `security/`, `specs/`, `plan
 | `priority` | metadata | test case catalogue (`results.catalogue`) |
 | `feature` | metadata | test case catalogue, Allure labels |
 | `requirement` | metadata | requirement links, `REQUIREMENTS_STRICT` (`traceability`) |
+| `service` | metadata | service selection map (`gate.service_selection`) |
 | `covers` | metadata | coverage gaps (`traceability.gaps`) |
 | `generated_batch` | metadata | `/generate-from-swagger` batch selection |
 

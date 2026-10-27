@@ -72,6 +72,8 @@ INPUTS: tuple[Input, ...] = (
     Input("entity_allowlist", "string", "", "command"),
     Input("browser_matrix", "boolean", "false", "workflow"),
     Input("run_token_lane", "boolean", "false", "workflow"),
+    # Read by gate.service_selection (the gate step's opt-in narrowing), not by the command.
+    Input("changed_services", "string", "", "workflow"),
 )
 INPUT_NAMES = frozenset(i.name for i in INPUTS)
 
@@ -190,6 +192,13 @@ def plan(
     if targets and not _TARGETS_RE.fullmatch(targets):
         raise RunInputsError(
             f"input entity_allowlist={targets!r} must be comma-separated ids ([A-Za-z0-9._-])"
+        )
+
+    services = values["changed_services"].replace(",", " ").split()
+    if services and not _TARGETS_RE.fullmatch(",".join(services)):
+        raise RunInputsError(
+            f"input changed_services={values['changed_services']!r} must be service names "
+            "([A-Za-z0-9._-]), comma or space separated"
         )
 
     env: dict[str, str] = {"TEST_ENV": env_name}
