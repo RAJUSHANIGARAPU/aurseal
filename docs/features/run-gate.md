@@ -370,8 +370,7 @@ def test_mail_relay_bounce():
 
 
 @pytest.mark.only_env("qa", "staging", covered_by="the staging nightly lane")
-def test_marked():
-    ...
+def test_marked(): ...
 ```
 
 `runs_only_on(envs, what, env=None, *, covered_by=None)` reads the environment from `env`,
