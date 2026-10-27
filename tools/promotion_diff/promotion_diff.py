@@ -43,15 +43,15 @@ clean one).
 from __future__ import annotations
 
 import argparse
+import collections
 import json
 import os
 import re
 import subprocess
 import sys
-from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -613,8 +613,8 @@ def settings_drift(
         except OSError:
             drift.problem = f"{label} settings file not found: {path}"
             return drift
-    source = Counter(normalise_settings(texts[0], masks))
-    target = Counter(normalise_settings(texts[1], masks))
+    source = collections.Counter(normalise_settings(texts[0], masks))
+    target = collections.Counter(normalise_settings(texts[1], masks))
     drift.to_only = sorted((target - source).elements())
     drift.from_only = sorted((source - target).elements())
     sides = [("to", line) for line in drift.to_only] + [("from", line) for line in drift.from_only]
@@ -829,7 +829,7 @@ def to_json(
         "candidateId": candidate_id,
         "from": labels[0],
         "to": labels[1],
-        "generated": generated or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "generated": generated or datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "pins": {
             side: {name: pin.ref for name, pin in sorted(manifest.items())}
             for side, manifest in zip(("from", "to"), pins, strict=True)
