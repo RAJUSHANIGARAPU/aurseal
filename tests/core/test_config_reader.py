@@ -219,3 +219,37 @@ class TestEnvProfile:
 
         with pytest.raises(ValueError, match=message):
             EnvProfile.from_config(_reader({}, {}, {**self._ENTRY, key: value}))
+
+
+class TestBrowserTimezone:
+    _ENTRY = TestEnvProfile._ENTRY
+
+    def test_absent_leaves_the_browser_default(self):
+        from core.env_profile import EnvProfile, browser_timezone, timezone_context_args
+
+        reader = _reader({}, {}, self._ENTRY)
+        assert browser_timezone(reader) is None
+        assert timezone_context_args(None) == {}
+        assert EnvProfile.from_config(reader).context_args() == {}
+
+    def test_committed_value_reaches_the_context_args(self):
+        from core.env_profile import EnvProfile
+
+        reader = _reader({}, {}, {**self._ENTRY, "browser_timezone": "Europe/Lisbon"})
+        profile = EnvProfile.from_config(reader)
+        assert profile.browser_timezone == "Europe/Lisbon"
+        assert profile.context_args() == {"timezone_id": "Europe/Lisbon"}
+
+    def test_the_ladder_overrides_it(self):
+        from core.env_profile import browser_timezone
+
+        reader = _reader(
+            {"BROWSER_TIMEZONE": " Asia/Tokyo "}, {}, {"browser_timezone": "Europe/Lisbon"}
+        )
+        assert browser_timezone(reader) == "Asia/Tokyo"
+
+    def test_an_unknown_zone_is_named(self):
+        from core.env_profile import browser_timezone
+
+        with pytest.raises(ValueError, match="not a known IANA time zone"):
+            browser_timezone(_reader({"BROWSER_TIMEZONE": "Mars/Olympus"}, {}, {}))

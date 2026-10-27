@@ -63,6 +63,7 @@ config = ConfigReader(
 | `TEST_ENV` | `qa` | environment when `--env` is not given |
 | `<KEY>` | — | overrides `<key>` from any file |
 | `.env.<env>` | absent | per-environment local secrets (already ignored by `.env.*`) |
+| `browser_timezone` | none | browser context time zone (IANA name), so UI dates match the API |
 
 ## The `.env.<env>` file
 
