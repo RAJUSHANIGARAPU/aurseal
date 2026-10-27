@@ -14,7 +14,8 @@ import pytest
 import yaml
 
 from gate.preflight import Status
-from gate.read_only import ReadOnlyClient, find_write_calls
+from gate.read_only import find_write_calls
+from tools.config_preflight import cli
 from tools.config_preflight import config_preflight as cp
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -299,30 +300,6 @@ def test_a_bad_jsonl_line_is_an_input_error_not_a_skipped_record(tmp_path):
         list(cp.FileRecordReader(jsonl).records())
 
 
-class _Response:
-    def __init__(self, body):
-        self.body = body
-
-    def json(self):
-        return self.body
-
-
-def test_http_reader_follows_pages_through_a_read_only_client():
-    pages = {
-        "/subscriptions": {"items": [record("S-1")], "next": "/subscriptions?page=2"},
-        "/subscriptions?page=2": {"items": [record("S-2")], "next": None},
-    }
-    client = ReadOnlyClient(lambda url, **_: _Response(pages[url]))
-    reader = cp.HttpRecordReader(client, "/subscriptions")
-    assert [r["id"] for r in reader.records()] == ["S-1", "S-2"]
-
-
-def test_http_reader_refuses_a_malformed_page():
-    client = ReadOnlyClient(lambda url, **_: _Response({"error": "busy"}))
-    with pytest.raises(cp.InputError, match="no 'items' list"):
-        list(cp.HttpRecordReader(client, "/subscriptions").records())
-
-
 def _git(repo: Path, *args: str) -> None:
     subprocess.run(
         ["git", "-c", "user.name=Dev", "-c", "user.email=dev@example.test",
@@ -366,7 +343,7 @@ def files(tmp_path):
 
 
 def _cli(old, new, records, *extra):
-    return cp.main(["--old", str(old), "--new", str(new), "--records", str(records), *extra])
+    return cli.main(["--old", str(old), "--new", str(new), "--records", str(records), *extra])
 
 
 def test_cli_markdown_and_fail_on_reject(files, capsys):
@@ -388,11 +365,16 @@ def test_cli_json_and_clean_exit(files, capsys):
         "records": 2,
         "valid": 2,
         "newly_valid": 0,
-        "rejected": 0,
         "orphaned": 0,
+        "out_of_scope": 0,
+        "rejected": 0,
         "stuck": 0,
+        "stale_action": 0,
+        "stale_route": 0,
         "not_assessed": 0,
     }
+    assert body["determined"] is True
+    assert body["scanned"] == {"subscription": {"file": 2}}
 
 
 def test_cli_not_assessed_fails_unless_allowed(files):
@@ -406,7 +388,7 @@ def test_cli_bad_input_exits_1(files, capsys):
     old, _new, records = files
     assert _cli(old, old.with_name("missing.yaml"), records) == 1
     assert "config not found" in capsys.readouterr().err
-    assert cp.main(["--old", str(old), "--new-ref", "HEAD", "--records", str(records)]) == 1
+    assert cli.main(["--old", str(old), "--new-ref", "HEAD", "--records", str(records)]) == 1
 
 
 # ---------------------------------------------------------------- read-only

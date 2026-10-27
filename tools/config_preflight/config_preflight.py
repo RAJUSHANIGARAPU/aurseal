@@ -5,12 +5,12 @@ state's rules. Change the rules and the records already stored do not change
 with them: the app rejects them on the next upgrade or the next action. This
 tool answers the question before the deploy, from three inputs:
 
-* the OLD config and the NEW config: workflow YAML in the format
-  :mod:`generators.workflow_model` reads, as two files or directories, or as
-  one path at two git refs (read with ``git show``);
+* the NEW config, and optionally the OLD one: workflow YAML in the format
+  :mod:`generators.workflow_model` reads, as files or directories, or at git
+  refs (read with ``git show``, see :mod:`tools.config_preflight.sources`);
 * the records: a JSONL or JSON export, or anything implementing
-  :class:`RecordReader` (:class:`HttpRecordReader` reads pages through a
-  :class:`~gate.read_only.ReadOnlyClient`).
+  :class:`RecordReader`. The paged HTTP lists, the event-history recovery and
+  the fetch-by-id live in :mod:`tools.config_preflight.sources`.
 
 Per-state rules. The workflow format declares ``fields`` once for the entity.
 A state may add its own ``fields`` list; an entry there is merged over the
@@ -30,6 +30,10 @@ the report lists:
 * **rejected** - a BLOCKED rule: record, field, rule and the stored value, and
   whether the OLD config already rejected it;
 * **orphaned** - the record's state (or entity type) is gone from the NEW config;
+* **stale action** - the record sits in an action (an open draft) its state no
+  longer offers;
+* **stale route** - the record is headed for a target that is not a declared
+  transition target of its state (a state with no routes accepts none);
 * **stuck** - the state had a way out in the OLD config and has none in the NEW
   one (no transition to a declared state). Transition conditions are not
   evaluated: a conditional exit counts as an exit;
@@ -39,26 +43,23 @@ the report lists:
 * the config change itself: entity types, states, transitions and field rules
   added, removed, tightened or loosened.
 
-Records valid under the NEW rules with no finding are counted, not listed.
+Records valid under the NEW rules with no finding are counted, not listed. A
+finding whose every stale name the type's migration script mentions gets the
+verdict ``covered-by-migration?``: a hint, still a finding.
 
 Read-only by construction: the tool reads files, runs ``git show``/``git
-ls-tree``, and prints to stdout. It writes nothing.
-
-Exit status: 0 report printed; 1 bad input; 2 with ``--fail-on-reject`` when any
-record is rejected, orphaned or stuck, or (unless ``--allow-not-assessed``) any
-rule could not be assessed.
+ls-tree``, issues GETs, and prints to stdout. It writes nothing. The command
+line and its exit status are in :mod:`tools.config_preflight.cli`.
 """
 
 from __future__ import annotations
 
-import argparse
 import datetime as dt
 import json
 import re
 import subprocess
-import sys
-from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
-from dataclasses import asdict, dataclass, field
+from collections.abc import Iterable, Iterator, Mapping
+from dataclasses import asdict, dataclass, field, replace
 from decimal import Decimal, InvalidOperation
 from enum import Enum
 from pathlib import Path
@@ -67,7 +68,6 @@ from typing import Any, Protocol
 import yaml
 
 from gate.preflight import Status
-from gate.read_only import ReadOnlyClient
 from generators.workflow_model import (
     WORKFLOW_SUFFIXES,
     WorkflowDefinition,
@@ -94,7 +94,14 @@ class Finding(str, Enum):
     REJECTED = "rejected"
     ORPHANED = "orphaned"
     STUCK = "stuck"
+    STALE_ACTION = "stale_action"
+    STALE_ROUTE = "stale_route"
     NOT_ASSESSED = "not_assessed"
+
+
+#: The verdict of a finding whose every stale name the type's migration script mentions.
+#: A hint for the reader, still a finding: a mention is not a migration.
+MIGRATION_HINT = "covered-by-migration?"
 
 
 class _Missing:
@@ -288,38 +295,6 @@ def _record_object(item: Any, where: str) -> Mapping[str, Any]:
 
 
 @dataclass(frozen=True)
-class HttpRecordReader:
-    """Records from a paged list endpoint, read through a :class:`ReadOnlyClient`.
-
-    Each page is a JSON object holding the records under ``items_key`` and the
-    next page's path under ``next_key`` (absent or null on the last page). A
-    page that is not shaped like that raises :class:`InputError` instead of
-    ending the read early: a partial export is not a clean one.
-    """
-
-    client: ReadOnlyClient
-    path: str
-    items_key: str = "items"
-    next_key: str = "next"
-    max_pages: int = 1000
-    decode: Callable[[Any], Any] = field(default=lambda response: response.json())
-
-    def records(self) -> Iterator[Mapping[str, Any]]:
-        path: str | None = self.path
-        for _page in range(self.max_pages):
-            if not path:
-                return
-            body = self.decode(self.client.get(path))
-            if not isinstance(body, Mapping) or not isinstance(body.get(self.items_key), list):
-                raise InputError(f"{path}: page has no {self.items_key!r} list")
-            for index, item in enumerate(body[self.items_key]):
-                yield _record_object(item, f"{path}[{index}]")
-            path = body.get(self.next_key)
-        if path:
-            raise InputError(f"stopped after {self.max_pages} pages; more were announced")
-
-
-@dataclass(frozen=True)
 class RecordShape:
     """Where a record keeps its id, entity type, state and field values."""
 
@@ -327,12 +302,14 @@ class RecordShape:
     type_key: str = "type"
     state_key: str = "state"
     fields_key: str = "fields"  # a mapping of values; when absent, the record's own keys
+    action_key: str = "action"  # the action(s) the record currently sits in (an open draft)
+    target_key: str = "target"  # the route target(s) the record is currently headed for
 
     def values(self, record: Mapping[str, Any]) -> Mapping[str, Any]:
         nested = record.get(self.fields_key)
         if isinstance(nested, Mapping):
             return nested
-        meta = {self.id_key, self.type_key, self.state_key}
+        meta = {self.id_key, self.type_key, self.state_key, self.action_key, self.target_key}
         return {k: v for k, v in record.items() if k not in meta}
 
 
@@ -596,6 +573,33 @@ class RecordFinding:
     value: Any = None
     detail: str = ""
     already_under_old: bool = False  # the OLD config rejected it as well
+    source: str = "file"  # where the record was read: file, records, drafts, events, ids
+    verdict: str = "finding"  # or MIGRATION_HINT
+
+    @property
+    def stale_names(self) -> tuple[str, ...]:
+        """Config names this finding says are gone; empty when it is about a value."""
+        if self.kind is Finding.ORPHANED:
+            return (self.entity,) if self.field == "type" else (self.state,)
+        if self.kind in (Finding.STALE_ACTION, Finding.STALE_ROUTE):
+            return (str(self.value),)
+        return ()
+
+
+def _lookup(config: Mapping[str, Entity], key: str) -> Entity | None:
+    """An entity by key; the match is case-insensitive."""
+    if key in config:
+        return config[key]
+    folded = key.casefold()
+    return next((e for k, e in config.items() if k.casefold() == folded), None)
+
+
+def _names(value: Any) -> list[str]:
+    if value is None or value == "":
+        return []
+    if isinstance(value, list | tuple):
+        return [str(v) for v in value if v not in (None, "")]
+    return [str(value)]
 
 
 @dataclass
@@ -607,12 +611,18 @@ class PreflightResult:
     newly_valid: int = 0  # of those, records the OLD config rejected
     findings: list[RecordFinding] = field(default_factory=list)
     changes: list[ConfigChange] = field(default_factory=list)
+    scanned: dict[str, dict[str, int]] = field(default_factory=dict)  # entity -> source -> n
+    out_of_scope: int = 0  # records of a type outside --types / the manifest
+    undetermined: list[str] = field(default_factory=list)  # what could not be read or judged
+    gone: list[dict[str, str]] = field(default_factory=list)  # fetched by id, answered 404
+    days: list[dict[str, Any]] = field(default_factory=list)  # event history, one row per day
+    compared: bool = True  # False when no OLD config was given
 
     def of(self, kind: Finding) -> list[RecordFinding]:
         return [f for f in self.findings if f.kind is kind]
 
     def records_with(self, kind: Finding) -> int:
-        return len({f.record for f in self.of(kind)})
+        return len({(f.entity, f.record) for f in self.of(kind)})
 
     @property
     def blocking(self) -> bool:
@@ -621,6 +631,23 @@ class PreflightResult:
     @property
     def not_assessed(self) -> bool:
         return any(f.kind is Finding.NOT_ASSESSED for f in self.findings)
+
+    @property
+    def determined(self) -> bool:
+        """Every source was read, every type had a config, and something was scanned."""
+        return not self.undetermined and self.total > 0
+
+    def exit_code(self, *, fail_on_findings: bool, allow_not_assessed: bool = False) -> int:
+        """2 findings (with ``fail_on_findings``), else 1 undetermined, else 0 clean.
+
+        A finding wins over an incomplete scan: it is already enough to stop a
+        deploy, and the report still lists what was not read. Nothing scanned is
+        never clean.
+        """
+        failing = self.blocking or (self.not_assessed and not allow_not_assessed)
+        if fail_on_findings and failing:
+            return 2
+        return 0 if self.determined else 1
 
     def to_json(self) -> dict[str, Any]:
         def finding(f: RecordFinding) -> dict[str, Any]:
@@ -632,86 +659,188 @@ class PreflightResult:
         return {
             "old": self.old_label,
             "new": self.new_label,
+            "determined": self.determined,
             "counts": {
                 "records": self.total,
                 "valid": self.valid,
                 "newly_valid": self.newly_valid,
+                "out_of_scope": self.out_of_scope,
                 **{k.value: self.records_with(k) for k in Finding},
             },
+            "scanned": self.scanned,
+            "undetermined": self.undetermined,
+            "gone": self.gone,
+            "days": self.days,
             "changes": [asdict(c) for c in self.changes],
             "findings": [finding(f) for f in self.findings],
         }
 
 
-def _record_findings(
-    rid: str, record: Mapping[str, Any], shape: RecordShape, old: Config, new: Config
-) -> tuple[list[RecordFinding], bool]:
-    """Findings for one record, and whether the OLD config rejected it."""
-    raw_type, state = record.get(shape.type_key), record.get(shape.state_key)
-    entity_key = str(raw_type) if raw_type else (next(iter(new)) if len(new) == 1 else "")
-    if not entity_key or not state:
-        missing = "entity type" if not entity_key else "state"
-        return [RecordFinding(Finding.NOT_ASSESSED, rid, entity_key, str(state or ""),
-                              detail=f"record has no {missing}")], False  # fmt: skip
-    state = str(state)
-    values = shape.values(record)
-    old_entity = old.get(entity_key)
-    if old_entity is not None and state not in old_entity.definition.states:
-        old_entity = None
-    old_rules = old_entity.rules(state) if old_entity is not None else None
-    old_rejected = {
-        (r.field, r.rule)
-        for r in evaluate_values(values, old_rules or {})
-        if r.status is Status.BLOCKED
-    }
+class Preflight:
+    """Judges records one at a time against the NEW config and collects the result.
 
-    entity = new.get(entity_key)
-    orphan = (
-        "entity type is not in the new config" if entity is None
-        else "state is not in the new config" if state not in entity.definition.states
-        else ""
-    )  # fmt: skip
-    if entity is None or orphan:
-        finding = RecordFinding(Finding.ORPHANED, rid, entity_key, state, detail=orphan)
-        return [finding], bool(old_rejected)
+    ``old`` may be ``None`` when only the new config is known: there is then no
+    config diff, no "already rejected" marking and no stuck detection.
+    ``types`` narrows the run to those entity types (case-insensitive); a
+    record of another type is counted as out of scope, not judged.
+    """
 
-    out: list[RecordFinding] = []
-    for r in evaluate_values(values, entity.rules(state), old_rules):
-        if r.status is Status.OK:
-            continue
-        kind = Finding.REJECTED if r.status is Status.BLOCKED else Finding.NOT_ASSESSED
-        out.append(RecordFinding(
-            kind, rid, entity_key, state, r.field, r.rule, r.value, r.detail,
-            already_under_old=(r.field, r.rule) in old_rejected,
-        ))  # fmt: skip
-    old_exits = old_entity.exits(state) if old_entity is not None else []
-    if old_exits and not entity.exits(state):
-        why = f"no way out; removed: {', '.join(old_exits)}"
-        out.append(RecordFinding(Finding.STUCK, rid, entity_key, state, detail=why))
-    return out, bool(old_rejected)
+    def __init__(
+        self,
+        old: Config | None,
+        new: Config,
+        *,
+        shape: RecordShape | None = None,
+        old_label: str = "old",
+        new_label: str = "new",
+        types: Iterable[str] | None = None,
+    ) -> None:
+        self.old = old or {}
+        self.new = new
+        self.shape = shape or RecordShape()
+        self.types = None if types is None else {t.casefold() for t in types}
+        changes = diff_configs(old, new) if old is not None else []
+        self.result = PreflightResult(
+            old_label, new_label, changes=changes, compared=old is not None
+        )
+
+    def in_scope(self, entity: str) -> bool:
+        return self.types is None or entity.casefold() in self.types
+
+    def declared(self, entity: str, state: str, action: str | None) -> bool:
+        """Does the NEW config declare ``state`` for ``entity``, and ``action`` in it?"""
+        found = _lookup(self.new, entity)
+        if found is None or state not in found.definition.states:
+            return False
+        return not action or action in found.definition.states[state].actions
+
+    def check(
+        self, record: Mapping[str, Any], source: str = "file", entity: str | None = None
+    ) -> list[RecordFinding]:
+        """Judge one record; ``entity`` is the type to assume when the record names none."""
+        shape = self.shape
+        raw_type = record.get(shape.type_key) or entity
+        if raw_type and not self.in_scope(str(raw_type)):
+            self.result.out_of_scope += 1
+            return []
+        result = self.result
+        result.total += 1
+        rid = str(record.get(shape.id_key) or f"#{result.total}")
+        if not raw_type and len(self.new) == 1:
+            raw_type = next(iter(self.new))
+        found = _lookup(self.new, str(raw_type)) if raw_type else None
+        label = found.key if found is not None else str(raw_type or "")
+        per_type = result.scanned.setdefault(label or "(no type)", {})
+        per_type[source] = per_type.get(source, 0) + 1
+        findings, old_rejected = self._findings(rid, label, record, source)
+        if findings:
+            result.findings.extend(findings)
+        else:
+            result.valid += 1
+            result.newly_valid += old_rejected
+        return findings
+
+    def _findings(
+        self, rid: str, entity_key: str, record: Mapping[str, Any], source: str
+    ) -> tuple[list[RecordFinding], bool]:
+        """Findings for one record, and whether the OLD config rejected it."""
+        shape = self.shape
+        state = record.get(shape.state_key)
+
+        def make(kind: Finding, st: str = "", **kw: Any) -> RecordFinding:
+            return RecordFinding(kind, rid, entity_key, st, source=source, **kw)
+
+        if not entity_key or not state:
+            missing = "entity type" if not entity_key else "state"
+            return [make(Finding.NOT_ASSESSED, str(state or ""),
+                         detail=f"record has no {missing}")], False  # fmt: skip
+        state = str(state)
+        values = shape.values(record)
+        old_entity = _lookup(self.old, entity_key)
+        if old_entity is not None and state not in old_entity.definition.states:
+            old_entity = None
+        old_rules = old_entity.rules(state) if old_entity is not None else None
+        old_rejected = {
+            (r.field, r.rule)
+            for r in evaluate_values(values, old_rules or {})
+            if r.status is Status.BLOCKED
+        }
+
+        entity = _lookup(self.new, entity_key)
+        if entity is None:
+            why = "entity type is not in the new config"
+            return [make(Finding.ORPHANED, state, field="type", detail=why)], bool(old_rejected)
+        if state not in entity.definition.states:
+            why = "state is not in the new config"
+            return [make(Finding.ORPHANED, state, detail=why)], bool(old_rejected)
+
+        out: list[RecordFinding] = []
+        node = entity.definition.states[state]
+        for action in _names(record.get(shape.action_key)):
+            if action not in node.actions:
+                out.append(make(
+                    Finding.STALE_ACTION, state, field=shape.action_key, rule="declared",
+                    value=action, detail=f"action is not offered in state {state}",
+                ))  # fmt: skip
+        targets = {t.to for t in node.transitions}
+        for target in _names(record.get(shape.target_key)):
+            if target not in targets:
+                why = (
+                    f"not a declared target of {state}"
+                    if targets
+                    else f"{state} has no routes, so it accepts none"
+                )
+                out.append(make(Finding.STALE_ROUTE, state, field=shape.target_key,
+                                rule="declared", value=target, detail=why))  # fmt: skip
+        for r in evaluate_values(values, entity.rules(state), old_rules):
+            if r.status is Status.OK:
+                continue
+            kind = Finding.REJECTED if r.status is Status.BLOCKED else Finding.NOT_ASSESSED
+            out.append(make(
+                kind, state, field=r.field, rule=r.rule, value=r.value, detail=r.detail,
+                already_under_old=(r.field, r.rule) in old_rejected,
+            ))  # fmt: skip
+        old_exits = old_entity.exits(state) if old_entity is not None else []
+        if old_exits and not entity.exits(state):
+            why = f"no way out; removed: {', '.join(old_exits)}"
+            out.append(make(Finding.STUCK, state, detail=why))
+        return out, bool(old_rejected)
 
 
 def run(
-    old: Config,
+    old: Config | None,
     new: Config,
     records: Iterable[Mapping[str, Any]],
     *,
     shape: RecordShape | None = None,
     old_label: str = "old",
     new_label: str = "new",
+    types: Iterable[str] | None = None,
 ) -> PreflightResult:
-    shape = shape or RecordShape()
-    result = PreflightResult(old_label, new_label, changes=diff_configs(old, new))
-    for index, record in enumerate(records):
-        result.total += 1
-        rid = str(record.get(shape.id_key) or f"#{index}")
-        findings, old_rejected = _record_findings(rid, record, shape, old, new)
-        if findings:
-            result.findings.extend(findings)
-        else:
-            result.valid += 1
-            result.newly_valid += old_rejected
-    return result
+    """Judge an export of records in one call."""
+    pre = Preflight(old, new, shape=shape, old_label=old_label, new_label=new_label, types=types)
+    for record in records:
+        pre.check(record)
+    return pre.result
+
+
+def apply_migration_hints(result: PreflightResult, scripts: Mapping[str, str]) -> int:
+    """Mark findings whose every stale name the type's migration script mentions.
+
+    ``scripts`` maps entity type to the script text (case-insensitive key). A
+    name matches as a whole word. Returns how many findings were marked.
+    """
+    folded = {k.casefold(): v for k, v in scripts.items()}
+    marked = 0
+    for index, f in enumerate(result.findings):
+        script = folded.get(f.entity.casefold())
+        names = f.stale_names
+        if not script or not names:
+            continue
+        if all(re.search(rf"(?<![\w-]){re.escape(n)}(?![\w-])", script) for n in names):
+            result.findings[index] = replace(f, verdict=MIGRATION_HINT)
+            marked += 1
+    return marked
 
 
 # ---------------------------------------------------------------------------
@@ -739,10 +868,29 @@ def render_markdown(result: PreflightResult) -> str:
         f"{result.records_with(Finding.REJECTED)} rejected, "
         f"{result.records_with(Finding.ORPHANED)} orphaned, "
         f"{result.records_with(Finding.STUCK)} stuck, "
+        f"{result.records_with(Finding.STALE_ACTION)} on a stale action, "
+        f"{result.records_with(Finding.STALE_ROUTE)} on a stale route, "
         f"{result.records_with(Finding.NOT_ASSESSED)} not assessed.",
     ]
     if result.newly_valid:
         lines.append(f"{result.newly_valid} valid record(s) were rejected by the old config.")
+    if result.out_of_scope:
+        lines.append(f"{result.out_of_scope} record(s) of a type out of scope were skipped.")
+    if not result.determined:
+        lines.append(
+            "**Undetermined:** nothing was scanned."
+            if result.total == 0 and not result.undetermined
+            else "**Undetermined:** see below; this report does not cover everything."
+        )
+    if result.scanned:
+        sources = sorted({s for row in result.scanned.values() for s in row})
+        lines += ["", "## Scanned", "", f"| Entity | {' | '.join(sources)} |",
+                  "|---|" + "---|" * len(sources)]  # fmt: skip
+        for entity, row in sorted(result.scanned.items()):
+            lines.append(f"| {entity} | {' | '.join(str(row.get(s, 0)) for s in sources)} |")
+    if result.undetermined:
+        lines += ["", f"## Undetermined ({len(result.undetermined)})", ""]
+        lines += [f"- {_cell(u, 200)}" for u in result.undetermined]
     lines += ["", "## Config change", ""]
     if result.changes:
         lines += ["| Entity | Scope | Change | Subject | Old | New |", "|---|---|---|---|---|---|"]
@@ -753,7 +901,7 @@ def render_markdown(result: PreflightResult) -> str:
             for c in result.changes
         ]
     else:
-        lines.append("No change.")
+        lines.append("No change." if result.compared else "No old config given; nothing compared.")
 
     def section(title: str, header: str, rows: list[str]) -> None:
         if rows:
@@ -769,12 +917,20 @@ def render_markdown(result: PreflightResult) -> str:
             for f in rejected
         ],
     )
-    for kind, title in ((Finding.ORPHANED, "Orphaned"), (Finding.STUCK, "Stuck")):
+    for kind, title in (
+        (Finding.ORPHANED, "Orphaned"),
+        (Finding.STALE_ACTION, "Stale action"),
+        (Finding.STALE_ROUTE, "Stale route"),
+        (Finding.STUCK, "Stuck"),
+    ):
         section(
             title,
-            "| Record | Entity | State | Why |\n|---|---|---|---|",
+            "| Record | Entity | State | Name | Why | Source | Verdict |\n"
+            "|---|---|---|---|---|---|---|",
             [
-                f"| {f.record} | {f.entity} | {f.state} | {_cell(f.detail, 100)} |"
+                f"| {f.record} | {f.entity} | {f.state} | "
+                f"{_cell(f.value) if f.value is not None else ''} | {_cell(f.detail, 100)} | "
+                f"{f.source} | {f.verdict} |"
                 for f in result.of(kind)
             ],
         )
@@ -790,72 +946,17 @@ def render_markdown(result: PreflightResult) -> str:
             for (e, s, fld, rule, why), ids in grouped.items()
         ],
     )
+    section(
+        "Gone",
+        "| Record | Entity | Source |\n|---|---|---|",
+        [f"| {g['record']} | {g['entity']} | {g['source']} |" for g in result.gone],
+    )
+    section(
+        "Event history",
+        "| Entity | Day (UTC) | Events | Error |\n|---|---|---|---|",
+        [
+            f"| {d['entity']} | {d['day']} | {d['count']} | {_cell(d['error'] or '', 80)} |"
+            for d in result.days
+        ],
+    )
     return "\n".join(lines) + "\n"
-
-
-# ---------------------------------------------------------------------------
-# CLI
-# ---------------------------------------------------------------------------
-
-
-def parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
-    p = argparse.ArgumentParser(
-        prog="python -m tools.config_preflight",
-        description="Which stored records would the new workflow config reject?",
-    )
-    p.add_argument("--old", help="old config: workflow file or directory")
-    p.add_argument("--new", help="new config: workflow file or directory")
-    p.add_argument("--old-ref", help="git ref of the old config (with --config)")
-    p.add_argument("--new-ref", help="git ref of the new config (with --config)")
-    p.add_argument("--config", help="config path inside the repo, for --old-ref/--new-ref")
-    p.add_argument("--repo", default=".", help="git repository for the refs (default .)")
-    p.add_argument("--records", required=True, help="records export: .jsonl or .json")
-    p.add_argument("--id-key", default="id")
-    p.add_argument("--type-key", default="type")
-    p.add_argument("--state-key", default="state")
-    p.add_argument("--fields-key", default="fields")
-    p.add_argument("--json", action="store_true", help="print JSON instead of markdown")
-    p.add_argument(
-        "--fail-on-reject",
-        action="store_true",
-        help="exit 2 when a record is rejected, orphaned, stuck or not assessed",
-    )
-    p.add_argument(
-        "--allow-not-assessed",
-        action="store_true",
-        help="with --fail-on-reject: do not fail on not-assessed rules alone",
-    )
-    return p.parse_args(argv)
-
-
-def _side(args: argparse.Namespace, which: str) -> tuple[Config, str]:
-    path, ref = getattr(args, which), getattr(args, f"{which}_ref")
-    if bool(path) == bool(ref):
-        raise InputError(f"give exactly one of --{which} and --{which}-ref")
-    if ref:
-        if not args.config:
-            raise InputError(f"--{which}-ref needs --config")
-        return load_config_at_ref(args.repo, ref, args.config), ref
-    return load_config(path), Path(path).name
-
-
-def main(argv: Sequence[str] | None = None) -> int:
-    args = parse_args(argv)
-    try:
-        old, old_label = _side(args, "old")
-        new, new_label = _side(args, "new")
-        shape = RecordShape(args.id_key, args.type_key, args.state_key, args.fields_key)
-        records = FileRecordReader(Path(args.records)).records()
-        result = run(old, new, records, shape=shape, old_label=old_label, new_label=new_label)
-    except InputError as exc:
-        print(f"config-preflight: {exc}", file=sys.stderr)
-        return 1
-    if args.json:
-        print(json.dumps(result.to_json(), indent=2, default=str))
-    else:
-        print(render_markdown(result), end="")
-    if args.fail_on_reject and (
-        result.blocking or (result.not_assessed and not args.allow_not_assessed)
-    ):
-        return 2
-    return 0
