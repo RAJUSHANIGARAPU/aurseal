@@ -18,6 +18,9 @@ pytest tests/ -n auto
 pytest -m "smoke or api or contract" -n auto --env=qa
 pytest -m regression -n auto   # CI runs this on main only
 
+# Records a new workflow config would reject, before deploying it (docs/features/release-tooling.md)
+python -m tools.config_preflight --old v1.yaml --new v2.yaml --records export.jsonl --fail-on-reject
+
 docker compose up
 ```
 
