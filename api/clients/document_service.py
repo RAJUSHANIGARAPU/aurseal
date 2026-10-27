@@ -44,9 +44,19 @@ class DocumentPaths:
 class DocumentServiceClient:
     """List templates, read template source, render to PDF and download stored documents."""
 
-    def __init__(self, engine: HttpEngine, paths: DocumentPaths | None = None) -> None:
+    def __init__(
+        self,
+        engine: HttpEngine,
+        paths: DocumentPaths | None = None,
+        *,
+        store_timeout_s: float = 30.0,
+        store_interval_s: float = 1.0,
+    ) -> None:
         self.engine = engine
         self.paths = paths or DocumentPaths()
+        # A file id can be listed before the file reaches storage: file() polls on 404.
+        self.store_timeout_s = store_timeout_s
+        self.store_interval_s = store_interval_s
 
     # -- templates ----------------------------------------------------------
 
@@ -95,9 +105,16 @@ class DocumentServiceClient:
         path = self.paths.document_pdf.format(id=document_id)
         return _require_pdf(self.engine.get_bytes(path, accept=PDF), f"document {document_id}")
 
-    def file(self, file_id: Any) -> bytes:
-        """Raw bytes of a stored file."""
-        return self.engine.get_bytes(self.paths.file.format(id=file_id))
+    def file(self, file_id: Any, *, timeout_s: float | None = None) -> bytes:
+        """Raw bytes of a stored file, waiting up to ``timeout_s`` for it to be stored.
+
+        Only a 404 is waited on; any other error raises at once. ``timeout_s=0`` asks once.
+        """
+        return self.engine.get_bytes_once_stored(
+            self.paths.file.format(id=file_id),
+            timeout_s=self.store_timeout_s if timeout_s is None else timeout_s,
+            interval_s=self.store_interval_s,
+        )
 
 
 def _require_pdf(data: bytes, what: str) -> bytes:

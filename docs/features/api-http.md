@@ -80,6 +80,16 @@ pdf = api.get_bytes("documents/42/content")  # raises ApiError on non-2xx
 `get_bytes` sends `Accept: application/octet-stream` by default. Pass
 `accept=` to change it.
 
+A file id can be listed before the file reaches storage. `get_bytes_once_stored` polls on a
+not-yet status (404 by default) until the deadline, then raises the last response
+unchanged; any other non-2xx raises at once, unretried. The deadline uses a monotonic
+clock and an interrupt during the pause propagates. `DocumentServiceClient.file` uses it
+(`store_timeout_s=30`, `store_interval_s=1`; `file(id, timeout_s=0)` asks once).
+
+```python
+pdf = api.get_bytes_once_stored("files/9", timeout_s=30, interval_s=1, not_yet={404})
+```
+
 ## Run tagging
 
 **What it does.** Tags every API request as test traffic, with one id per run.

@@ -18,7 +18,8 @@ import json as _json
 import logging
 import os
 import re
-from collections.abc import Callable, Mapping
+import time
+from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urljoin
@@ -95,6 +96,10 @@ class ApiResponse:
     @classmethod
     def from_requests(cls, response: requests.Response) -> ApiResponse:
         return cls(response.status_code, response.content, dict(response.headers), response.url)
+
+
+def _first(*values: float | None) -> float:
+    return float(next(v for v in values if v is not None))
 
 
 class ApiError(AssertionError):
@@ -192,6 +197,52 @@ class HttpEngine:
     def get_bytes(self, path: str, *, accept: str = "application/octet-stream") -> bytes:
         """Download a binary; raises :class:`ApiError` on a non-2xx."""
         return self.request("GET", path, headers={"Accept": accept}).raise_for_status().content
+
+    def get_bytes_once_stored(
+        self,
+        path: str,
+        *,
+        timeout_s: float | None = None,
+        interval_s: float | None = None,
+        accept: str = "application/octet-stream",
+        not_yet: Collection[int] = (404,),
+        window_s: float | None = None,
+        pause_s: float | None = None,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> bytes:
+        """Download a file that may be listed before it reaches storage.
+
+        A ``not_yet`` status (default: 404) before the deadline is logged and retried after
+        ``interval_s``; any other non-2xx raises :class:`ApiError` at once, unretried.
+        After ``timeout_s`` the last not-yet response is raised unchanged. The deadline is
+        measured on a monotonic clock; an interrupt during the pause propagates.
+        ``window_s``/``pause_s`` are accepted as aliases of ``timeout_s``/``interval_s``.
+        """
+        window = _first(timeout_s, window_s, 30.0)
+        pause = _first(interval_s, pause_s, 1.0)
+        if window < 0 or pause < 0:
+            raise ValueError("timeout_s and interval_s must not be negative")
+        sleep = self._sleep or time.sleep
+        deadline = clock() + window
+        attempt = 0
+        while True:
+            attempt += 1
+            response = self.request("GET", path, headers={"Accept": accept})
+            if response.is_success:
+                return response.content
+            if response.status not in not_yet:
+                raise ApiError(response)
+            remaining = deadline - clock()
+            if remaining <= 0:
+                raise ApiError(response)
+            logger.info(
+                "GET %s -> %d, not stored yet (attempt %d, %.1fs left)",
+                path,
+                response.status,
+                attempt,
+                remaining,
+            )
+            sleep(min(pause, remaining))
 
     def post_multipart(self, path: str, parts: list[Part]) -> ApiResponse:
         files = [(p.name, (p.filename, p.content, p.content_type)) for p in parts]
