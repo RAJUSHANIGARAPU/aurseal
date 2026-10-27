@@ -277,10 +277,24 @@ def derive_entry(collected: Collected, smap: ServiceMap, excluded: Sequence[str]
 
 
 def derive(
-    smap: ServiceMap, collected: Mapping[str, Collected], excluded: Sequence[str] | None = None
+    smap: ServiceMap,
+    collected: Mapping[str, Collected],
+    excluded: Sequence[str] | None = None,
+    *,
+    keep: Mapping[str, dict] | None = None,
+    root: str | Path = ROOT,
 ) -> dict[str, dict]:
+    """Entries for ``collected``, plus the ``keep`` entries of test files that exist under
+    ``root`` but collected nothing (a directory skipped for a missing optional dependency),
+    so the map does not depend on which extras are installed. A deleted file drops out."""
     excluded = _gate_excluded() if excluded is None else excluded
-    return {tid: derive_entry(collected[tid], smap, excluded) for tid in sorted(collected)}
+    derived = {tid: derive_entry(collected[tid], smap, excluded) for tid in collected}
+    collected_files = {tid.split("::")[0] for tid in collected}
+    for tid, entry in (keep or {}).items():
+        path = tid.split("::")[0]
+        if path not in collected_files and (Path(root) / path).is_file():
+            derived[tid] = entry
+    return dict(sorted(derived.items()))
 
 
 def check(smap: ServiceMap, collected: Mapping[str, Collected]) -> list[str]:
@@ -302,7 +316,7 @@ def check(smap: ServiceMap, collected: Mapping[str, Collected]) -> list[str]:
             except re.error as exc:
                 problems.append(f"service {s.name}: bad name pattern {pattern!r} ({exc})")
     if not problems:
-        derived = derive(smap, collected)
+        derived = derive(smap, collected, keep=smap.tests)
         if derived != smap.tests:
             changed = sorted(
                 t for t in set(derived) | set(smap.tests) if derived.get(t) != smap.tests.get(t)
@@ -727,7 +741,7 @@ def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None
 
         smap = ServiceMap.load(args.map)
         if args.command == "derive":
-            smap.tests = derive(smap, collect(smap.roots))
+            smap.tests = derive(smap, collect(smap.roots), keep=smap.tests)
             text = smap.dumps()
             if args.write:
                 Path(args.map).write_text(text, encoding="utf-8")

@@ -153,6 +153,17 @@ def test_check_reports_drift_and_dead_references():
     assert any("bad name pattern" in p for p in problems)
 
 
+def test_derive_keeps_entries_of_files_that_collected_nothing(tmp_path):
+    (tmp_path / "suite").mkdir()
+    (tmp_path / "suite" / "test_extras.py").write_text("", encoding="utf-8")
+    kept = {"services": ["mail"], "source": "inferred"}
+    keep = {"suite/test_extras.py::test_x": kept, "suite/test_gone.py::test_y": kept}
+    derived = derive(_map(), {A: _c(A)}, [], keep=keep, root=tmp_path)
+    assert derived["suite/test_extras.py::test_x"] == kept
+    assert "suite/test_gone.py::test_y" not in derived
+    assert A in derived
+
+
 def test_the_committed_map_is_what_derive_produces():
     """The generated part of config/service_map.json is regenerated, never hand-edited."""
     smap = ServiceMap.load()
