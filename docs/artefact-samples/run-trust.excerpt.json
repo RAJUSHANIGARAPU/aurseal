@@ -9,6 +9,7 @@
     "executed floor - just 4 test(s) were selected, under the floor of 10: a narrowed selection, not a shrunken run",
     "fixture provenance - no test needing acquired data was selected"
   ],
+  "out_of_scope": [],
   "passed_on_acquired": 0,
   "run_id": "sample-run",
   "seeded_selected": 0,
