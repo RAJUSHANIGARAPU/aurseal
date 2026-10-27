@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -12,6 +13,9 @@ from traceability.requirements import Registry, Requirement
 
 M = "tests/test_m.py::"
 NOW = datetime(2026, 6, 1, tzinfo=timezone.utc)
+FRESH = "2026-05-31T12:00:00Z"  # a defect snapshot 12 hours before NOW
+NOTHING_SHIPS = {"keys": [], "regressing": [], "not_compared": []}
+PASSED_GAPS = {"ratchet": {"new": [], "closed": [], "passed": True}}
 CANDIDATE = Candidate("R1", "rc1")
 STRICT = {
     "version": 1,
@@ -45,8 +49,14 @@ def proved_run(run_id: str = "r1", **kw) -> RunSpec:
     )
 
 
-def decide(tmp_path: Path, runs, registry=None, pol=None, **kw):
+def decide(tmp_path: Path, runs, registry=None, pol=None, gaps=PASSED_GAPS, **kw):
+    """The verdict with every other input present and clean: a delta that ships nothing and
+    a passing gap ratchet, unless the test overrides them."""
     reports = write_artifacts(tmp_path / "reports", runs)
+    if gaps is not None:
+        (reports / "traceability").mkdir(parents=True, exist_ok=True)
+        (reports / "traceability" / "gaps.json").write_text(json.dumps(gaps))
+    kw.setdefault("delta", NOTHING_SHIPS)
     return decide_release(
         CANDIDATE,
         ArtifactResultSource(reports),

@@ -539,6 +539,18 @@ def _release(sub: argparse._SubParsersAction) -> None:
         "--known-defects",
         help="known-defects manifest file or directory: the fix_line of each defect",
     )
+    d.add_argument("--delta", help="promotion diff JSON: what ships (change-scope rules)")
+    d.add_argument(
+        "--candidates-dir",
+        default="release-candidates",
+        help="<candidate>.json here may carry pins and a delta path",
+    )
+    d.add_argument(
+        "--enforcement",
+        choices=["fail", "unstable", "report"],
+        help="what the verdict does to the exit code (env RELEASE_VERDICT_ENFORCEMENT or "
+        "RELEASE_VERDICT; default fail). The verdict itself never changes.",
+    )
     d.set_defaults(func=_release_decide)
 
 
@@ -564,6 +576,33 @@ def _release_decide(args: argparse.Namespace) -> int:
     registry = Registry.load(args.registry, rootdir=Path(args.rootdir))
     if plan is not None:
         selection = resolve_plan(plan, Path(args.rootdir), registry)
+    import os
+
+    enforcement = (
+        args.enforcement
+        or os.environ.get("RELEASE_VERDICT_ENFORCEMENT", "").strip().lower()
+        or os.environ.get("RELEASE_VERDICT", "").strip().lower()
+        or "fail"
+    )
+    if enforcement not in ("fail", "unstable", "report"):
+        raise ValueError(f"enforcement must be fail, unstable or report, got {enforcement!r}")
+    problems: list[str] = []
+    pins: dict[str, str] = {}
+    delta_path = Path(args.delta) if args.delta else None
+    candidate_file = Path(args.candidates_dir) / f"{args.candidate}.json"
+    if candidate_file.is_file():
+        body = json.loads(candidate_file.read_text(encoding="utf-8"))
+        pins = {str(k): str(v) for k, v in (body.get("pins") or {}).items()}
+        if delta_path is None and body.get("delta"):
+            delta_path = candidate_file.parent / str(body["delta"])
+    else:
+        problems.append(f"candidate {args.candidate!r} names no file ({candidate_file})")
+    delta = None
+    if delta_path is not None:
+        if delta_path.is_file():
+            delta = json.loads(delta_path.read_text(encoding="utf-8"))
+        else:
+            problems.append(f"delta file {delta_path} does not exist")
     candidate = Candidate(
         args.release_id, args.candidate, args.version, args.commit, plan.id if plan else None
     )
@@ -586,6 +625,11 @@ def _release_decide(args: argparse.Namespace) -> int:
             open_defects=open_defects_provider(),
             release_line=args.release_line,
             fix_lines=fix_lines,
+            delta=delta,
+            reports_dir=Path(args.reports) if args.reports else None,
+            pins=pins,
+            input_problems=problems,
+            enforcement=enforcement,
         )
         doc = decision_json(decision)
         if store is not None and args.save:
@@ -606,7 +650,15 @@ def _release_decide(args: argparse.Namespace) -> int:
     write_json(out / f"{stem}.json", doc)
     write_text(out / f"{stem}.md", decision.to_markdown())
     print(decision.to_markdown())
-    return EXIT_CODES[decision.verdict]
+    code = EXIT_CODES[decision.verdict]
+    if enforcement == "report":
+        print("enforcement: report - the verdict is recorded and never changes the exit code")
+        return 0
+    if enforcement == "unstable":
+        if code:
+            print(f"::warning title=Release verdict::{decision.first_line}")
+        return 0
+    return code
 
 
 # ---------------------------------------------------------------------- defects (G-025)

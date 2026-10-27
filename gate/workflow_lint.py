@@ -35,6 +35,11 @@ Shape rules (:class:`ShapeOptions`, on by default for the CLI and
 * a dispatch-triggered workflow (``repository_dispatch``/``workflow_dispatch``) does not
   share a concurrency group with ``tests.yml``, so an externally triggered run never
   queues behind (or replaces a pending) merge gate.
+* a step that composes the release verdict (``traceability release decide``) in an
+  ordinary workflow (one triggered by pull requests or a schedule) is report only: its
+  ``if:`` contains ``always()`` (it must run after a red
+  or aborted lane), it passes ``--enforcement report``, and it does not set
+  ``continue-on-error: false``.
 
 ``python -m gate.workflow_lint [files...]`` is the local parse check and the
 commit guard: the pre-commit hook scoped to ``.github/workflows/`` runs it on
@@ -263,6 +268,40 @@ def _lint_shape(
         for index, step in enumerate(_steps(job)):
             if _uses(step, "actions/upload-artifact"):
                 _lint_upload(file, f"{where}.steps[{index}]", step, shape, out)
+    # Only an ordinary CI workflow (pull requests or a schedule); the dedicated release
+    # workflow is the one place the verdict is allowed to fail the run.
+    on = _on(data)
+    triggers = set(on) if isinstance(on, (dict, list)) else {on}
+    if triggers & {"pull_request", "schedule"}:
+        for where, step in release_verdict_steps(jobs):
+            out += [Finding(file, where, p) for p in release_verdict_problems(step)]
+
+
+RELEASE_DECIDE = "traceability release decide"
+
+
+def release_verdict_steps(jobs: dict) -> list[tuple[str, dict]]:
+    """``(where, step)`` for every step that runs ``traceability release decide``."""
+    found = []
+    for job_name, job in jobs.items():
+        if not isinstance(job, dict):
+            continue
+        for index, step in enumerate(_steps(job)):
+            if RELEASE_DECIDE in str(step.get("run") or ""):
+                found.append((f"jobs.{job_name}.steps[{index}]", step))
+    return found
+
+
+def release_verdict_problems(step: dict) -> list[str]:
+    """Why a release-verdict step on an ordinary run could change the build result."""
+    problems = []
+    if "always()" not in str(step.get("if") or ""):
+        problems.append("release verdict step must run with always() (after a red lane too)")
+    if "--enforcement report" not in str(step.get("run") or ""):
+        problems.append("release verdict step must pass --enforcement report")
+    if step.get("continue-on-error") is False:
+        problems.append("release verdict step must not set continue-on-error: false")
+    return problems
 
 
 def _lint_upload(file: str, where: str, step: dict, shape: ShapeOptions, out: list) -> None:

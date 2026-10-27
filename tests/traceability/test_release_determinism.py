@@ -9,7 +9,16 @@ import pytest
 
 from results.api import ApiError, dispatch
 from results.store import open_store
-from tests.traceability._release import CANDIDATE, NOW, decide, policy, proved_run, reg
+from tests.traceability._release import (
+    CANDIDATE,
+    NOTHING_SHIPS,
+    NOW,
+    PASSED_GAPS,
+    decide,
+    policy,
+    proved_run,
+    reg,
+)
 from tests.traceability._runs import RunSpec, T, load_store, red, write_artifacts
 from traceability import api  # noqa: F401 - registers the routes
 from traceability.cli import main as trace_main
@@ -58,6 +67,11 @@ def test_the_repository_policy_loads_strict():
 )
 def test_cli_exit_codes(tmp_path, runs, code):
     reports = write_artifacts(tmp_path / "reports", runs)
+    # GO needs every input: a delta (what ships) and a passing gap ratchet.
+    reports.mkdir(parents=True, exist_ok=True)
+    (reports / "gaps.json").write_text(json.dumps(PASSED_GAPS))
+    delta = tmp_path / "delta.json"
+    delta.write_text(json.dumps(NOTHING_SHIPS))
     reg_file = tmp_path / "reg.yaml"
     reg_file.write_text("requirements:\n  - {id: REQ-1, title: one, priority: must}\n")
     pol = tmp_path / "policy.yaml"
@@ -81,12 +95,19 @@ def test_cli_exit_codes(tmp_path, runs, code):
             str(tmp_path / "none.yaml"),
             "--out",
             str(out),
+            "--delta",
+            str(delta),
+            "--candidates-dir",
+            str(tmp_path),
         ]
     )
     assert rc == code
     doc = json.loads((out / "R1-rc1.json").read_text())
-    assert doc["verdict"] == {0: "GO", 1: "NO_GO", 3: "NO_VERDICT"}[code]
-    assert (out / "R1-rc1.md").read_text().startswith("## Release R1 / rc1")
+    verdict = {0: "GO", 1: "NO_GO", 3: "NO_VERDICT"}[code]
+    assert doc["verdict"] == verdict
+    lines = (out / "R1-rc1.md").read_text().splitlines()
+    assert lines[0] == f"RELEASE={verdict} ENFORCEMENT=FAIL CANDIDATE=rc1"
+    assert lines[2].startswith("## Release R1 / rc1")
 
 
 def test_rest_candidate_and_verdict(tmp_path, monkeypatch):

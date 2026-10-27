@@ -34,11 +34,26 @@
       "additionalProperties": false,
       "properties": {
         "blocking_severities": {"type": "array", "items": {"type": "string"}},
-        "blocking_labels": {"type": "array", "items": {"type": "string"}}
+        "blocking_labels": {"type": "array", "items": {"type": "string"}},
+        "max_snapshot_age_hours": {"type": "number", "exclusiveMinimum": 0}
       }
-    }
+    },
+    "change_scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "regressing": {"$ref": "#/$defs/severity"},
+        "claimed_fixed": {"$ref": "#/$defs/severity"},
+        "shipped_untested": {"$ref": "#/$defs/severity"},
+        "open_defect_shipped": {"$ref": "#/$defs/severity"},
+        "unknown": {"$ref": "#/$defs/severity"}
+      }
+    },
+    "coverage_gaps": {"enum": ["block", "no_verdict", "ignore"]},
+    "plan": {"enum": ["required", "optional"]}
   },
   "$defs": {
+    "severity": {"enum": ["block", "no_verdict", "attention"]},
     "status": {"enum": ["UNCOVERED", "NOT_RUN", "UNVERIFIED", "FAILING", "FIX_OBSERVED", "FLAKY", "KNOWN_DEFECT",
                         "DRAFT_ONLY", "PASSING", "PROVED"]},
     "red": {"enum": ["reproduces", "cleared", "held_empty", "signature_mismatch",

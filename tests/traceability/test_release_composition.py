@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from tests.traceability._release import M, decide, policy, proved_run, reg
+from tests.traceability._release import FRESH, M, decide, policy, proved_run, reg
 from tests.traceability._runs import RunSpec, T, coverage, red
+from traceability.defects import defects_provider
 from traceability.release import BLOCK, NO_VERDICT, ReleaseVerdict
 
 
@@ -99,14 +100,12 @@ def test_defects_checked_without_a_tracker_is_no_verdict(tmp_path):
 def test_open_defects(tmp_path):
     pol = policy(defects={"blocking_severities": ["high"], "blocking_labels": ["blocker"]})
 
-    def low():
-        return [{"id": "GH-1", "severity": "low", "labels": []}]
-
-    def high():
-        return [{"id": "GH-2", "severity": "high", "labels": [], "title": "totals off"}]
-
-    def labelled():
-        return [{"id": "GH-3", "severity": None, "labels": ["blocker"]}]
+    # Providers state the snapshot's age now; one without a date is no verdict (below).
+    low = defects_provider([{"id": "GH-1", "severity": "low", "labels": []}], FRESH)
+    high = defects_provider(
+        [{"id": "GH-2", "severity": "high", "labels": [], "title": "totals off"}], FRESH
+    )
+    labelled = defects_provider([{"id": "GH-3", "severity": None, "labels": ["blocker"]}], FRESH)
 
     def down():
         raise ConnectionError("no route")
