@@ -1,8 +1,11 @@
 """GitHub Issues as the defect tracker: ``GH-57`` is issue #57 of the configured repo.
 
-Reads need no write permission (``issues: read``); ``create`` is only called by an
-explicit ``--submit`` or by CI auto-filing when ``DEFECT_AUTOFILE=true`` on ``main``.
-GitHub has no native severity: a label such as ``severity:high`` carries it.
+Reads need no write permission (``issues: read``) and go through a
+:class:`~integrations.read_transport.ReadOnlyTrackerTransport` limited to this repository's
+issues and the search endpoint, so the status half of a sync cannot write. ``create`` is
+only called by an explicit ``--submit`` or by CI auto-filing when ``DEFECT_AUTOFILE=true``
+on ``main``, and builds the full client only then. GitHub has no native severity: a label
+such as ``severity:high`` carries it.
 """
 
 from __future__ import annotations
@@ -13,6 +16,13 @@ from typing import Any
 import requests
 
 from integrations.http import GitHubClient, ServiceUnavailable
+from integrations.read_transport import (
+    ReadOnlyTrackerTransport,
+    fetch,
+    github_transport,
+    paginate,
+    read_json,
+)
 from integrations.trackers.base import DefectDraft, DefectRef, DefectState, TrackerUnavailable
 
 FINGERPRINT_TAG = "defect-fingerprint"
@@ -29,6 +39,7 @@ class GitHubIssuesTracker:
         prefix: str = "GH",
         labels: tuple[str, ...] = (),
         severity_prefix: str = "severity:",
+        transport: ReadOnlyTrackerTransport | None = None,
     ) -> None:
         if not repo or "/" not in repo:
             raise ValueError(f"GitHub tracker needs 'owner/name', got {repo!r}")
@@ -37,7 +48,14 @@ class GitHubIssuesTracker:
         self.prefix = prefix
         self.labels = labels
         self.severity_prefix = severity_prefix
-        self.client = GitHubClient(token, session)
+        self.reader = transport or github_transport(self.read_paths(repo), token, session)
+        self._token = token
+        self._session = session
+
+    @staticmethod
+    def read_paths(repo: str) -> tuple[str, ...]:
+        """The only paths a status lookup may read: this repository's issues, and search."""
+        return (f"/repos/{repo}/issues", "/search/issues")
 
     def _id(self, number: int) -> str:
         return f"{self.prefix}-{number}"
@@ -73,7 +91,7 @@ class GitHubIssuesTracker:
                 out[defect_id] = DefectState(defect_id, "unknown", tracker=self.name)
                 continue
             try:
-                response = self.client.request("GET", f"/repos/{self.repo}/issues/{number}")
+                response = fetch(self.reader, f"/repos/{self.repo}/issues/{number}")
             except ServiceUnavailable as exc:
                 raise TrackerUnavailable(str(exc)) from exc
             if response.status_code == 404:
@@ -87,7 +105,7 @@ class GitHubIssuesTracker:
     def find_by_fingerprint(self, fp: str) -> DefectRef | None:
         query = f'repo:{self.repo} is:issue "{FINGERPRINT_TAG}: {fp}" in:body'
         try:
-            data = self.client.json("GET", "/search/issues", params={"q": query})
+            data = read_json(self.reader, "/search/issues", {"q": query})
         except ServiceUnavailable as exc:
             raise TrackerUnavailable(str(exc)) from exc
         items = data.get("items") or []
@@ -95,8 +113,9 @@ class GitHubIssuesTracker:
 
     def create(self, draft: DefectDraft) -> DefectRef:
         body = {"title": draft.title, "body": draft.body, "labels": list(draft.labels)}
+        client = GitHubClient(self._token, self._session)  # filing: the one write path
         try:
-            issue = self.client.json("POST", f"/repos/{self.repo}/issues", json=body)
+            issue = client.json("POST", f"/repos/{self.repo}/issues", json=body)
         except ServiceUnavailable as exc:
             raise TrackerUnavailable(str(exc)) from exc
         return self._state(issue)
@@ -107,7 +126,7 @@ class GitHubIssuesTracker:
         if wanted:
             params["labels"] = ",".join(wanted)
         try:
-            issues = list(self.client.paginate(f"/repos/{self.repo}/issues", params))
+            issues = list(paginate(self.reader, f"/repos/{self.repo}/issues", params))
         except ServiceUnavailable as exc:
             raise TrackerUnavailable(str(exc)) from exc
         return [self._state(i) for i in issues if "pull_request" not in i]

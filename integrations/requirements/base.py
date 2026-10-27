@@ -15,7 +15,8 @@ from typing import Protocol
 
 import requests
 
-from integrations.http import GitHubClient, ServiceUnavailable
+from integrations.http import ServiceUnavailable
+from integrations.read_transport import ReadOnlyTrackerTransport, github_transport, paginate
 from traceability.requirements import Namespace, Registry, Requirement
 
 
@@ -47,7 +48,10 @@ class GitHubIssuesSource:
     ``number_prefix`` (e.g. ``GHR``) gives issues without an id in the title the id
     ``GHR-<number>``; without it they are skipped and reported. A milestone becomes the
     release label, ``priority:<p>`` labels the priority, and an issue closed as not planned
-    is retired.
+    is retired. An issue labelled ``container_label`` (default ``epic``), or one that has
+    sub-issues, is a container: ``kind: epic``, too coarse for a test to link to.
+
+    Reads go through a read-only transport limited to the repository's issues.
     """
 
     repo: str
@@ -56,16 +60,20 @@ class GitHubIssuesSource:
     session: requests.Session | None = None
     number_prefix: str | None = None
     name: str = "github"
+    container_label: str | None = "epic"
+    transport: ReadOnlyTrackerTransport | None = None
     skipped: list[str] = field(default_factory=list)
 
     def fetch(self) -> list[Requirement]:
         if not self.repo or "/" not in self.repo:
             raise SourceUnavailable(f"GitHub source needs 'owner/name', got {self.repo!r}")
-        client = GitHubClient(self.token, self.session)
+        reader = self.transport or github_transport(
+            (f"/repos/{self.repo}/issues",), self.token, self.session
+        )
         try:
             issues = list(
-                client.paginate(
-                    f"/repos/{self.repo}/issues", {"state": "all", "labels": self.label}
+                paginate(
+                    reader, f"/repos/{self.repo}/issues", {"state": "all", "labels": self.label}
                 )
             )
         except ServiceUnavailable as exc:
@@ -92,6 +100,10 @@ class GitHubIssuesSource:
             priority = next((x.split(":", 1)[1] for x in labels if x.startswith("priority:")), None)
             retired = issue.get("state") == "closed" and issue.get("state_reason") == "not_planned"
             milestone = issue.get("milestone") or {}
+            sub_issues = (issue.get("sub_issues_summary") or {}).get("total") or 0
+            container = bool(sub_issues) or (
+                self.container_label is not None and self.container_label in labels
+            )
             out.append(
                 Requirement(
                     id=req_id,
@@ -103,6 +115,7 @@ class GitHubIssuesSource:
                     source=self.name,
                     source_ref=f"#{issue.get('number')}",
                     url=issue.get("html_url"),
+                    kind="epic" if container else "requirement",
                 )
             )
         return out
