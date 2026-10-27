@@ -19,14 +19,15 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
+from core import run_id as run_ids
 from test_data.fixture_replay import Fixture, FixtureSeeder, SeededEntity, SeedError
 
 logger = logging.getLogger(__name__)
 
 
 def new_seed_tag() -> str:
-    """A short run-unique tag for names: 8 hex chars."""
-    return uuid.uuid4().hex[:8]
+    """A short run-unique tag for names: 8 hex chars, after the worker prefix when sharded."""
+    return run_ids.data_tag(uuid.uuid4().hex[:8])
 
 
 @dataclass(frozen=True)
