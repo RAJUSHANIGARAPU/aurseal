@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.test/schemas/traceability/workflow-gap-report.schema.json",
+  "title": "Workflow action gap report",
+  "description": "Written by python -m traceability workflow-gaps. When measured is false every list is null: not measured, never zero.",
+  "type": "object",
+  "required": ["schema_version", "generated_at", "config_dir", "measured", "not_measured",
+               "actions", "gaps", "new", "stale"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "generated_at": {"type": "string"},
+    "config_dir": {"type": ["string", "null"]},
+    "measured": {"type": "boolean"},
+    "not_measured": {"type": ["string", "null"]},
+    "actions": {"$ref": "#/$defs/refs"},
+    "gaps": {"$ref": "#/$defs/refs"},
+    "new": {"$ref": "#/$defs/refs"},
+    "stale": {"$ref": "#/$defs/refs"}
+  },
+  "$defs": {
+    "refs": {
+      "type": ["array", "null"],
+      "items": {"type": "string", "pattern": "^[^:]+:[^:]+:[^:]+$"}
+    }
+  },
+  "if": {"properties": {"measured": {"const": false}}},
+  "then": {
+    "properties": {
+      "actions": {"type": "null"}, "gaps": {"type": "null"},
+      "new": {"type": "null"}, "stale": {"type": "null"},
+      "not_measured": {"type": "string"}
+    }
+  },
+  "else": {
+    "properties": {
+      "actions": {"type": "array"}, "gaps": {"type": "array"},
+      "new": {"type": "array"}, "stale": {"type": "array"}
+    }
+  }
+}

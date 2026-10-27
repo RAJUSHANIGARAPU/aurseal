@@ -1,0 +1,4 @@
+{
+  "description": "Workflow (state, action) pairs no test module names. A new gap fails; an entry that is no longer a gap fails until it is removed.",
+  "accepted": []
+}

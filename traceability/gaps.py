@@ -10,6 +10,8 @@ PostmanSource          one item per request in a collection (v2.x)
 RequirementSource      one item per active requirement in the registry
 =====================  ========================================================
 
+OpenAPI documents and Postman collections may be files or http(s) URLs.
+
 Evidence, strongest first:
 
 * **static** — ``@pytest.mark.covers("GET /api/customers/{id}")`` or
@@ -40,6 +42,8 @@ from traceability.endpoint_hits import EndpointHit, iter_matched, normalise
 from traceability.requirements import Namespace, Registry
 
 HTTP_METHODS = ("get", "put", "post", "delete", "patch", "head", "options", "trace")
+MAX_DOC_BYTES = 5 * 1024 * 1024
+URL_TIMEOUT_S = 15
 COVERED, COVERED_NOT_PASSING, EXERCISED, GAP = "covered", "covered_not_passing", "exercised", "gap"
 DEFAULT_BASELINE = Path("traceability") / "gap-baseline.json"
 _SCENARIO = re.compile(r"^##\s+Scenario\s*:?\s*(.+?)\s*$", re.IGNORECASE)
@@ -73,13 +77,48 @@ def operation_key(method: str, path: str) -> str:
     return f"{method.upper()} {path}"
 
 
+def is_url(location: str | Path) -> bool:
+    return isinstance(location, str) and location.startswith(("http://", "https://"))
+
+
+def location(text: str) -> str | Path:
+    """An http(s) URL stays a string; anything else is a local path."""
+    return text if is_url(text) else Path(text)
+
+
+def read_document(source: str | Path) -> Any:
+    """JSON from a file, or from an http(s) URL (capped at ``MAX_DOC_BYTES``).
+
+    A file that cannot be read gives ``None``, like :func:`read_json`; a URL that cannot be
+    fetched raises :class:`GapSourceError`, because a source that was not read is not one
+    with no items.
+    """
+    if not is_url(source):
+        return read_json(Path(source))
+    import urllib.error
+    import urllib.request
+
+    try:
+        # the scheme is http(s), checked by is_url above
+        with urllib.request.urlopen(str(source), timeout=URL_TIMEOUT_S) as response:  # noqa: S310
+            body = response.read(MAX_DOC_BYTES + 1)
+    except (urllib.error.URLError, OSError, ValueError) as exc:
+        raise GapSourceError(f"{source}: could not be fetched ({exc})") from None
+    if len(body) > MAX_DOC_BYTES:
+        raise GapSourceError(f"{source}: larger than {MAX_DOC_BYTES} bytes")
+    try:
+        return json.loads(body)
+    except ValueError:
+        return None
+
+
 @dataclass
 class OpenApiSource:
-    path: Path
+    path: Path | str  # a file, or an http(s) URL
     name: str = "openapi"
 
     def items(self) -> list[SourceItem]:
-        data = read_json(Path(self.path))
+        data = read_document(self.path)
         if not isinstance(data, dict) or not isinstance(data.get("paths"), dict):
             raise GapSourceError(f"{self.path}: not an OpenAPI document with paths")
         out = []
@@ -141,11 +180,11 @@ def scenarios(text: str, ns: Namespace) -> list[tuple[str, tuple[str, ...]]]:
 
 @dataclass
 class PostmanSource:
-    path: Path
+    path: Path | str  # a file, or an http(s) URL
     name: str = "postman"
 
     def items(self) -> list[SourceItem]:
-        data = read_json(Path(self.path))
+        data = read_document(self.path)
         if not isinstance(data, dict) or "item" not in data:
             raise GapSourceError(f"{self.path}: not a Postman collection")
         out: list[SourceItem] = []

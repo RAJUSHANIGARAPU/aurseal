@@ -118,7 +118,7 @@ entries:
   - fingerprint: "bandit:B314:tools/ci_reader.py:ba963c8eba98"
     reason: "parses JUnit XML from the configured CI's report artifact; fix: defusedxml"
     expires: 2027-01-18
-  - fingerprint: "bandit:B310:tools/slash/coverage_gaps.py:3ba66faf9437"
+  - fingerprint: "bandit:B310:traceability/gaps.py:22651822d11d"
     reason: "user-given URL, scheme already restricted to http(s) before urlopen"
     expires: 2027-01-18
   - fingerprint: "bandit:B314:tools/slash/junit.py:b48ab22d3e14"

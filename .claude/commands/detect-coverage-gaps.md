@@ -1,5 +1,5 @@
 ---
-description: "Use to see what is specified but not tested: scenario specs, OpenAPI documents and Postman collections against the UI and API test modules; writes a dated report and offers to generate tests for the gaps."
+description: "Use to see what is specified but not tested: OpenAPI operations, spec scenarios, requirements and workflow actions, with the same sources and matching as the CI coverage ratchets; writes the reports and offers to generate tests for the gaps."
 ---
 
 # detect-coverage-gaps
@@ -7,37 +7,47 @@ description: "Use to see what is specified but not tested: scenario specs, OpenA
 ## Usage
 
 ```
-/detect-coverage-gaps [all | specs/<file>.md | <url to an OpenAPI document>]
+/detect-coverage-gaps [all | <openapi url or file> | <postman collection file>]
 ```
 
 Default `all`. May be started by the user or by the assistant.
 
 ## Steps
 
-1. Build the report (sources: `specs/*.md` without the format guide `README.md`, OpenAPI /
-   Swagger JSON and Postman collections under `specs/`, `api/`, `demo_sut/`, `schemas/`;
-   tests: `ui/tests/` and `api/tests/`):
+1. Build the reports. The helper has no parser of its own: it runs the two CI ratchets
+   report-only, with the sources of the CI steps "Coverage gaps (ratchet)" and "Workflow
+   action gaps (ratchet)":
 
    ```bash
-   python -m tools.slash.coverage_gaps "${TARGET:-all}" --out reports
+   python -m tools.slash.coverage_gaps "${TARGET:-all}" --out reports/gaps
    ```
 
-   Coverage rules, applied by the helper:
-   - a **scenario** is covered when a test function name contains `test_` + the scenario name
-     in snake_case (lowercase, non-alphanumeric runs to `_`, trimmed). `## Scenario: x` and
-     `## Scenario x` are both scenario headings;
-   - an **operation** is covered when an API test calls its path with the same method, or a
-     test carries `@pytest.mark.covers("METHOD /path")`.
+   which is
 
-2. The report has the date, a summary table per source, and three sections: sources with
-   **no tests at all** (highest priority), partially covered sources with the missing
-   scenarios or endpoints, and fully covered sources. It is saved as
-   `reports/coverage-gaps-<date>.md`.
+   ```bash
+   python -m traceability gaps --openapi demo_sut/openapi.json --specs specs \
+     --requirements --baseline traceability/gap-baseline.json --report-only --out reports/gaps
+   python -m traceability workflow-gaps --config-dir demo_sut/config \
+     --baseline traceability/workflow-gap-baseline.json --report-only --out reports/gaps
+   ```
+
+   A URL or an OpenAPI file is added as one more `--openapi` input, a Postman collection
+   as `--postman`. CI does not check those, so their items show up as new gaps.
+
+   Matching, applied by the ratchets:
+   - an **operation, scenario or requirement** is covered by an explicit
+     `@pytest.mark.covers("METHOD /path")` / `covers("spec:<file>#<scenario>")` or a
+     requirement link. Test names are not matched: a false "covered" is worse than a
+     visible gap;
+   - a **workflow action** (a `(state, action)` pair) is named when a test module holds
+     the action as a string literal. A name is not an assertion.
+
+2. Read `reports/gaps/gaps.md` (and `gaps.json`) and `reports/gaps/workflow-gaps.md`. The
+   workflow report starts with `GAPS= ACTIONS= NEW= STALE=`; `NOT-MEASURED` there means the
+   config dir was not bound, never zero gaps. Summarise: new gaps first, then the
+   accepted ones per source.
 
 3. If there are gaps, **ask** whether to generate tests: `/generate-from-prd <spec>` for
    spec gaps, `/generate-from-swagger <document>` for endpoint gaps. Generate only after an
    explicit yes, one gap source at a time. Without a yes, nothing is generated; the saved
-   report is the result.
-
-The CI step `python -m traceability gaps` is the separate ratchet over explicit `covers`
-links; this command is the readable overview and also matches by test name.
+   reports are the result.

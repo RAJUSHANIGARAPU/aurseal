@@ -240,9 +240,21 @@ def open_defects_provider():
 @command
 def _gaps(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser("gaps", help="coverage gaps against OpenAPI, specs, Postman, requirements")
-    p.add_argument("--openapi", nargs="*", default=[], help="OpenAPI JSON file(s)")
+    p.add_argument(
+        "--openapi",
+        nargs="*",
+        action="extend",
+        default=[],
+        help="OpenAPI JSON file(s) or http(s) URL(s) (repeatable)",
+    )
     p.add_argument("--specs", help="directory of spec markdown files")
-    p.add_argument("--postman", nargs="*", default=[], help="Postman collection file(s)")
+    p.add_argument(
+        "--postman",
+        nargs="*",
+        action="extend",
+        default=[],
+        help="Postman collection file(s) or URL(s) (repeatable)",
+    )
     p.add_argument("--requirements", action="store_true", help="include the registry")
     p.add_argument("--hits", help="endpoint-hits.jsonl from a run (runtime mode)")
     p.add_argument("--reports", help="a run's reports dir: outcomes for covered_not_passing")
@@ -267,6 +279,7 @@ def _gaps_run(args: argparse.Namespace) -> int:
         RequirementSource,
         SpecSource,
         detect_gaps,
+        location,
         ratchet,
         report_json,
         write_baseline,
@@ -274,10 +287,10 @@ def _gaps_run(args: argparse.Namespace) -> int:
     from traceability.requirements import Registry
 
     root = Path(args.rootdir)
-    sources = [OpenApiSource(Path(p)) for p in args.openapi]
+    sources = [OpenApiSource(location(p)) for p in args.openapi]
     if args.specs:
         sources.append(SpecSource(Path(args.specs)))
-    sources += [PostmanSource(Path(p)) for p in args.postman]
+    sources += [PostmanSource(location(p)) for p in args.postman]
     if args.requirements:
         sources.append(RequirementSource(Registry.load(rootdir=root)))
     if not sources:
@@ -327,6 +340,55 @@ def _gaps_run(args: argparse.Namespace) -> int:
         if not result.ok and not args.report_only:
             return 1
     return 0
+
+
+# ---------------------------------------------------------------------- workflow gaps
+
+
+@command
+def _workflow_gaps(sub: argparse._SubParsersAction) -> None:
+    p = sub.add_parser("workflow-gaps", help="workflow (state, action) pairs no test names")
+    p.add_argument("--config-dir", help="workflow definitions (default $EXT_CONFIG_PATH)")
+    p.add_argument(
+        "--tests",
+        nargs="+",
+        help="test roots scanned for string literals (default tests ui/tests api/tests)",
+    )
+    p.add_argument("--baseline", help="ratchet against this accepted-gaps file")
+    p.add_argument("--write-baseline", action="store_true", help="rewrite the baseline")
+    p.add_argument("--report-only", action="store_true", help="never fail")
+    p.add_argument("--out", default="reports/traceability")
+    p.set_defaults(func=_workflow_gaps_run)
+
+
+def _workflow_gaps_run(args: argparse.Namespace) -> int:
+    """0 clean; 1 a new gap or a stale baseline entry; 3 NOT-MEASURED (unbound config)."""
+    from traceability._util import write_json, write_text
+    from traceability.workflow_gaps import (
+        DEFAULT_TEST_ROOTS,
+        measure,
+        report_json,
+        write_baseline,
+    )
+
+    baseline = Path(args.baseline) if args.baseline else None
+    roots = args.tests or DEFAULT_TEST_ROOTS
+    report = measure(args.config_dir, roots, None if args.write_baseline else baseline)
+    if args.write_baseline and baseline is not None and report.measured:
+        write_baseline(report, baseline)
+        print(f"baseline written: {len(report.gaps)} accepted gap(s)")
+    out = Path(args.out)
+    write_json(out / "workflow-gaps.json", report_json(report))
+    write_text(out / "workflow-gaps.md", report.to_markdown())
+    print(report.header())
+    if not report.measured:
+        print(f"NOT MEASURED: {report.not_measured}")
+        return 0 if args.report_only else 3
+    for gap in report.new:
+        print(f"NEW GAP: {gap}")
+    for entry in report.stale:
+        print(f"STALE: {entry} is no longer a gap; remove it from {args.baseline}")
+    return 0 if report.ok or args.report_only else 1
 
 
 # ---------------------------------------------------------------------- review (G-007)
