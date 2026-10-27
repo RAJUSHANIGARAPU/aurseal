@@ -231,6 +231,10 @@ jobs:
       - name: Requirement ids in prose are linked (shrink-only baseline)
         run: python -m traceability links --check-prose --baseline traceability/prose-baseline.txt
 
+      # Offline: reads the committed snapshot only; "not measured" when none is configured.
+      - name: Declared defect ids are in the committed snapshot
+        run: python -m traceability defects check
+
       - name: Test plans
         run: python -m traceability plan lint plans/
 

@@ -609,7 +609,22 @@ def _defects(sub: argparse._SubParsersAction) -> None:
     draft.add_argument("--tracker", default="github", help="tracker name to file in")
     draft.add_argument("--trackers", help="tracker config")
     draft.add_argument("--flaky", help="JSON list of node ids never to file")
+    draft.add_argument("--snapshot", help="defect snapshot for 'possibly already filed'")
     draft.set_defaults(func=_defects_draft)
+    chk = dsub.add_parser(
+        "check", help="offline: every declared defect id is in the committed snapshot"
+    )
+    chk.add_argument("--snapshot", help="committed snapshot (default: tracking config's)")
+    chk.add_argument("--config", help="tracking config (default defects/tracking.yaml)")
+    chk.add_argument("--rootdir", default=".")
+    chk.set_defaults(func=_defects_check)
+    ref = dsub.add_parser("refresh", help="write a snapshot of the declared ids, to commit")
+    ref.add_argument("--keys-from", choices=["declared"], default="declared")
+    ref.add_argument("--out", help="snapshot path (default: tracking config's)")
+    ref.add_argument("--config", help="tracking config (default defects/tracking.yaml)")
+    ref.add_argument("--trackers", help="tracker config")
+    ref.add_argument("--rootdir", default=".")
+    ref.set_defaults(func=_defects_refresh)
 
 
 def _defects_sync(args: argparse.Namespace) -> int:
@@ -620,9 +635,12 @@ def _defects_sync(args: argparse.Namespace) -> int:
     ids = set(args.ids) | set(referenced_ids())
     if not args.no_collect:
         from traceability.collect import collect
+        from traceability.declared import TrackingConfig, scan
 
         result = collect(Path(args.rootdir), ["-p", "traceability._defect_ids"])
         ids |= {d for item in result.items for d in item.get("defects") or ()}
+        # still_reproduces ids and manifest open issues: the same scan `defects check` uses.
+        ids |= set(scan(TrackingConfig.load(rootdir=Path(args.rootdir))).ids)
     cache = StatusCache(config, Path(args.snapshot) if args.snapshot else None)
     snap = cache.sync(ids)
     if args.db:
@@ -637,7 +655,58 @@ def _defects_sync(args: argparse.Namespace) -> int:
     )
     for error in snap.errors:
         print(f"warning: {error}", file=sys.stderr)
+    print(snap.age_line())
     print(f"export DEFECT_STATUS_FILE={cache.snapshot}")
+    return 0
+
+
+def _tracking(args: argparse.Namespace):
+    from traceability.declared import TrackingConfig
+
+    return TrackingConfig.load(args.config, rootdir=Path(args.rootdir))
+
+
+def _defects_check(args: argparse.Namespace) -> int:
+    from traceability.declared import check, scan
+    from traceability.defects import Snapshot
+
+    tracking = _tracking(args)
+    target = Path(args.snapshot) if args.snapshot else tracking.path(tracking.snapshot)
+    if target is None:
+        print("defect status: not measured (no committed snapshot is configured)")
+        return 0
+    if not target.is_file():
+        print(f"no committed snapshot at {target}: refresh with `defects sync`")
+        return 1
+    snap = Snapshot.load(target)
+    found = scan(tracking)
+    result = check(tracking, snap.defects, found)
+    for line in result.problems:
+        print(line)
+    for note in result.notes:
+        print(f"note: {note}")
+    print(
+        f"{len(found.ids)} declared id(s) at {found.call_sites} call site(s); "
+        f"{snap.age_line()}; {len(result.problems)} problem(s)"
+    )
+    return 0 if result.ok else 1
+
+
+def _defects_refresh(args: argparse.Namespace) -> int:
+    from integrations.trackers.base import TrackerConfig
+    from traceability.declared import scan
+    from traceability.defects import refresh_declared
+
+    tracking = _tracking(args)
+    out = Path(args.out) if args.out else tracking.path(tracking.snapshot)
+    if out is None:
+        raise ValueError("pass --out or set 'snapshot' in the tracking config")
+    found = scan(tracking)
+    config = TrackerConfig.load(args.trackers, rootdir=Path(args.rootdir))
+    snap = refresh_declared(config, found.ids, out)
+    for error in snap.errors:
+        print(f"warning: {error}", file=sys.stderr)
+    print(f"{len(snap.defects)} declared defect(s) -> {out}; {snap.age_line()}")
     return 0
 
 
@@ -646,15 +715,30 @@ def _defects_draft(args: argparse.Namespace) -> int:
 
     from integrations.trackers.base import TrackerConfig, build
     from traceability.defects import (
+        Snapshot,
         autofile_allowed,
         draft_from_failure,
+        failure_links,
         failures_from_reports,
         file_drafts,
+        snapshot_path,
         write_drafts,
     )
 
+    snap_file = Path(args.snapshot) if args.snapshot else snapshot_path()
+    snapshot = Snapshot.load(snap_file) if snap_file.is_file() else None
+    print(snapshot.age_line() if snapshot else f"snapshot not found at {snap_file}")
+    links = failure_links(Path(args.from_run))
     drafts = [
-        draft_from_failure(None, row, nodeid=nodeid, run_id=run_id, message=message)
+        draft_from_failure(
+            None,
+            row,
+            nodeid=nodeid,
+            run_id=run_id,
+            message=message,
+            snapshot=snapshot,
+            links=links.get(nodeid, ()),
+        )
         for run_id, nodeid, message, row in failures_from_reports(Path(args.from_run))
     ]
     submit = args.submit or autofile_allowed()

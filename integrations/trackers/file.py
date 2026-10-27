@@ -17,7 +17,7 @@ from pathlib import Path
 
 import yaml
 
-from integrations.trackers.base import DefectDraft, DefectRef, DefectState
+from integrations.trackers.base import BadQuery, DefectDraft, DefectRef, DefectState
 
 FINGERPRINT_KEY = "fingerprint"
 
@@ -51,6 +51,14 @@ class FileTracker:
     def get_states(self, ids: Collection[str]) -> dict[str, DefectState]:
         known = {str(i["id"]): self._state(i) for i in self._load()}
         return {i: known.get(i, DefectState(i, "unknown", tracker=self.name)) for i in ids}
+
+    def get_states_batch(self, ids: Collection[str]) -> dict[str, DefectState]:
+        """One read for many ids. Like a tracker query language, a malformed id in the
+        batch (not ``PREFIX-n``) rejects the whole query."""
+        bad = [i for i in ids if not str(i).rsplit("-", 1)[-1].isdigit()]
+        if bad:
+            raise BadQuery(f"malformed id(s) in the query: {', '.join(sorted(bad))}")
+        return self.get_states(ids)
 
     def find_by_fingerprint(self, fp: str) -> DefectRef | None:
         for item in self._load():

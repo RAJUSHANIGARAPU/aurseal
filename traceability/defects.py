@@ -15,6 +15,18 @@ verdict row) with a fingerprint over the node id and the *normalised* failure si
 so the same failure maps to the same issue across runs. Nothing is filed unless the
 caller asks: ``--submit`` locally, or ``DEFECT_AUTOFILE=true`` on ``main`` in CI (off by
 default), and an existing issue with the same fingerprint is reused, never duplicated.
+
+A draft body is redacted before it is returned (bearer, basic, JWT and ``key=``/``token=``/
+``password=`` values, plus the values of secret-named environment variables), names the
+deployed build the run measured (or "not measured") and the CI run, and lists the issues it
+may duplicate under "Possibly already filed": the defect ids the test links to, then up to
+three open snapshot defects whose title shares at least three distinctive words with the
+failure. A failure that is a confirmed known defect (its detector reported ``reproduces``
+in the same run) gets no draft.
+
+**Batched lookups.** A tracker with ``get_states_batch`` is asked in chunks of
+``BATCH_SIZE``; a chunk the tracker rejects (``BadQuery``) is split in half until the
+offending id stands alone, and that id is listed under ``missing``.
 """
 
 from __future__ import annotations
@@ -28,6 +40,7 @@ from pathlib import Path
 from typing import Any
 
 from integrations.trackers.base import (
+    BadQuery,
     DefectDraft,
     DefectState,
     TrackerConfig,
@@ -42,6 +55,15 @@ AUTOFILE_ENV = "DEFECT_AUTOFILE"
 SYNC_ENV = "DEFECT_SYNC"
 FINGERPRINT_TAG = "defect-fingerprint"
 DEFAULT_LABELS = ("bug", "from-test-run")
+BATCH_SIZE = 50
+CANDIDATE_MIN_SHARED = 3
+CANDIDATE_LIMIT = 3
+_STOP_WORDS = frozenset(
+    "that this with from were have been when then than there their they them will would "
+    "should could into onto over under after before about which while where what does done "
+    "expected actual assert assertion error failed failure equal value test true false none "
+    "<uuid> <ts> <addr> <hex> <tmp>".split()
+)
 
 _VOLATILE = (
     (re.compile(r"\b[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}\b", re.I), "<uuid>"),
@@ -80,6 +102,7 @@ class Snapshot:
     open_ids: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     generated_at: str = ""
+    missing: list[str] = field(default_factory=list)  # ids the tracker rejected even alone
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -88,7 +111,13 @@ class Snapshot:
             "defects": {k: v.to_json() for k, v in sorted(self.defects.items())},
             "open": sorted(self.open_ids),
             "errors": self.errors,
+            "missing": sorted(self.missing),
         }
+
+    def age_line(self) -> str:
+        from traceability.declared import age_line
+
+        return age_line(self.generated_at)
 
     @classmethod
     def load(cls, path: Path) -> Snapshot:
@@ -100,6 +129,7 @@ class Snapshot:
             open_ids=list(data.get("open") or ()),
             errors=list(data.get("errors") or ()),
             generated_at=str(data.get("generated_at") or ""),
+            missing=list(data.get("missing") or ()),
         )
 
     def closed_ids(self) -> set[str]:
@@ -136,10 +166,11 @@ class StatusCache:
         states = dict(previous.defects)
         open_ids = set(previous.open_ids)
         errors = []
+        missing: list[str] = []
         for name, spec in self.config.trackers.items():
             try:
                 tracker = self.factory(name, spec, self.session)
-                fresh = tracker.get_states(by_tracker.get(name, []))
+                fresh = lookup_states(tracker, by_tracker.get(name, []), missing)
                 listed = tracker.list_open()
             except (TrackerUnavailable, ValueError, OSError) as exc:
                 errors.append(f"{name}: {exc} (kept the last snapshot)")
@@ -152,7 +183,7 @@ class StatusCache:
                 states[ref.id] = ref
                 open_ids.add(ref.id)
             open_ids |= {k for k, v in fresh.items() if v.state == "open"}
-        self.current = Snapshot(states, sorted(open_ids), errors, utc_now())
+        self.current = Snapshot(states, sorted(open_ids), errors, utc_now(), sorted(missing))
         write_json(self.snapshot, self.current.to_json())
         return self.current
 
@@ -166,20 +197,85 @@ class StatusCache:
         return state is None or state.state != "closed"
 
 
+def lookup_states(
+    tracker: Any, ids: Sequence[str], missing: list[str], size: int = BATCH_SIZE
+) -> dict[str, DefectState]:
+    """States for ``ids``: batched when the tracker can, bisecting a rejected batch."""
+    batch = getattr(tracker, "get_states_batch", None)
+    if batch is None:
+        return tracker.get_states(ids)
+    out: dict[str, DefectState] = {}
+
+    def ask(chunk: Sequence[str]) -> None:
+        if not chunk:
+            return
+        try:
+            out.update(batch(list(chunk)))
+        except BadQuery:
+            if len(chunk) == 1:
+                missing.append(chunk[0])
+                return
+            half = len(chunk) // 2
+            ask(chunk[:half])
+            ask(chunk[half:])
+
+    ids = list(ids)
+    for start in range(0, len(ids), max(size, 1)):
+        ask(ids[start : start + size])
+    return out
+
+
 def open_defects_from_snapshot(path: Path | None = None) -> Callable[[], list[dict[str, Any]]]:
     """A provider for plans and the release verdict: open defects from the last sync.
 
     Raises when no snapshot exists, which those callers turn into "no evidence", never
-    into "zero open defects".
+    into "zero open defects". ``provider.generated_at()`` says how old the answer is.
     """
 
-    def provider() -> list[dict[str, Any]]:
-        target = path or snapshot_path()
-        if not Path(target).is_file():
-            raise FileNotFoundError(f"no defect snapshot at {target}: run `defects sync`")
-        return Snapshot.load(Path(target)).open_defects()
+    def target() -> Path:
+        return Path(path or snapshot_path())
 
+    def provider() -> list[dict[str, Any]]:
+        if not target().is_file():
+            raise FileNotFoundError(f"no defect snapshot at {target()}: run `defects sync`")
+        return Snapshot.load(target()).open_defects()
+
+    def generated_at() -> str | None:
+        return Snapshot.load(target()).generated_at or None if target().is_file() else None
+
+    provider.generated_at = generated_at  # type: ignore[attr-defined]
     return provider
+
+
+def defects_provider(
+    rows: Sequence[Mapping[str, Any]], generated_at: str | None
+) -> Callable[[], list[dict[str, Any]]]:
+    """A provider over fixed rows with a stated age (tests, the platform service)."""
+
+    def provider() -> list[dict[str, Any]]:
+        return [dict(r) for r in rows]
+
+    provider.generated_at = lambda: generated_at  # type: ignore[attr-defined]
+    return provider
+
+
+def refresh_declared(config: TrackerConfig, ids: Iterable[str], out: Path) -> Snapshot:
+    """Ask the trackers about exactly ``ids`` and write a snapshot to commit.
+
+    An id no tracker owns still gets an entry (state ``unknown``), so the offline check can
+    tell "asked, no tracker knows it" from "never asked".
+    """
+    wanted = sorted(set(ids))
+    if Path(out).is_file():
+        Path(out).unlink()  # a committed snapshot holds this answer only, nothing inherited
+    cache = StatusCache(config, Path(out))
+    snap = cache.sync(wanted)
+    for defect_id in wanted:
+        snap.defects.setdefault(defect_id, DefectState(defect_id, "unknown"))
+    snap.defects = {k: v for k, v in snap.defects.items() if k in set(wanted)}
+    snap.open_ids = [i for i in snap.open_ids if i in set(wanted)]
+    write_json(Path(out), snap.to_json())
+    return snap
 
 
 # ---------------------------------------------------------------------- drafts
@@ -190,6 +286,50 @@ def _bundle(path: Path | None) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
+def _words(text: str) -> set[str]:
+    words = re.findall(r"[a-z][a-z0-9]{3,}", normalise_signature(text).lower())
+    return {w for w in words if w not in _STOP_WORDS}
+
+
+def candidates(
+    snapshot: Snapshot | None,
+    nodeid_links: Sequence[str],
+    message: str,
+    *,
+    min_shared: int = CANDIDATE_MIN_SHARED,
+    limit: int = CANDIDATE_LIMIT,
+) -> list[str]:
+    """Issues this failure may duplicate, offline: linked ids, then similar open ones.
+
+    Similar means the open defect's title shares at least ``min_shared`` words of four or
+    more letters (stop words excluded) with the normalised failure message; the top
+    ``limit`` by token-set (Jaccard) similarity are kept.
+    """
+    out = list(dict.fromkeys(i for i in nodeid_links if i))
+    if snapshot is None:
+        return out
+    failure = _words(message)
+    scored = []
+    for defect_id in snapshot.open_ids:
+        state = snapshot.defects.get(defect_id)
+        if state is None or defect_id in out:
+            continue
+        title = _words(state.title)
+        shared = failure & title
+        if len(shared) >= min_shared:
+            scored.append((len(shared) / len(failure | title), defect_id, state.title))
+    scored.sort(key=lambda s: (-s[0], s[1]))
+    return out + [f"{d} ({t})" for _, d, t in scored[:limit]]
+
+
+def run_url(environ: Mapping[str, str] | None = None) -> str:
+    env = os.environ if environ is None else environ
+    server, repo, run = (
+        env.get(k, "") for k in ("GITHUB_SERVER_URL", "GITHUB_REPOSITORY", "GITHUB_RUN_ID")
+    )
+    return f"{server}/{repo}/actions/runs/{run}" if server and repo and run else "not in CI"
+
+
 def draft_from_failure(
     bundle: Path | None,
     verdict_row: Mapping[str, Any] | None = None,
@@ -198,8 +338,14 @@ def draft_from_failure(
     run_id: str = "",
     message: str = "",
     labels: Sequence[str] = DEFAULT_LABELS,
+    snapshot: Snapshot | None = None,
+    links: Sequence[str] = (),
+    environ: Mapping[str, str] | None = None,
 ) -> DefectDraft:
-    """An issue draft for one failure. Never filed here."""
+    """An issue draft for one failure, redacted. Never filed here."""
+    from core.build_info import last_observed
+    from gate.notify import redact_secrets
+
     data = _bundle(bundle)
     row = dict(verdict_row or {})
     nodeid = nodeid or str(row.get("nodeid") or data.get("test") or "")
@@ -227,9 +373,22 @@ def draft_from_failure(
     for key, title_ in (("failedRequests", "Failed requests"), ("consoleErrors", "Console")):
         if data.get(key):
             lines += ["", f"**{title_}**", ""] + [f"- `{x}`" for x in list(data[key])[:10]]
+    deployed = data.get("context", {}).get("deployedVersion") or last_observed().describe()
+    lines += [
+        "",
+        f"**Deployed build:** {deployed}",
+        f"**CI run:** {run_url(environ)}",
+    ]
+    if snapshot is not None:
+        lines.append(f"**Defect status:** {snapshot.age_line()}")
+    linked = list(links) + ([str(row["ticket"])] if row.get("ticket") else [])
+    possible = candidates(snapshot, linked, signature)
+    if possible:
+        lines += ["", "**Possibly already filed**", ""] + [f"- {c}" for c in possible]
     lines += ["", f"<!-- {FINGERPRINT_TAG}: {fp} -->"]
     tags = tuple(labels) + (("regression",) if kind == "closed_regressed" else ())
-    return DefectDraft(title, "\n".join(lines), fp, tags, nodeid, run_id, kind)
+    body = redact_secrets("\n".join(lines), environ=environ)
+    return DefectDraft(redact_secrets(title, environ=environ), body, fp, tags, nodeid, run_id, kind)
 
 
 @dataclass
@@ -240,12 +399,28 @@ class DraftOutcome:
     note: str = ""
 
 
+def failure_links(reports: Path) -> dict[str, list[str]]:
+    """Per node id, the defect ids the test is linked to in a run (marker or verdict row)."""
+    from traceability.evidence import ArtifactResultSource
+
+    src = ArtifactResultSource(reports)
+    out: dict[str, list[str]] = {}
+    for res in src.results():
+        if res.defect:
+            out.setdefault(res.nodeid, []).append(res.defect)
+    for v in src.verdicts():
+        if v.get("kind") == "expected_red" and v.get("ticket") and v.get("nodeid"):
+            out.setdefault(str(v["nodeid"]), []).append(str(v["ticket"]))
+    return {k: list(dict.fromkeys(v)) for k, v in out.items()}
+
+
 def failures_from_reports(reports: Path) -> list[tuple[str, str, str, dict[str, Any] | None]]:
     """``(run_id, nodeid, message, verdict_row)`` per failure in a run's artefacts.
 
     Failures are failed/error outcomes from the run-trust markers and
     ``closed_regressed`` detector rows; messages come from failure bundles when one names
-    the test.
+    the test. A failure whose detector reported ``reproduces`` in the same run is a
+    confirmed known defect and gets no draft.
     """
     from traceability.evidence import ArtifactResultSource
 
@@ -261,8 +436,15 @@ def failures_from_reports(reports: Path) -> list[tuple[str, str, str, dict[str, 
         for v in src.verdicts()
         if v.get("kind") == "expected_red" and v.get("verdict") == "closed_regressed"
     }
+    confirmed = {
+        (v.get("run_id"), v.get("nodeid"))
+        for v in src.verdicts()
+        if v.get("kind") == "expected_red" and v.get("verdict") == "reproduces"
+    }
     for res in src.results():
         if res.outcome not in ("failed", "error"):
+            continue
+        if (res.run_id, res.nodeid) in confirmed:
             continue
         name = res.nodeid.rsplit("::", 1)[-1]
         message = bundles.get(res.nodeid) or bundles.get(name) or ""

@@ -180,3 +180,75 @@ def test_rest_draft_and_case_link(tmp_path):
         assert dispatch(store, "GET", "/defects/GH-57")["cases"] == ["c-1"]
         with pytest.raises(ApiError):
             dispatch(store, "PUT", "/cases/c-1/defects/REQ-1")
+
+
+def _snapshot(**titles):
+    from traceability.defects import Snapshot
+
+    defects = {k: DefectState(k, "open", title=t) for k, t in titles.items()}
+    return Snapshot(defects, sorted(defects), generated_at="2026-01-01T00:00:00Z")
+
+
+def test_a_token_in_the_message_never_reaches_the_body():
+    jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4In0.c2lnbmF0dXJlLXZhbHVl"
+    message = (
+        f"401 for Authorization: Bearer abcdef0123456789 cookie {jwt} "
+        "url https://svc.example.test/x?token=s3cr3tvalue&api_key=k3yvalue1 "
+        "login https://user:hunter22@example.test/ password=letmein99"
+    )
+    d = draft_from_failure(
+        None, nodeid=M + "a", message=message, environ={"SERVICE_TOKEN": "plainsecret77"}
+    )
+    for secret in ("abcdef0123456789", jwt, "s3cr3tvalue", "k3yvalue1", "hunter22", "letmein99"):
+        assert secret not in d.body and secret not in d.title
+    assert "<redacted>" in d.body
+    leaked = draft_from_failure(
+        None,
+        nodeid=M + "a",
+        message="ran with plainsecret77",
+        environ={"SERVICE_TOKEN": "plainsecret77"},
+    )
+    assert "plainsecret77" not in leaked.body
+
+
+def test_possibly_already_filed_uses_links_and_similar_open_titles():
+    from traceability.defects import candidates
+
+    snap = _snapshot(
+        **{
+            "BUG-40": "Refund rounding drops a cent on monthly invoices",
+            "BUG-41": "Login page slow",
+            "BUG-42": "Monthly invoice refund total rounding is off",
+            "BUG-43": "Invoice refund rounding monthly report",
+            "BUG-44": "Monthly refund rounding invoice export",
+        }
+    )
+    message = "AssertionError: monthly invoice refund rounding differs by 0.01"
+    got = candidates(snap, ["BUG-7"], message)
+    assert got[0] == "BUG-7"
+    assert len(got) == 4  # the link, then the top three similar open defects
+    assert not any(c.startswith("BUG-41") for c in got)
+    d = draft_from_failure(None, nodeid=M + "a", message=message, snapshot=snap, links=["BUG-7"])
+    assert "**Possibly already filed**" in d.body and "- BUG-7" in d.body
+    assert "snapshot 2026-01-01" in d.body
+
+
+def test_the_body_names_the_measured_build_and_the_run():
+    env = {
+        "GITHUB_SERVER_URL": "https://ci.example.test",
+        "GITHUB_REPOSITORY": "o/r",
+        "GITHUB_RUN_ID": "9",
+    }
+    d = draft_from_failure(None, nodeid=M + "a", message="boom", environ=env)
+    assert "**Deployed build:** UNKNOWN" in d.body  # not measured in this process
+    assert "**CI run:** https://ci.example.test/o/r/actions/runs/9" in d.body
+
+
+def test_a_confirmed_known_defect_gets_no_draft(tmp_path):
+    run = RunSpec(
+        "r1",
+        [T(M + "a", "failed"), T(M + "b", "failed")],
+        verdicts=[red("r1", M + "a", "BUG-3", "reproduces")],
+    )
+    reports = write_artifacts(tmp_path / "reports", [run])
+    assert [n for _, n, _, _ in failures_from_reports(reports)] == [M + "b"]
