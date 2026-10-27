@@ -20,14 +20,31 @@ Transport is injected (``fetch(path) -> (status, body)``), so every branch is
 testable offline and any HTTP client can be plugged in. Candidates are injectable
 too; the defaults cover a Spring Boot ``/actuator/info`` and a generic
 ``/version`` endpoint.
+
+**Stated, not measured.** Some environments expose no version at all. Then
+:func:`stated_or_measured` lets the operator state it (``$STATED_BUILD_VERSION``): the
+answer carries ``source="stated"``, and :func:`stamp` prefixes every verdict text with
+``[version <x> stated, not measured]`` so nobody later reads it as a measurement. A
+measured answer always wins over a stated one; with neither the result stays UNKNOWN and
+the caller abstains.
+
+**Fingerprints.** When the version cannot be read, the build can sometimes still be told
+apart by something only the new build produces. :class:`DocumentFingerprint` reads a
+published API document (fetched *anonymously*: pass a fetch without credentials, the
+document is public), resolves a JSON pointer in it and reports whether the text there
+contains the new build's sentence: ``matched``, ``absent`` or ``unreadable``. Combine it
+with :func:`verification.fix_scope.fingerprint_verdict`: asserted where the release is
+expected, recorded elsewhere.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import threading
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from enum import Enum
 
 from core.logger import logger
 
@@ -62,6 +79,11 @@ class BuildInfo:
     @property
     def known(self) -> bool:
         return self.value is not None
+
+    @property
+    def stated(self) -> bool:
+        """The operator asserted this version; nothing measured it."""
+        return self.known and self.source == STATED
 
     def describe(self) -> str:
         """One line that can never be misread as a claim it does not support."""
@@ -194,6 +216,125 @@ def reset_for_tests() -> None:
     global _observed
     with _lock:
         _observed = None
+
+
+# ---------------------------------------------------------------------------
+# stated by the operator
+# ---------------------------------------------------------------------------
+
+STATED = "stated"
+STATED_ENV = "STATED_BUILD_VERSION"
+
+
+def stated_or_measured(
+    probe_result: BuildInfo,
+    stated_env: str = STATED_ENV,
+    environ: Mapping[str, str] | None = None,
+) -> BuildInfo:
+    """The measured version; else the operator's ``$stated_env``; else the UNKNOWN as is."""
+    if probe_result.known:
+        return probe_result
+    stated = ((os.environ if environ is None else environ).get(stated_env) or "").strip()
+    if not stated:
+        return probe_result
+    logger.warning(
+        "[version] %s stated by the operator through $%s, not measured (%s)",
+        stated,
+        stated_env,
+        probe_result.detail or "no probe answered",
+    )
+    return BuildInfo(
+        STATED, stated, f"asserted by the operator through ${stated_env}, not measured"
+    )
+
+
+def stamp_prefix(build: BuildInfo) -> str:
+    """``[version <x> stated, not measured]`` for a stated build, "" otherwise."""
+    return f"[version {build.value} stated, not measured]" if build.stated else ""
+
+
+def stamp(build: BuildInfo, text: str) -> str:
+    """``text``, prefixed when the build version was stated rather than measured."""
+    prefix = stamp_prefix(build)
+    return f"{prefix} {text}" if prefix else text
+
+
+# ---------------------------------------------------------------------------
+# fingerprint over a published document
+# ---------------------------------------------------------------------------
+
+
+class Match(str, Enum):
+    MATCHED = "matched"
+    ABSENT = "absent"
+    UNREADABLE = "unreadable"
+
+
+@dataclass(frozen=True)
+class FingerprintReading:
+    state: Match
+    detail: str
+
+    @property
+    def matched(self) -> bool:
+        return self.state is Match.MATCHED
+
+    def describe(self) -> str:
+        return f"{self.state.value}: {self.detail}"
+
+
+@dataclass(frozen=True)
+class DocumentFingerprint:
+    """``contains`` at ``json_pointer`` (RFC 6901) of the JSON document at ``path``."""
+
+    path: str
+    json_pointer: str
+    contains: str
+
+    def read(self, fetch: Fetch) -> FingerprintReading:
+        """Fetch the document (without credentials) and look for the sentence."""
+        where = f"{self.path}#{self.json_pointer}"
+        try:
+            response = fetch(self.path)
+        except Exception as exc:  # noqa: BLE001 - every failure is "unreadable"
+            return FingerprintReading(Match.UNREADABLE, f"{where} -> unreachable ({exc!r})")
+        if response is None:
+            return FingerprintReading(Match.UNREADABLE, f"{where} -> no response")
+        status, body = response
+        if status != 200:
+            return FingerprintReading(Match.UNREADABLE, f"{where} -> HTTP {status}")
+        try:
+            document = json.loads(body)
+        except (TypeError, ValueError):
+            return FingerprintReading(Match.UNREADABLE, f"{where} -> not JSON")
+        try:
+            node = json_pointer(document, self.json_pointer)
+        except (KeyError, IndexError, ValueError) as exc:
+            return FingerprintReading(Match.ABSENT, f"{where} -> pointer not found ({exc})")
+        text = node if isinstance(node, str) else json.dumps(node, ensure_ascii=False)
+        if self.contains in text:
+            return FingerprintReading(Match.MATCHED, f"{where} contains {self.contains!r}")
+        return FingerprintReading(Match.ABSENT, f"{where} does not contain {self.contains!r}")
+
+
+def json_pointer(document: object, pointer: str) -> object:
+    """Resolve an RFC 6901 pointer (``/info/description``); ``""`` is the whole document."""
+    if pointer == "":
+        return document
+    if not pointer.startswith("/"):
+        raise ValueError(f"a JSON pointer starts with '/': {pointer!r}")
+    node = document
+    for raw in pointer[1:].split("/"):
+        token = raw.replace("~1", "/").replace("~0", "~")
+        if isinstance(node, list):
+            if not token.isdigit():
+                raise ValueError(f"{token!r} is not a list index")
+            node = node[int(token)]
+        elif isinstance(node, dict):
+            node = node[token]
+        else:
+            raise KeyError(token)
+    return node
 
 
 def requests_fetch(base_url: str, session=None, timeout_s: float = 5.0, headers=None) -> Fetch:
