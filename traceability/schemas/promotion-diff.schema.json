@@ -35,10 +35,14 @@
     },
     "service": {
       "type": "object",
-      "required": ["service", "fromRef", "toRef", "functional", "regressing", "fixedIn",
+      "required": ["service", "status", "fromRef", "toRef", "functional", "regressing", "fixedIn",
                    "notCompared"],
       "properties": {
         "service": {"type": "string"},
+        "status": {
+          "enum": ["changed", "unchanged", "one-sided", "not-compared"],
+          "description": "whether the service moved; one-sided and not-compared count as changed for test selection"
+        },
         "fromRef": {"type": ["string", "null"]},
         "toRef": {"type": ["string", "null"]},
         "notCompared": {

@@ -604,3 +604,18 @@ def test_json_regressions_carry_fixed_in(fixed_in_repo, tmp_path, capsys):
     ]
     assert orders["regressing"][0]["fixedTags"] == ["v1.2.0", "v1.2.0-hotfix-1", "v1.3.0"]
     assert all(r["equivalent"] for r in orders["regressing"])
+
+
+@pytest.mark.parametrize(
+    ("from_ref", "to_ref", "problem", "expected"),
+    [
+        ("v1.2.0", "v1.1.0", None, "changed"),
+        ("v1.2.0", "v1.2.0", None, "unchanged"),
+        (None, "v1.1.0", "not in FROM: the promotion would not touch it", "one-sided"),
+        ("v1.2.0", None, "not in TO: new service, every commit up to FROM is new", "one-sided"),
+        ("v1.2.0", "v1.1.0", "no git clone at /tmp/missing", "not-compared"),
+    ],
+)
+def test_service_status_is_one_word_per_service(from_ref, to_ref, problem, expected):
+    delta = pdiff.ServiceDelta(service="billing", from_ref=from_ref, to_ref=to_ref, problem=problem)
+    assert pdiff.service_status(delta) == expected
