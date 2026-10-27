@@ -9,8 +9,8 @@ manifest format, git helpers, ticket-key regex and noise file.
 |---|---|
 | `tools/promotion_diff/promotion_diff.py` | what promoting one environment's versions onto another would ship, and what it would regress |
 | `tools/config_preflight/` | which stored records a new version of the workflow config would reject, before it is deployed |
-| `tools/hotfix_mergeback/` | which fixes run in production that the next release from mainline would drop ([README](../../tools/hotfix_mergeback/README.md)) |
-| `tools/release_leadtime/` | median and p90 of merge -> tag -> production per service, and the slowest changes ([README](../../tools/release_leadtime/README.md)) |
+| `tools/hotfix_mergeback/` | per hotfix tag: MISSING / BACK-PORTED / NOT-NEEDED fix by fix, with the evidence commit ([README](../../tools/hotfix_mergeback/README.md)) |
+| `tools/release_leadtime/` | median, p90 and threshold counts of merge -> tag -> environment -> production, hotfix vs regular ([README](../../tools/release_leadtime/README.md)) |
 
 Their tests are offline and run in the normal suite: `pytest tests/tools`.
 

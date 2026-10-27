@@ -1,60 +1,93 @@
 # Hotfix merge-back
 
 Answers one question before a release is cut: **which fixes are running in
-production that the next release from mainline would silently drop?**
+production that the next release from the default branch would silently drop?**
 
-A hotfix made on a release line and never merged back to mainline disappears the
-moment the next mainline release replaces the hotfix tag in production. This
-report finds those commits for every service in the production manifest.
+A hotfix made on a release line and never merged back disappears the moment the
+next release from the default branch replaces the hotfix tag in production. This
+report checks every hotfix (or production) tag, fix by fix.
 
 ```bash
-python -m tools.hotfix_mergeback --production deploy/production.yaml \
-  --workspace ~/src --fail-on-missing -o reports/hotfix-mergeback.md
+# every hotfix tag created in October, across the clones in ~/src
+python -m tools.hotfix_mergeback --workspace ~/src --since 2026-10-01 --until 2026-11-01
+
+# what production runs, as a CI gate
+python -m tools.hotfix_mergeback --workspace ~/src --production deploy/production.yaml \
+  --fail-on-missing -o reports/hotfix-mergeback.md
 ```
 
-## What it reports
+## How a tag is checked
 
-For each service: every commit reachable from the production ref and not from
-mainline (merges excluded). A commit is cleared when mainline already carries it,
-judged exactly as `tools/promotion_diff` judges a regression, in order of strength:
+The unit is one `(service, tag)`.
 
-1. **same patch**: `git cherry` finds a commit on mainline with the same patch-id
-   (a cherry-pick or a clean rebase);
-2. **same subject**: a mainline-only commit has the same subject;
-3. **identical files**: every file the commit touched has the same content on
-   both sides.
+1. **Base.** A hotfix tag (`--hotfix-pattern`, default `vX.Y.Z-hotfix-N`) starts
+   from its release tag `vX.Y.Z` when that exists. Hotfix tags are cumulative:
+   `-hotfix-2` also carries what `-hotfix-1` carried. Any other tag, or a hotfix
+   whose release tag is missing, starts from its merge-base with the default branch.
+2. **Default branch.** `--default-branch` when given, else `origin/HEAD`, then
+   `main`, then `master`. A remote-tracking branch is preferred over a local one,
+   so a stale local branch does not hide a missing fix.
+3. **Dropped before matching.** A commit and its revert inside base..tag cancel
+   out (a revert of a revert stays, because the change is back). A commit whose
+   every touched file matches `non_product_globs.txt` (CI configuration,
+   dependency manifests and lock files, docs, test-only files) is **not needed**:
+   the product loses nothing without it.
+4. **Matching.** The remaining commits are grouped per ticket key; a commit with
+   no key is a unit of its own. Each unit runs this chain, first hit wins:
 
-What is left is listed under **Not on mainline**, with the ticket keys from the
-subject and the tags that contain it. Commits matching the noise file
-(dependency bumps, release bookkeeping, formatting) are listed apart as noise and
-do not fail the run; a commit naming a ticket key is never noise. The cleared
-commits are listed too, with the equivalence that cleared them, so a reviewer
-can check the call.
+   | Link | Holds when |
+   |---|---|
+   | same commit | every commit of the unit is an ancestor of the default branch |
+   | patch-id | (unkeyed) a commit on the default branch has the same patch-id |
+   | key | a commit in base..default names the key. A merge commit is preferred as the evidence: a back-port is a new commit, so its patch-id differs |
+   | subject | (unkeyed) a commit in base..default has the same normalised subject (case, conventional prefix, back-port markers and a `(#123)` suffix ignored) |
+   | content | every commit's diff applies in reverse to the default tree (`git apply --reverse --check`): the fix is already there, under another ticket or none |
 
-A service that could not be checked (no clone, unknown ref, no mainline) is
-**Not checked**, never clean.
+## Verdicts
 
-## Inputs
+| Verdict | Meaning |
+|---|---|
+| MISSING | at least one unit was not found on the default branch |
+| BACK-PORTED | every unit was found; the report names the evidence commit per unit |
+| NOT-NEEDED | nothing remained after reverts and non-product commits |
+| ERROR | no clone, no tag, or no default branch: not checked, never clean |
+
+The default exit status is 0 (report only). `--fail-on-missing` exits 2 on a
+MISSING or ERROR verdict, for CI. Exit 1 is bad input.
+
+## What to check
+
+Combinable; the same `(service, tag)` is checked once.
+
+| Option | Selects |
+|---|---|
+| `--tag REPO:TAG` | one tag (repeatable) |
+| `--since`, `--until` | every hotfix tag whose creation date is in `[since, until)`, across the clones in the workspace. A clone whose `origin` repository name differs from its directory is a copy and is skipped (named in the report) |
+| `--release-manifest FILE` | every hotfix version pinned in a release manifest |
+| `--production FILE` | every ref pinned in a manifest, hotfix or not |
+
+Manifests use the `tools/promotion_diff` format (JSON or YAML, `service: ref` or a
+`services:` block with `{ref, repo}`).
+
+## Other options
 
 | Option | Default | Effect |
 |---|---|---|
-| `--production FILE` | required | version manifest of production, the `promotion_diff` format (JSON or YAML); the stem labels the report |
-| `--mainline` | `main` | branch the next release is cut from; `origin/<name>` is preferred over a local branch of that name, so a stale local branch does not hide a missing fix |
-| `--workspace` | `.` | directory holding one clone per service (`repo` in the manifest overrides the name) |
-| `--noise-file` | `tools/promotion_diff/noise_patterns.txt` | one case-insensitive regex per line |
+| `--workspace` | `.` | directory holding one clone per service |
+| `--clone-base URL` | none | clone a missing service from `URL/<repo>` with `--filter=blob:none` |
+| `--hotfix-pattern` | `^(?P<base>v?\d+\.\d+\.\d+)-hotfix-\d+$` | the named group `base` names the release tag |
+| `--non-product-file` | `tools/hotfix_mergeback/non_product_globs.txt` | one fnmatch glob per line (`*` crosses `/`) |
+| `--key-prefix P` | none | ticket keys are `P-<number>` (repeatable); overrides `--key-pattern` |
 | `--key-pattern` | `\b[A-Z][A-Z0-9]{1,9}-\d+\b` | regex for ticket keys |
-| `--no-fetch` | fetch | use local refs only; otherwise `git fetch --tags` per clone with a remote, warning on failure |
-| `--json` | markdown | machine-readable output with the same content |
-| `--fail-on-missing` | off | exit 2 when a non-noise commit is missing from mainline, or a service was not checked |
+| `--no-fetch` | fetch | use local refs only; otherwise `git fetch --tags` per clone with a remote |
+| `--json` | markdown | every unit with its commits, method and evidence commit |
 | `-o FILE` | stdout | write the report to a file |
-
-Exit status: 0 report written, 1 bad input, 2 the `--fail-on-missing` finding.
 
 ## Limits
 
-- A fix re-done on mainline by hand, with a different patch, subject and end
-  content, is reported as missing. That is the safe direction: a human confirms it.
-- Merge commits that exist only on the production line are not listed; their
-  parents are.
+- A fix re-done by hand under a new key, with different content, is reported as
+  MISSING. That is the safe direction: a person confirms it.
+- The content check needs the blobs; on a blobless clone git fetches them on
+  demand from the origin.
 
 Tests: `tests/tools/test_hotfix_mergeback.py` (offline, throwaway git repositories).

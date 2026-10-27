@@ -24,7 +24,7 @@ python -m tools.config_preflight --old v1.yaml --new v2.yaml --records export.js
 docker compose up
 
 # Release reports (docs/features/release-tooling.md)
-python -m tools.hotfix_mergeback --production deploy/production.yaml --fail-on-missing
+python -m tools.hotfix_mergeback --workspace ~/src --since 2026-10-01   # hotfix tags not on main
 python -m tools.release_leadtime --manifest deploy/production.yaml --deployments deploy/log.csv
 ```
 
