@@ -12,6 +12,7 @@ import pytest
 
 from gate.shard import (
     durations_from_store,
+    is_serial,
     load_durations,
     main,
     parse_shard,
@@ -141,3 +142,30 @@ def test_durations_from_the_results_store_use_the_median_per_test():
             ]
         )
     assert durations_from_store(store) == {"t.py::a": 0.3}
+
+
+def test_serial_spec_parses():
+    spec = parse_shard("serial/3")
+    assert spec.serial and spec.count == 3 and str(spec) == "serial/3"
+    assert spec.label == "serial" and not parse_shard("2/3").serial
+
+
+@pytest.mark.parametrize("bad", ["serial/0", "serial", "serial/x", "Serial/2"])
+def test_bad_serial_spec_rejected(bad):
+    with pytest.raises(ValueError):
+        parse_shard(bad)
+
+
+@pytest.mark.parametrize(
+    "markers, isolated, expected",
+    [
+        ({"serial"}, (), True),
+        ({"stateful", "smoke"}, (), True),
+        ({"smoke"}, (), False),
+        ({"smoke"}, ("isolated",), True),
+        ({"smoke", "isolated"}, ("isolated",), False),
+        ({"serial", "isolated"}, ("isolated",), True),
+    ],
+)
+def test_is_serial(markers, isolated, expected):
+    assert is_serial(markers, ("serial", "stateful"), isolated) is expected

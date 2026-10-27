@@ -330,6 +330,7 @@ class TestShardingIsExecutionOnly:
             (["-m", "regression", "-p", "gate.pytest_shard", "--shard=2/3"], ["-m", "regression"]),
             (["tests/", "-pgate.pytest_shard", "--shard", "1/2"], ["tests/"]),
             (["tests/", "--shard-durations", "d.json", "--shard-dir=x"], ["tests/"]),
+            (["tests/", "--shard=serial/2", "--serial-lane", "--isolated-markers=a"], ["tests/"]),
         ],
     )
     def test_shard_flags_and_plugin_are_dropped(self, given, expected):

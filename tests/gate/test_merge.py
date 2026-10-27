@@ -143,3 +143,102 @@ def test_manifests_that_disagree_are_reported(tmp_path):
     manifests = read_manifests(tmp_path)
     assert any("different test sets" in p for p in manifests.problems)
     assert merge_durations(tmp_path, tmp_path / "d.json") == 1
+
+
+def _serial(tmp_path, count, ids, exit_status=0, executed=None):
+    collected = json.loads((tmp_path / f"shard-1-of-{count}.selected.json").read_text())[
+        "collected"
+    ]
+    (tmp_path / f"shard-serial-of-{count}.selected.json").write_text(
+        json.dumps({"shard": 0, "count": count, "collected": collected, "selected": ids})
+    )
+    (tmp_path / f"shard-serial-of-{count}.executed.json").write_text(
+        json.dumps(
+            {
+                "shard": 0,
+                "count": count,
+                "executed": ids if executed is None else executed,
+                "exit_status": exit_status,
+            }
+        )
+    )
+
+
+def _hand_to_serial(tmp_path, count, ids):
+    for path in tmp_path.glob("shard-*-of-*.selected.json"):
+        data = json.loads(path.read_text())
+        if data["shard"] != 0:
+            data["collected"] = sorted({*data["collected"], *ids})
+            data["serial_selected"] = ids
+            path.write_text(json.dumps(data))
+
+
+def _run(tmp_path, *extra):
+    out = io.StringIO()
+    code = main(
+        ["--manifests", str(tmp_path), "--durations-out", str(tmp_path / "d.json"), *extra], out
+    )
+    return code, out.getvalue()
+
+
+def test_serial_lane_counts_like_a_shard(tmp_path):
+    _manifests(tmp_path, {1: ["a"], 2: ["b"]}, 2)
+    _hand_to_serial(tmp_path, 2, ["s"])
+    _serial(tmp_path, 2, ["s"])
+    code, out = _run(tmp_path, "--summary")
+    assert code == 0, out
+    assert "shard serial/2: selected 1, executed 1, exit 0" in out
+    assert out.strip().endswith("verdict: PASS")
+
+
+def test_serial_lane_that_never_ran_is_incomplete(tmp_path):
+    _manifests(tmp_path, {1: ["a"], 2: ["b"]}, 2)
+    _hand_to_serial(tmp_path, 2, ["s"])
+    code, out = _run(tmp_path)
+    assert code == 1
+    assert "serial lane left no results (1 test(s) were handed to it)" in out
+
+
+def test_serial_lane_that_lost_a_test_is_incomplete(tmp_path):
+    _manifests(tmp_path, {1: ["a"], 2: ["b"]}, 2)
+    _hand_to_serial(tmp_path, 2, ["s", "t"])
+    _serial(tmp_path, 2, ["s", "t"], executed=["s"])
+    code, out = _run(tmp_path)
+    assert code == 1 and "shard serial: 1 selected test(s) never reported" in out
+
+
+def test_failing_serial_lane_fails_the_verdict(tmp_path):
+    _manifests(tmp_path, {1: ["a"], 2: ["b"]}, 2)
+    _hand_to_serial(tmp_path, 2, ["s"])
+    _serial(tmp_path, 2, ["s"], exit_status=1)
+    code, out = _run(tmp_path, "--summary")
+    assert code == 1 and "merge: complete" in out and "verdict: FAIL" in out
+
+
+def test_an_empty_serial_lane_has_no_say(tmp_path):
+    _manifests(tmp_path, {1: ["a"], 2: ["b"]}, 2)
+    _serial(tmp_path, 2, [], exit_status=5)
+    code, out = _run(tmp_path, "--summary")
+    assert code == 0, out
+    assert "(empty serial lane: no say)" in out
+    assert "zero tests" not in out
+
+
+def test_summary_verdict_fails_on_a_failed_junit_case(tmp_path):
+    _manifests(tmp_path, {1: ["a"], 2: ["b"]}, 2)
+    junit = tmp_path / "junit-1.xml"
+    junit.write_text(JUNIT_A)
+    code, out = _run(
+        tmp_path, "--summary", "--junit", str(junit), "--junit-out", str(tmp_path / "m.xml")
+    )
+    assert code == 1 and "verdict: FAIL" in out
+
+
+def test_without_summary_the_exit_code_is_completeness_only(tmp_path):
+    _manifests(tmp_path, {1: ["a"], 2: ["b"]}, 2)
+    _serial(tmp_path, 2, [], exit_status=0)
+    (tmp_path / "shard-1-of-2.executed.json").write_text(
+        json.dumps({"shard": 1, "count": 2, "executed": ["a"], "exit_status": 1})
+    )
+    code, out = _run(tmp_path)
+    assert code == 0 and "verdict" not in out

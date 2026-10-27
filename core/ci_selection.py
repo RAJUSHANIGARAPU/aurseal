@@ -51,12 +51,12 @@ from gate.browsers import strip_browser_param
 # reporting flags only decide what gets written. None of them alter the set of
 # collected node ids, and several are meaningless under --collect-only.
 _EXECUTION_ONLY_FLAGS: frozenset[str] = frozenset(
-    {"-v", "-vv", "-q", "-s", "-x", "--tb", "--exitfirst", "--headed"}
+    {"-v", "-vv", "-q", "-s", "-x", "--tb", "--exitfirst", "--headed", "--serial-lane"}
 )
 
 # Same, but these consume a following value (`-n auto`, `--reruns 2`).
-# The shard options split one selection across machines: the union of the
-# shards is the unsharded selection, which is what the gate must replay.
+# The shard options split one selection across machines: the union of the shards
+# (serial lane included) is the unsharded selection, which the gate must replay.
 _EXECUTION_ONLY_FLAGS_WITH_VALUE: frozenset[str] = frozenset(
     {
         "-n",
@@ -68,6 +68,7 @@ _EXECUTION_ONLY_FLAGS_WITH_VALUE: frozenset[str] = frozenset(
         "--shard",
         "--shard-durations",
         "--shard-dir",
+        "--isolated-markers",
         # Which engine a browser test runs on. A matrix leg selects the same tests as
         # the default engine; its node ids differ only in the engine parameter.
         "--browser",
