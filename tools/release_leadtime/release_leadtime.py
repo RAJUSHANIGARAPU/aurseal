@@ -1,24 +1,34 @@
-"""How long a merged change takes to reach a release tag and then production.
+"""How long a change takes from merge to production, and a release from env to env.
 
-For every change on a service's mainline (each first-parent commit: a merge
-commit, a squash merge or a direct commit) the report takes three timestamps:
+Two views, both over local clones, a release tag glob and deployment data.
 
-* ``merged_at``: the commit date of the change on mainline;
-* ``tagged_at``: the date of the first release tag (by tag date) that contains it;
-* ``deployed_at``: the first production deployment, in the deployment log, of a
-  tag that contains it. Normally that is the first tag; when that tag never
-  reached production, the next tag that did carries the change there.
+**Changes** (unit: one first-parent commit on mainline, so a merge commit, a
+squash merge or a direct commit), windowed on merge time:
 
-and reports the median and p90 of merge->tag, tag->prod and merge->prod per
-service and overall, over a ``--since``/``--until`` window, plus the slowest
-changes. A change not tagged yet, or tagged but not deployed yet, is counted
-as pending and kept out of the percentiles.
+* merge -> tag: to the first annotated release tag containing the change;
+* merge -> prod: to the first production deployment of any tag containing it
+  (when the first tag never reached production, the next deployed one did).
 
-Without a deployment log, or when the log holds no production row for a
-service, the production stages are NOT MEASURED, never zero.
+**Releases** (unit: one ``(service, tag)``, counted once), windowed on
+production time: the time a version reached an environment is its FIRST
+deployment there; a later re-pin (a rollback, a moved URL) is ignored.
+Production is the earliest of the ``--production`` environments. Stages run
+between consecutive environments of ``--envs`` and from the tag to production;
+a stage counts only when both timestamps exist and are in order, so a hotfix
+that skipped an environment drops out of those stages only. A lightweight tag
+has no tag date of its own: it is listed apart and counted only in the
+environment stages. Rows split into hotfix and regular by ``--hotfix-pattern``.
 
-The output is a pure function of the clones and the inputs: nothing is read
-from the clock, so a rerun over the same refs gives the same report.
+Every group reports n, the median, the p90 (nearest rank) and how many fall at
+or under each ``--threshold``. Medians are not additive: the median of
+merge -> prod is not the sum of the medians of its stages.
+
+Deployment data comes from a log (CSV or JSON rows: service, tag, environment,
+deployed_at) and/or a git repository of deploy manifests, where the committer
+date of the commit that first pins a tag for an environment is the time it got
+there. Without either, or with nothing recorded for a service, the stages that
+need it are NOT MEASURED, never zero. Nothing is read from the clock: a rerun
+over the same refs and inputs gives the same report.
 
 Exit status: 0 report written; 1 bad input.
 """
@@ -37,6 +47,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
+import yaml
+
 from tools.hotfix_mergeback.hotfix_mergeback import resolve_mainline
 from tools.promotion_diff.promotion_diff import (
     DEFAULT_KEY_PATTERN,
@@ -45,15 +57,17 @@ from tools.promotion_diff.promotion_diff import (
     _md,
     keys_in,
     load_pins,
+    parse_pins,
 )
 
-STAGES = ("merge_to_tag", "tag_to_prod", "merge_to_prod")
-STAGE_LABELS = {
-    "merge_to_tag": "merge -> tag",
-    "tag_to_prod": "tag -> prod",
-    "merge_to_prod": "merge -> prod",
-}
+CHANGE_STAGES = {"merge_to_tag": "merge -> tag", "merge_to_prod": "merge -> prod"}
+PRODUCTION = "production"
+TAG_TO_PROD = "tag -> production"
 NOT_MEASURED = "NOT MEASURED"
+DEFAULT_HOTFIX_PATTERN = r"-hotfix-\d+$"
+DEFAULT_THRESHOLDS = (6.0, 24.0)
+
+Window = tuple[datetime | None, datetime | None]
 
 
 def parse_time(value: str, where: str) -> datetime:
@@ -66,6 +80,19 @@ def parse_time(value: str, where: str) -> datetime:
     except ValueError:
         raise InputError(f"{where}: not an ISO 8601 time: {value!r}") from None
     return moment if moment.tzinfo else moment.replace(tzinfo=UTC)
+
+
+def in_window(moment: datetime | None, window: Window) -> bool:
+    since, until = window
+    if since is None and until is None:
+        return True
+    if moment is None:
+        return False
+    return not ((since and moment < since) or (until and moment >= until))
+
+
+def split_list(value: str) -> list[str]:
+    return [part.strip() for part in value.split(",") if part.strip()]
 
 
 # ---------------------------------------------------------------------------
@@ -120,6 +147,40 @@ def load_deployments(path: str | Path) -> list[Deployment]:
     return result
 
 
+def deploy_history(
+    repo: str | Path, template: str, envs: Sequence[str], ref: str = "HEAD"
+) -> tuple[list[Deployment], list[str]]:
+    """First pin of every (service, tag) per environment in a repository of deploy manifests.
+
+    ``template`` names each environment's manifest, e.g. ``envs/{env}/versions.yaml``.
+    Returns the deployments and the revisions that could not be read (skipped).
+    """
+    git = Git(Path(repo))
+    if not git.exists():
+        raise InputError(f"deploy repository not found: {repo}")
+    deployments, unreadable = [], []
+    for env in envs:
+        path = template.format(env=env)
+        seen: set[tuple[str, str]] = set()
+        out = git.out("log", "--reverse", "--format=%H%x1f%cI", ref, "--", path)
+        for line in out.splitlines():
+            sha, at = line.split("\x1f")
+            shown = git.run("show", f"{sha}:{path}", check=False)
+            if shown.returncode != 0:
+                continue  # the file was deleted in this commit
+            try:
+                pins = parse_pins(shown.stdout, Path(path))
+            except (InputError, ValueError, yaml.YAMLError):  # a broken revision: skip, name it
+                unreadable.append(f"{sha[:8]}:{path}")
+                continue
+            for pin in pins.values():
+                if (pin.service, pin.ref) in seen:
+                    continue  # a re-pin: the first time counts
+                seen.add((pin.service, pin.ref))
+                deployments.append(Deployment(pin.ref, env, parse_time(at, sha), pin.service))
+    return deployments, unreadable
+
+
 def parse_service(value: str) -> tuple[str, str]:
     name, _, repo = value.partition("=")
     if not name.strip():
@@ -137,6 +198,7 @@ class Tag:
     name: str
     sha: str
     at: datetime
+    annotated: bool = True
 
 
 @dataclass
@@ -144,19 +206,15 @@ class Change:
     sha: str
     subject: str
     merged_at: datetime
-    tag: Tag | None = None
+    tag: Tag | None = None  # first annotated tag containing it
     deployed_tag: str | None = None
     deployed_at: datetime | None = None
 
     def hours(self, stage: str) -> float | None:
-        start, end = {
-            "merge_to_tag": (self.merged_at, self.tag and self.tag.at),
-            "tag_to_prod": (self.tag and self.tag.at, self.deployed_at),
-            "merge_to_prod": (self.merged_at, self.deployed_at),
-        }[stage]
-        if start is None or end is None:
+        end = self.tag and self.tag.at if stage == "merge_to_tag" else self.deployed_at
+        if end is None or end < self.merged_at:
             return None
-        return (end - start).total_seconds() / 3600
+        return (end - self.merged_at).total_seconds() / 3600
 
 
 def mainline_changes(git: Git, mainline: str) -> list[Change]:
@@ -169,20 +227,21 @@ def mainline_changes(git: Git, mainline: str) -> list[Change]:
 
 
 def release_tags(git: Git, patterns: Sequence[str]) -> list[Tag]:
-    """Tags matching the globs, oldest first by tag date (commit date for a light tag)."""
+    """Tags matching the globs, oldest first; a lightweight tag is dated by its commit."""
     out = git.out(
         "for-each-ref",
-        "--format=%(refname:short)%1f%(objectname)%1f%(*objectname)%1f%(creatordate:iso-strict)",
+        "--format=%(refname:short)%1f%(objecttype)%1f%(objectname)%1f%(*objectname)"
+        "%1f%(creatordate:iso-strict)",
         *(f"refs/tags/{p}" for p in patterns),
     )
     tags = []
     for line in out.splitlines():
-        name, obj, peeled, at = line.split("\x1f")
-        tags.append(Tag(name, peeled or obj, parse_time(at, name)))
+        name, kind, obj, peeled, at = line.split("\x1f")
+        tags.append(Tag(name, peeled or obj, parse_time(at, name), kind == "tag"))
     return sorted(tags, key=lambda t: (t.at, t.name))
 
 
-def first_tag_per_commit(git: Git, tags: Sequence[Tag]) -> dict[str, list[Tag]]:
+def tags_per_commit(git: Git, tags: Sequence[Tag]) -> dict[str, list[Tag]]:
     """Every commit reachable from a tag -> the tags containing it, oldest first."""
     containing: dict[str, list[Tag]] = {}
     for tag in tags:
@@ -197,64 +256,112 @@ def first_tag_per_commit(git: Git, tags: Sequence[Tag]) -> dict[str, list[Tag]]:
 
 
 @dataclass
+class Release:
+    """One (service, tag): when it was tagged and when it first reached each environment."""
+
+    service: str
+    tag: Tag
+    hotfix: bool
+    reached: dict[str, datetime] = field(default_factory=dict)  # chain env -> first arrival
+
+    @property
+    def production_at(self) -> datetime | None:
+        return self.reached.get(PRODUCTION)
+
+    def hours(self, stage: str) -> float | None:
+        if stage == TAG_TO_PROD:
+            if not self.tag.annotated:
+                return None
+            start, end = self.tag.at, self.production_at
+        else:
+            a, b = stage.split(" -> ")
+            start, end = self.reached.get(a), self.reached.get(b)
+        if start is None or end is None or end < start:
+            return None
+        return (end - start).total_seconds() / 3600
+
+
+@dataclass
 class ServiceTimes:
     service: str
     problem: str | None = None
     changes: list[Change] = field(default_factory=list)
-    prod_measured: bool = False
-    skipped_tags: set[str] = field(default_factory=set)  # deployed before tagged: data error
+    releases: list[Release] = field(default_factory=list)
+    deploy_measured: bool = False
+    deployed_before_tagged: set[str] = field(default_factory=set)
 
 
-def production_deployments(
-    service: str, deployments: Sequence[Deployment], production: str
-) -> dict[str, list[datetime]]:
-    """Tag -> its production deployment times for this service, oldest first."""
-    times: dict[str, list[datetime]] = {}
+@dataclass(frozen=True)
+class Settings:
+    workspace: Path
+    mainline: str
+    tag_globs: Sequence[str]
+    chain: Sequence[str]  # pre-production environments in order, then PRODUCTION
+    production_envs: Sequence[str]
+    hotfix_re: re.Pattern[str]
+    window: Window
+
+
+def first_arrivals(
+    service: str, deployments: Sequence[Deployment], s: Settings
+) -> dict[str, dict[str, datetime]]:
+    """tag -> chain env -> first deployment; production is the earliest production env."""
+    arrivals: dict[str, dict[str, datetime]] = {}
     for d in deployments:
-        if d.environment == production and d.service in (None, service):
-            times.setdefault(d.tag, []).append(d.deployed_at)
-    return {tag: sorted(at) for tag, at in times.items()}
+        if d.service not in (None, service):
+            continue
+        if d.environment in s.production_envs:
+            env = PRODUCTION
+        elif d.environment in s.chain:
+            env = d.environment
+        else:
+            continue
+        per_env = arrivals.setdefault(d.tag, {})
+        if env not in per_env or d.deployed_at < per_env[env]:
+            per_env[env] = d.deployed_at
+    return arrivals
 
 
 def analyse_service(
-    workspace: Path,
-    service: str,
-    repo: str,
-    mainline: str,
-    tag_globs: Sequence[str],
-    deployments: Sequence[Deployment] | None,
-    production: str,
-    window: tuple[datetime | None, datetime | None],
+    service: str, repo: str, deployments: Sequence[Deployment] | None, s: Settings
 ) -> ServiceTimes:
     times = ServiceTimes(service)
-    git = Git(workspace / repo)
+    git = Git(s.workspace / repo)
     if not git.exists():
-        times.problem = f"no git clone at {workspace / repo}"
+        times.problem = f"no git clone at {s.workspace / repo}"
         return times
-    main_sha = resolve_mainline(git, mainline)
+    main_sha = resolve_mainline(git, s.mainline)
     if main_sha is None:
-        times.problem = f"mainline {mainline!r} not found"
+        times.problem = f"mainline {s.mainline!r} not found"
         return times
-    tags = release_tags(git, tag_globs)
-    containing = first_tag_per_commit(git, tags)
-    deployed = (
-        production_deployments(service, deployments, production) if deployments is not None else {}
-    )
-    times.prod_measured = bool(deployed)
-    since, until = window
+    tags = release_tags(git, s.tag_globs)
+    arrivals = first_arrivals(service, deployments or [], s)
+    times.deploy_measured = deployments is not None and bool(arrivals)
+
+    releases = {}
+    for tag in tags:
+        release = Release(
+            service, tag, bool(s.hotfix_re.search(tag.name)), arrivals.get(tag.name, {})
+        )
+        releases[tag.name] = release
+        prod = release.production_at
+        if tag.annotated and prod is not None and prod < tag.at:
+            times.deployed_before_tagged.add(tag.name)
+        if in_window(prod, s.window):
+            times.releases.append(release)
+
+    containing = tags_per_commit(git, tags)
     for change in mainline_changes(git, main_sha):
-        if (since and change.merged_at < since) or (until and change.merged_at >= until):
+        if not in_window(change.merged_at, s.window):
             continue
         carriers = containing.get(change.sha, [])
-        change.tag = carriers[0] if carriers else None
-        candidates = []
-        for tag in carriers:
-            at = deployed.get(tag.name, [])
-            if at and at[0] < tag.at:
-                times.skipped_tags.add(tag.name)
-            valid = [moment for moment in at if moment >= tag.at]
-            if valid:
-                candidates.append((valid[0], tag.name))
+        change.tag = next((t for t in carriers if t.annotated), None)
+        candidates = [
+            (releases[t.name].production_at, t.name)
+            for t in carriers
+            if releases[t.name].production_at is not None
+            and t.name not in times.deployed_before_tagged
+        ]
         if candidates:
             change.deployed_at, change.deployed_tag = min(candidates)
         times.changes.append(change)
@@ -267,28 +374,48 @@ def percentile(values: Sequence[float], q: float) -> float:
     return ordered[max(0, math.ceil(q * len(ordered)) - 1)]
 
 
-def stage_stats(changes: Sequence[Change], stage: str, measured: bool) -> dict:
+def stats(values: Sequence[float | None], measured: bool, thresholds: Sequence[float]) -> dict:
+    """``None`` values are pending: counted, not timed."""
     if not measured:
         return {"status": NOT_MEASURED}
-    values = [h for h in (c.hours(stage) for c in changes) if h is not None]
-    pending = len(changes) - len(values)
-    if not values:
-        return {"status": "no data", "count": 0, "pending": pending}
+    timed = [v for v in values if v is not None]
+    pending = len(values) - len(timed)
+    if not timed:
+        return {"status": "no data", "n": 0, "pending": pending}
     return {
         "status": "measured",
-        "count": len(values),
+        "n": len(timed),
         "pending": pending,
-        "median_hours": round(statistics.median(values), 2),
-        "p90_hours": round(percentile(values, 0.9), 2),
+        "median_hours": round(statistics.median(timed), 2),
+        "p90_hours": round(percentile(timed, 0.9), 2),
+        "at_or_under": {f"{t:g}h": sum(1 for v in timed if v <= t) for t in thresholds},
     }
 
 
-def summarise(changes: Sequence[Change], prod_changes: Sequence[Change], prod: bool) -> dict:
-    """``prod_changes``: the changes of the services whose production stages are measured."""
+def release_stages(chain: Sequence[str]) -> list[str]:
+    return [f"{a} -> {b}" for a, b in zip(chain, chain[1:], strict=False)] + [TAG_TO_PROD]
+
+
+def change_summary(
+    changes: Sequence[Change], prod_changes: Sequence[Change], prod: bool, thresholds
+) -> dict:
+    """``prod_changes``: the changes of the services whose deployments are measured."""
     return {
-        "merge_to_tag": stage_stats(changes, "merge_to_tag", True),
-        "tag_to_prod": stage_stats([c for c in prod_changes if c.tag], "tag_to_prod", prod),
-        "merge_to_prod": stage_stats(prod_changes, "merge_to_prod", prod),
+        "merge_to_tag": stats([c.hours("merge_to_tag") for c in changes], True, thresholds),
+        "merge_to_prod": stats([c.hours("merge_to_prod") for c in prod_changes], prod, thresholds),
+    }
+
+
+def release_summary(
+    releases: Sequence[Release], measured: bool, chain: Sequence[str], thresholds
+) -> dict:
+    return {
+        stage: stats(
+            [r.hours(stage) for r in releases if stage != TAG_TO_PROD or r.tag.annotated],
+            measured,
+            thresholds,
+        )
+        for stage in release_stages(chain)
     }
 
 
@@ -311,133 +438,211 @@ def slowest(services: Sequence[ServiceTimes], top: int) -> list[tuple[str, Chang
 # ---------------------------------------------------------------------------
 
 
+def _iso(moment: datetime | None) -> str | None:
+    return moment.isoformat() if moment else None
+
+
+def report_data(
+    services: Sequence[ServiceTimes],
+    s: Settings,
+    top: int,
+    key_re: re.Pattern[str],
+    thresholds: Sequence[float],
+    unreadable: Sequence[str] = (),
+) -> dict:
+    ok = [x for x in services if not x.problem]
+    deployed = [x for x in ok if x.deploy_measured]
+    groups = []
+    for scope, members in [("overall", deployed), *((x.service, [x]) for x in ok)]:
+        measured = bool(members) and all(m.deploy_measured for m in members)
+        for kind in ("regular", "hotfix"):
+            rel = [r for m in members for r in m.releases if r.hotfix == (kind == "hotfix")]
+            if rel or not measured:
+                groups.append(
+                    {
+                        "scope": scope,
+                        "kind": kind,
+                        "units": len(rel),
+                        "stages": release_summary(rel, measured, s.chain, thresholds),
+                    }
+                )
+            if not measured:
+                break  # one NOT MEASURED row per scope is enough
+    return {
+        "window": {"since": _iso(s.window[0]), "until": _iso(s.window[1])},
+        "chain": list(s.chain),
+        "production_envs": list(s.production_envs),
+        "thresholds_hours": list(thresholds),
+        "changes": {
+            "overall": change_summary(
+                [c for x in ok for c in x.changes],
+                [c for x in deployed for c in x.changes],
+                bool(deployed),
+                thresholds,
+            ),
+            "overall_prod_services": [x.service for x in deployed],
+            "services": [
+                {
+                    "service": x.service,
+                    "problem": x.problem,
+                    "changes": len(x.changes),
+                    "untagged": sum(1 for c in x.changes if c.tag is None),
+                    "stages": None
+                    if x.problem
+                    else change_summary(x.changes, x.changes, x.deploy_measured, thresholds),
+                }
+                for x in services
+            ],
+            "slowest": [
+                {
+                    "service": service,
+                    "sha": c.sha,
+                    "subject": c.subject,
+                    "keys": keys_in(c.subject, key_re),
+                    "merged_at": c.merged_at.isoformat(),
+                    "tag": c.tag and c.tag.name,
+                    "tagged_at": _iso(c.tag and c.tag.at),
+                    "deployed_tag": c.deployed_tag,
+                    "deployed_at": _iso(c.deployed_at),
+                    "ranked_by": stage,
+                    "hours": round(c.hours(stage) or 0.0, 2),
+                }
+                for service, c, stage in slowest(ok, top)
+            ],
+        },
+        "releases": {
+            "groups": groups,
+            "units": [
+                {
+                    "service": r.service,
+                    "tag": r.tag.name,
+                    "kind": "hotfix" if r.hotfix else "regular",
+                    "lightweight": not r.tag.annotated,
+                    "tagged_at": _iso(r.tag.at) if r.tag.annotated else None,
+                    "reached": {env: _iso(r.reached.get(env)) for env in s.chain},
+                }
+                for x in ok
+                for r in x.releases
+            ],
+            "lightweight_tags": [
+                f"{r.service} {r.tag.name}" for x in ok for r in x.releases if not r.tag.annotated
+            ],
+        },
+        "data_errors": {
+            "deployed_before_tagged": {
+                x.service: sorted(x.deployed_before_tagged) for x in ok if x.deployed_before_tagged
+            },
+            "unreadable_deploy_revisions": list(unreadable),
+        },
+        "services_not_measured": {x.service: x.problem for x in services if x.problem},
+    }
+
+
 def fmt_hours(hours: float | None) -> str:
     if hours is None:
         return "-"
     return f"{hours:.1f}h" if hours < 48 else f"{hours / 24:.1f}d"
 
 
-def fmt_stat(stat: dict) -> tuple[str, str, str]:
+def fmt_stat(stat: dict, thresholds: Sequence[float]) -> list[str]:
+    """``[n, median, p90, *at_or_under]``; a stage without data says why in median and p90."""
     if stat["status"] != "measured":
-        return stat["status"], stat["status"], str(stat.get("count", "-"))
-    return (
-        fmt_hours(stat["median_hours"]),
-        fmt_hours(stat["p90_hours"]),
-        f"{stat['count']} (+{stat['pending']} pending)" if stat["pending"] else str(stat["count"]),
-    )
+        status = stat["status"]
+        return [str(stat.get("n", "-")), status, status, *("-" for _ in thresholds)]
+    n = f"{stat['n']} (+{stat['pending']} pending)" if stat["pending"] else str(stat["n"])
+    under = [str(v) for v in stat["at_or_under"].values()]
+    return [n, fmt_hours(stat["median_hours"]), fmt_hours(stat["p90_hours"]), *under]
 
 
-def report_data(
-    services: Sequence[ServiceTimes],
-    top: int,
-    key_re: re.Pattern[str],
-    window: tuple[datetime | None, datetime | None],
-    production: str,
-) -> dict:
-    measured = [s for s in services if not s.problem]
-    with_prod = [s for s in measured if s.prod_measured]
-    return {
-        "window": {
-            "since": window[0] and window[0].isoformat(),
-            "until": window[1] and window[1].isoformat(),
-        },
-        "production": production,
-        "overall": summarise(
-            [c for s in measured for c in s.changes],
-            [c for s in with_prod for c in s.changes],
-            bool(with_prod),
-        ),
-        "overall_prod_services": [s.service for s in with_prod],
-        "services": [
-            {
-                "service": s.service,
-                "problem": s.problem,
-                "changes": len(s.changes),
-                "untagged": sum(1 for c in s.changes if c.tag is None),
-                "deployed_before_tagged": sorted(s.skipped_tags),
-                "stages": None if s.problem else summarise(s.changes, s.changes, s.prod_measured),
-            }
-            for s in services
-        ],
-        "slowest": [
-            {
-                "service": service,
-                "sha": c.sha,
-                "subject": c.subject,
-                "keys": keys_in(c.subject, key_re),
-                "merged_at": c.merged_at.isoformat(),
-                "tag": c.tag and c.tag.name,
-                "tagged_at": c.tag and c.tag.at.isoformat(),
-                "deployed_tag": c.deployed_tag,
-                "deployed_at": c.deployed_at and c.deployed_at.isoformat(),
-                "ranked_by": stage,
-                "hours": round(c.hours(stage) or 0.0, 2),
-            }
-            for service, c, stage in slowest(measured, top)
-        ],
-    }
+def _table(header: list[str], rows: list[list[str]]) -> list[str]:
+    lines = ["| " + " | ".join(header) + " |", "|" + "---|" * len(header)]
+    lines += ["| " + " | ".join(_md(c) for c in row) + " |" for row in rows]
+    return lines
 
 
 def render(data: dict) -> str:
+    thresholds = data["thresholds_hours"]
+    under = [f"<= {t:g}h" for t in thresholds]
     since, until = data["window"]["since"], data["window"]["until"]
-    window = f"{since or 'start'} .. {until or 'end'}"
-    lines = [f"# Release lead time ({window})", ""]
+    lines = [f"# Release lead time ({since or 'start'} .. {until or 'end'})", ""]
     lines.append(
-        "Stages: merge -> first tag containing the change -> first "
-        f"`{data['production']}` deployment of a tag containing it. "
-        "p90 is nearest-rank; pending changes are counted, not timed."
+        "p90 is nearest rank. Medians are not additive: the median of a whole path is not"
+        " the sum of its stage medians. Pending units are counted, not timed."
     )
-    lines += ["", "| Scope | Stage | Median | p90 | Changes |", "|---|---|---|---|---|"]
-    rows = [("overall", data["overall"])] + [
-        (s["service"], s["stages"]) for s in data["services"] if s["stages"]
-    ]
-    for scope, stages in rows:
-        for stage in STAGES:
-            median, p90, count = fmt_stat(stages[stage])
-            lines.append(f"| {_md(scope)} | {STAGE_LABELS[stage]} | {median} | {p90} | {count} |")
 
-    measured = [s["service"] for s in data["services"] if not s["problem"]]
-    with_prod = data["overall_prod_services"]
+    changes = data["changes"]
+    lines += ["", "## Changes (merge time in the window)", ""]
+    rows = []
+    for scope, stages in [("overall", changes["overall"])] + [
+        (x["service"], x["stages"]) for x in changes["services"] if x["stages"]
+    ]:
+        for key, label in CHANGE_STAGES.items():
+            rows.append([scope, label, *fmt_stat(stages[key], thresholds)])
+    lines += _table(["Scope", "Stage", "n", "Median", "p90", *under], rows)
+    measured = [x["service"] for x in changes["services"] if not x["problem"]]
+    with_prod = changes["overall_prod_services"]
     if with_prod and len(with_prod) < len(measured):
         lines += [
             "",
-            f"Overall production stages cover {len(with_prod)} of {len(measured)} service(s):"
+            f"Overall merge -> prod covers {len(with_prod)} of {len(measured)} service(s):"
             f" {', '.join(with_prod)}.",
         ]
+    untagged = [f"{x['service']} {x['untagged']}" for x in changes["services"] if x["untagged"]]
+    if untagged:
+        lines += ["", f"Not in any annotated release tag yet: {', '.join(untagged)}."]
 
-    for s in data["services"]:
-        notes = []
-        if s["problem"]:
-            notes.append(f"**Not measured:** {s['problem']}")
-        else:
-            if s["untagged"]:
-                notes.append(f"{s['untagged']} change(s) not in any release tag yet")
-            if s["stages"]["tag_to_prod"]["status"] == NOT_MEASURED:
-                notes.append("no production deployment recorded: production stages NOT MEASURED")
-            if s["deployed_before_tagged"]:
-                notes.append(
-                    "deployment dated before its tag, ignored: "
-                    + ", ".join(s["deployed_before_tagged"])
-                )
-        if notes:
-            lines += ["", f"## {s['service']}", ""] + [f"- {n}" for n in notes]
+    releases = data["releases"]
+    chain = " -> ".join(data["chain"])
+    lines += ["", f"## Releases (production time in the window; chain {chain})", ""]
+    lines.append(
+        f"production = earliest of {', '.join(data['production_envs'])}; one row per"
+        " (service, tag); a stage counts only when both ends exist and are in order."
+    )
+    lines.append("")
+    rows = []
+    for group in releases["groups"]:
+        for stage, stat in group["stages"].items():
+            rows.append([group["scope"], group["kind"], stage, *fmt_stat(stat, thresholds)])
+    lines += _table(["Scope", "Kind", "Stage", "n", "Median", "p90", *under], rows)
+    if releases["lightweight_tags"]:
+        lines += [
+            "",
+            "Lightweight tags (no tag date; environment stages only): "
+            + ", ".join(releases["lightweight_tags"])
+            + ".",
+        ]
 
-    if data["slowest"]:
-        lines += ["", f"## Slowest {len(data['slowest'])} change(s)", ""]
-        lines += ["| Service | Change | Tag | Prod | Lead time |", "|---|---|---|---|---|"]
-        for row in data["slowest"]:
-            change = f"{row['subject']} ({row['sha'][:8]})"
-            prod = row["deployed_tag"] or "-"
-            took = f"{fmt_hours(row['hours'])} ({STAGE_LABELS[row['ranked_by']]})"
-            lines.append(
-                f"| {_md(row['service'])} | {_md(change)} | {row['tag'] or '-'} | {prod} | {took} |"
-            )
+    errors = data["data_errors"]
+    for service, tags in errors["deployed_before_tagged"].items():
+        lines += ["", f"- {service}: production before the tag date, ignored: {', '.join(tags)}"]
+    if errors["unreadable_deploy_revisions"]:
+        lines += [
+            "",
+            "- unreadable deploy revisions: " + ", ".join(errors["unreadable_deploy_revisions"]),
+        ]
+    for service, problem in data["services_not_measured"].items():
+        lines += ["", f"- **{service} not measured:** {problem}"]
+
+    slow = changes["slowest"]
+    if slow:
+        lines += ["", f"## Slowest {len(slow)} change(s)", ""]
+        rows = [
+            [
+                row["service"],
+                f"{row['subject']} ({row['sha'][:8]})",
+                row["tag"] or "-",
+                row["deployed_tag"] or "-",
+                f"{fmt_hours(row['hours'])} ({CHANGE_STAGES[row['ranked_by']]})",
+            ]
+            for row in slow
+        ]
+        lines += _table(["Service", "Change", "Tag", "Prod", "Lead time"], rows)
     return "\n".join(lines) + "\n"
 
 
 def parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     p = argparse.ArgumentParser(
-        prog="release_leadtime", description="Merge -> tag -> production lead time."
+        prog="release_leadtime", description="Merge -> tag -> environment lead time."
     )
     p.add_argument(
         "--service",
@@ -452,9 +657,25 @@ def parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         "--tags", action="append", default=[], help="release tag glob or name (default v*)"
     )
     p.add_argument("--deployments", help="deployment log: CSV or JSON (tag, environment, ...)")
-    p.add_argument("--production", default="production", help="environment name of production")
-    p.add_argument("--since", help="only changes merged at or after this ISO time")
-    p.add_argument("--until", help="only changes merged before this ISO time")
+    p.add_argument("--deploy-repo", help="git repository of deploy manifests, one per env")
+    p.add_argument(
+        "--deploy-file", default="{env}.yaml", help="manifest path in --deploy-repo per {env}"
+    )
+    p.add_argument("--deploy-ref", default="HEAD", help="history of --deploy-repo to read")
+    p.add_argument("--envs", default=PRODUCTION, help="ordered environments, comma-separated")
+    p.add_argument(
+        "--production", default=PRODUCTION, help="production environments, comma-separated"
+    )
+    p.add_argument("--hotfix-pattern", default=DEFAULT_HOTFIX_PATTERN, help="regex: hotfix tags")
+    p.add_argument(
+        "--threshold",
+        action="append",
+        type=float,
+        default=[],
+        help="hours; report how many units fall at or under it (default 6 and 24)",
+    )
+    p.add_argument("--since", help="window start, ISO time (inclusive)")
+    p.add_argument("--until", help="window end, ISO time (exclusive)")
     p.add_argument("--top", type=int, default=10, help="how many slowest changes to list")
     p.add_argument("--key-pattern", default=DEFAULT_KEY_PATTERN, help="regex for ticket keys")
     p.add_argument("--json", action="store_true", help="JSON instead of markdown")
@@ -466,6 +687,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     try:
         key_re = re.compile(args.key_pattern)
+        hotfix_re = re.compile(args.hotfix_pattern)
         services = [parse_service(v) for v in args.service]
         if args.manifest:
             services += [
@@ -473,25 +695,43 @@ def main(argv: Sequence[str] | None = None) -> int:
             ]
         if not services:
             raise InputError("name at least one --service or a --manifest")
-        deployments = load_deployments(args.deployments) if args.deployments else None
+        production_envs = split_list(args.production)
+        if not production_envs:
+            raise InputError("--production names no environment")
+        chain = [e for e in split_list(args.envs) if e not in production_envs] + [PRODUCTION]
+        deployments = None
+        unreadable: list[str] = []
+        if args.deployments:
+            deployments = load_deployments(args.deployments)
+        if args.deploy_repo:
+            history, unreadable = deploy_history(
+                args.deploy_repo, args.deploy_file, [*chain[:-1], *production_envs], args.deploy_ref
+            )
+            deployments = (deployments or []) + history
         window = (
             parse_time(args.since, "--since") if args.since else None,
             parse_time(args.until, "--until") if args.until else None,
         )
         if args.top < 0:
             raise InputError("--top must not be negative")
-    except (InputError, re.error, OSError) as exc:
+        thresholds = sorted(args.threshold) or list(DEFAULT_THRESHOLDS)
+    except (InputError, re.error, OSError, KeyError, IndexError) as exc:
         print(f"release_leadtime: {exc}", file=sys.stderr)
         return 1
-    workspace = Path(args.workspace)
-    globs = args.tags or ["v*"]
+    settings = Settings(
+        Path(args.workspace),
+        args.mainline,
+        args.tags or ["v*"],
+        chain,
+        production_envs,
+        hotfix_re,
+        window,
+    )
     results = [
-        analyse_service(
-            workspace, name, repo, args.mainline, globs, deployments, args.production, window
-        )
+        analyse_service(name, repo, deployments, settings)
         for name, repo in sorted(dict(services).items())
     ]
-    data = report_data(results, args.top, key_re, window, args.production)
+    data = report_data(results, settings, args.top, key_re, thresholds, unreadable)
     text = json.dumps(data, indent=2) + "\n" if args.json else render(data)
     if args.output:
         Path(args.output).write_text(text, encoding="utf-8")

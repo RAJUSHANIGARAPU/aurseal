@@ -63,7 +63,11 @@ def load_pins(path: str | Path) -> dict[str, Pin]:
     source = Path(path)
     if not source.is_file():
         raise InputError(f"manifest not found: {source}")
-    text = source.read_text(encoding="utf-8")
+    return parse_pins(source.read_text(encoding="utf-8"), source)
+
+
+def parse_pins(text: str, source: Path) -> dict[str, Pin]:
+    """A manifest's text; ``source`` gives the format (by suffix) and the error label."""
     if source.suffix in (".yml", ".yaml"):
         import yaml  # project dependency; only YAML manifests need it
 
