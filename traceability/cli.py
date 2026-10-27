@@ -321,6 +321,13 @@ def _gaps(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--baseline", help="ratchet against this accepted-gaps file")
     p.add_argument("--write-baseline", action="store_true", help="rewrite the baseline")
     p.add_argument("--report-only", action="store_true", help="never fail on new gaps")
+    p.add_argument(
+        "--allow-stale",
+        action="store_true",
+        help="a closed gap still in the baseline is a reminder, not a failure",
+    )
+    p.add_argument("--groups", help="report only: group name -> item prefixes or tag:<id>")
+    p.add_argument("--frozen-ref", help="report only: the same file sources at this git ref")
     p.add_argument("--rootdir", default=".")
     p.add_argument("--out", default="reports/traceability")
     p.add_argument("--db", help="also store the report (with --run-id / --branch)")
@@ -339,6 +346,9 @@ def _gaps_run(args: argparse.Namespace) -> int:
         RequirementSource,
         SpecSource,
         detect_gaps,
+        frozen_view,
+        group_gaps,
+        load_groups,
         location,
         ratchet,
         report_json,
@@ -373,7 +383,21 @@ def _gaps_run(args: argparse.Namespace) -> int:
         write_baseline(report, Path(args.baseline))
         print(f"baseline written: {len(report.gaps)} accepted gap(s)")
     elif args.baseline:
-        result = ratchet(report, Path(args.baseline))
+        result = ratchet(report, Path(args.baseline), strict=not args.allow_stale)
+    if args.groups:
+        report.groups = group_gaps(report, load_groups(Path(args.groups)))
+    if args.frozen_ref:
+        report.frozen = frozen_view(
+            report,
+            args.frozen_ref,
+            root=root,
+            openapi=args.openapi,
+            specs=args.specs,
+            postman=args.postman,
+            links=collection.items,
+        )
+        if not report.frozen.get("measured"):
+            print(f"frozen ref {args.frozen_ref}: not measured ({report.frozen.get('reason')})")
     doc = report_json(report)
     out = Path(args.out)
     write_json(out / "gaps.json", doc)
@@ -393,10 +417,8 @@ def _gaps_run(args: argparse.Namespace) -> int:
     counts = doc["counts"]
     print(" · ".join(f"{k} {v}" for k, v in counts.items()))
     if result is not None:
-        for gap in result.new_gaps:
-            print(f"NEW GAP: {gap}")
-        if result.closed_gaps:
-            print(f"{len(result.closed_gaps)} gap(s) closed: remove them from {args.baseline}")
+        for line in result.messages():
+            print(line)
         if not result.ok and not args.report_only:
             return 1
     return 0

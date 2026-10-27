@@ -56,7 +56,7 @@ def test_static_runtime_and_not_passing(openapi):
     assert doc["mode"] == "runtime" and doc["counts"]["gap"] == 0
 
 
-def test_ratchet_new_gap_fails_closed_gap_reminds(openapi, tmp_path):
+def test_ratchet_new_gap_fails_closed_gap_fails_until_deleted(openapi, tmp_path):
     baseline = tmp_path / "baseline.json"
     links = _items(("t::a", ["GET /api/orders/{id}"]))
     first = detect_gaps([OpenApiSource(openapi)], links)
@@ -69,11 +69,19 @@ def test_ratchet_new_gap_fails_closed_gap_reminds(openapi, tmp_path):
     result = ratchet(detect_gaps([OpenApiSource(openapi)], links), baseline)
     assert not result.ok and result.new_gaps == ["openapi:POST /api/refunds"]
 
-    # closing a baselined gap passes and asks for the baseline to shrink
+    # Strict (the default, changed on purpose): a closed gap still in the baseline fails
+    # until the entry is deleted, so the baseline can only shrink.
     openapi.write_text(json.dumps(OPENAPI))
     more = _items(("t::a", ["GET /api/orders/{id}"]), ("t::b", ["POST /api/orders"]))
-    result = ratchet(detect_gaps([OpenApiSource(openapi)], more), baseline)
-    assert result.ok and result.closed_gaps == ["openapi:POST /api/orders"]
+    report = detect_gaps([OpenApiSource(openapi)], more)
+    result = ratchet(report, baseline)
+    assert not result.ok and result.closed_gaps == ["openapi:POST /api/orders"]
+    assert "stale baseline entry, delete it: openapi:POST /api/orders" in result.messages()
+    assert report.ratchet == {"new": [], "closed": ["openapi:POST /api/orders"], "passed": False}
+
+    # --allow-stale: the old behaviour, a reminder only
+    relaxed = ratchet(detect_gaps([OpenApiSource(openapi)], more), baseline, strict=False)
+    assert relaxed.ok and "remove them from the baseline" in relaxed.messages()[0]
 
 
 def test_the_repository_baseline_is_readable():
@@ -163,3 +171,50 @@ def test_cli_end_to_end_with_covers_markers(pytester, subprocess_env, openapi, t
 
 def test_cli_needs_a_source(capsys):
     assert trace_main(["gaps"]) == 2
+
+
+def test_gaps_per_group_with_an_ungrouped_row(openapi):
+    from traceability.gaps import group_gaps
+
+    report = detect_gaps([OpenApiSource(openapi)], _items(("t::a", ["GET /api/orders/{id}"])))
+    rows = group_gaps(report, {"orders-read": ["openapi:GET "], "none": ["tag:REQ-1"]})
+    assert rows == [
+        {"group": "orders-read", "items": 2, "uncovered": 1},
+        {"group": "none", "items": 0, "uncovered": 0},
+        {"group": "(ungrouped)", "items": 1, "uncovered": 1},
+    ]
+    report.groups = rows
+    assert "| (ungrouped) | 1 | 1 |" in report.to_markdown()
+    assert report_json(report)["ratchet"] is None  # the views never feed the ratchet
+
+
+def _git(repo, *args):
+    import subprocess
+
+    subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True)
+
+
+def test_frozen_ref_lists_items_present_at_only_one_side(tmp_path):
+    from traceability.gaps import frozen_view
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-q")
+    spec = repo / "openapi.json"
+    spec.write_text(json.dumps(OPENAPI))
+    _git(repo, "add", ".")
+    _git(repo, "-c", "user.name=t", "-c", "user.email=t@example.test", "commit", "-qm", "a")
+    _git(repo, "tag", "v1")
+    grown = dict(OPENAPI["paths"], **{"/api/refunds": {"post": {}}})
+    spec.write_text(json.dumps({"paths": grown}))
+    head = detect_gaps([OpenApiSource(spec)], [])
+    view = frozen_view(head, "v1", root=repo, openapi=[str(spec)])
+    assert view == {
+        "ref": "v1",
+        "measured": True,
+        "gaps": 3,
+        "only_head": ["openapi:POST /api/refunds"],
+        "only_ref": [],
+    }
+    missing = frozen_view(head, "v1", root=repo, openapi=[str(repo / "absent.json")])
+    assert missing["measured"] is False and "not at v1" in missing["reason"]
