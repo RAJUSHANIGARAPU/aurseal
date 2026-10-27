@@ -6,7 +6,7 @@ default_priority: must          # a requirement without a priority is treated as
 requirements:
   must:
     block: [FAILING, KNOWN_DEFECT]
-    no_verdict: [UNCOVERED, NOT_RUN, UNVERIFIED, DRAFT_ONLY, PASSING]
+    no_verdict: [UNCOVERED, NOT_RUN, UNVERIFIED, DRAFT_ONLY, PASSING, FLAKY, FIX_OBSERVED]
   should:
     block: [FAILING]
     no_verdict: [UNCOVERED, NOT_RUN, UNVERIFIED, DRAFT_ONLY]

@@ -329,7 +329,10 @@ jobs:
 
       - name: Traceability matrix
         if: always()
-        run: python -m traceability matrix --reports reports/ --out reports/traceability/
+        run: |
+          python -m traceability matrix --reports reports/ --out reports/traceability/ || rc=$?
+          echo "matrix: $(cat reports/traceability/headline.txt 2>/dev/null || echo MISSING)" >> "$GITHUB_STEP_SUMMARY"
+          exit "${rc:-0}"
 
       - name: Build the test case catalogue
         if: always()
@@ -548,7 +551,10 @@ jobs:
 
       - name: Traceability matrix
         if: always()
-        run: python -m traceability matrix --reports reports/ --out reports/traceability/
+        run: |
+          python -m traceability matrix --reports reports/ --out reports/traceability/ || rc=$?
+          echo "matrix: $(cat reports/traceability/headline.txt 2>/dev/null || echo MISSING)" >> "$GITHUB_STEP_SUMMARY"
+          exit "${rc:-0}"
 
       - name: Export the results bundle
         if: always()

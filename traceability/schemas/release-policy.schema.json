@@ -39,7 +39,7 @@
     }
   },
   "$defs": {
-    "status": {"enum": ["UNCOVERED", "NOT_RUN", "UNVERIFIED", "FAILING", "KNOWN_DEFECT",
+    "status": {"enum": ["UNCOVERED", "NOT_RUN", "UNVERIFIED", "FAILING", "FIX_OBSERVED", "FLAKY", "KNOWN_DEFECT",
                         "DRAFT_ONLY", "PASSING", "PROVED"]},
     "red": {"enum": ["reproduces", "cleared", "held_empty", "signature_mismatch",
                      "closed_pass", "closed_regressed"]}

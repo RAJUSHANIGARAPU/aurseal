@@ -121,7 +121,11 @@ def source_from_args(args: argparse.Namespace, requirements: Sequence[str] = ())
 def _matrix(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser("matrix", help="requirements traceability matrix (report only)")
     add_source_args(p)
-    p.add_argument("--out", default="reports/traceability", help="writes matrix.json + .md")
+    p.add_argument(
+        "--out",
+        default="reports/traceability",
+        help="writes matrix.json, .md, .csv and headline.txt",
+    )
     p.add_argument("--requirements", nargs="+", default=[], help="only these requirement ids")
     p.add_argument("--save", action="store_true", help="with --db: store a snapshot")
     p.set_defaults(func=_matrix_run)
@@ -129,7 +133,7 @@ def _matrix(sub: argparse._SubParsersAction) -> None:
 
 def _matrix_run(args: argparse.Namespace) -> int:
     from traceability._util import write_json, write_text
-    from traceability.matrix import build_matrix, matrix_json, render_markdown
+    from traceability.matrix import build_matrix, matrix_json, render_csv, render_markdown
     from traceability.requirements import Registry
 
     registry = Registry.load(args.registry)
@@ -147,7 +151,10 @@ def _matrix_run(args: argparse.Namespace) -> int:
     out = Path(args.out)
     write_json(out / "matrix.json", doc)
     write_text(out / "matrix.md", render_markdown(matrix))
+    write_text(out / "matrix.csv", render_csv(matrix))
+    write_text(out / "headline.txt", matrix.headline_line + "\n")
     print(matrix.headline)
+    print(matrix.headline_line)
     return 0
 
 

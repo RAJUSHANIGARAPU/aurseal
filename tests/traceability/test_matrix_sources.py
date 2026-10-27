@@ -109,3 +109,19 @@ def test_rest_matrix_needs_a_scope(store):
     assert row["status"] == "FAILING" and row["requirement"]["title"] == "title REQ-2"
     with pytest.raises(ApiError):
         dispatch(store, "GET", "/traceability/requirements/REQ-404", params={"runs": "r1"})
+
+
+def test_both_sources_see_a_flaky_pass(tmp_path):
+    runs = [RunSpec("r1", [T(M + "a", reqs=("REQ-1",), failed_first="Timeout 5000ms exceeded")])]
+    write_artifacts(tmp_path / "reports", runs)
+    s = open_store(str(tmp_path / "f.db"))
+    try:
+        load_store(s, runs)
+        from_db = build_matrix(registry("REQ-1"), None, StoreResultSource(s, Scope(("r1",))))
+    finally:
+        s.close()
+    from_files = build_matrix(registry("REQ-1"), None, ArtifactResultSource(tmp_path / "reports"))
+    for m in (from_files, from_db):
+        cell = m.row("REQ-1").cells[0]
+        assert (m.row("REQ-1").status.value, cell.state) == ("FLAKY", "flaky")
+        assert cell.first_failure == "Timeout 5000ms exceeded"

@@ -56,6 +56,10 @@ class ObservedResult:
     revision_id: str | None = None
     current_revision_id: str | None = None
     review_state: str = "approved"  # draft | approved
+    # An earlier attempt of this test in the same run failed (pytest-rerunfailures "rerun"),
+    # and that attempt's message. A final pass after it is FLAKY, not PASSING.
+    failed_attempt: bool = False
+    first_failure: str | None = None
 
     @property
     def stale(self) -> bool | None:
@@ -171,6 +175,8 @@ class ArtifactResultSource:
                         defect=data.get("defect"),
                         markers=markers,
                         review_state=_review_state(tests_meta, nodeid, markers),
+                        failed_attempt=int(data.get("failed_attempts") or 0) > 0,
+                        first_failure=data.get("first_failure") or None,
                     )
                 )
         return out
@@ -254,6 +260,7 @@ class StoreResultSource:
             ids,
         ).fetchall()
         reviews = self._draft_cases()
+        earlier = self._failed_attempts(ids)
         out = []
         for row in rows:
             markers = tuple(json.loads(row["markers_json"] or "[]"))
@@ -270,8 +277,26 @@ class StoreResultSource:
                     revision_id=row["revision_id"],
                     current_revision_id=row["current_revision_id"],
                     review_state="draft" if draft else "approved",
+                    failed_attempt=(row["run_id"], row["nodeid"]) in earlier,
+                    first_failure=earlier.get((row["run_id"], row["nodeid"])),
                 )
             )
+        return out
+
+    def _failed_attempts(self, ids: Sequence[str]) -> dict[tuple[str, str], str | None]:
+        """Per (run, nodeid): the first failed attempt's message, when a later attempt exists."""
+        rows = self.store.conn.execute(
+            "SELECT t.run_id, t.nodeid, t.attempt, t.message FROM test_results t"
+            f" WHERE t.run_id IN ({','.join('?' * len(ids))})"
+            " AND t.outcome IN ('failed', 'error') AND t.attempt < ("
+            "SELECT MAX(t2.attempt) FROM test_results t2"
+            " WHERE t2.run_id = t.run_id AND t2.nodeid = t.nodeid)"
+            " ORDER BY t.attempt",
+            list(ids),
+        ).fetchall()
+        out: dict[tuple[str, str], str | None] = {}
+        for row in rows:
+            out.setdefault((row["run_id"], row["nodeid"]), row["message"] or None)
         return out
 
     def _draft_cases(self) -> set[str]:

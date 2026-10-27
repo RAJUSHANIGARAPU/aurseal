@@ -26,7 +26,8 @@
         "parent_id": {"type": ["string", "null"]},
         "source": {"type": "string"},
         "source_ref": {"type": ["string", "null"]},
-        "url": {"type": ["string", "null"]}
+        "url": {"type": ["string", "null"]},
+        "kind": {"enum": ["requirement", "epic", "container"]}
       }
     }
   }

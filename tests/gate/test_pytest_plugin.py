@@ -265,7 +265,11 @@ def test_rerunfailures_attempts_are_discarded(pytester, monkeypatch):
     assert result.parseoutcomes() == {"passed": 1, "rerun": 1}
     marker = _marker(pytester)
     assert (marker["selected"], marker["executed"]) == (1, 1)
-    assert list(marker["tests"].values())[0]["outcome"] == "passed"
+    entry = list(marker["tests"].values())[0]
+    assert entry["outcome"] == "passed"
+    # The retried attempt is kept as a fact about the test: it passed only on a rerun.
+    assert entry["failed_attempts"] == 1
+    assert "assert 0 >= 1" in entry["first_failure"]
 
 
 def test_xdist_workers_are_tallied_on_the_controller(pytester, monkeypatch, subprocess_env):

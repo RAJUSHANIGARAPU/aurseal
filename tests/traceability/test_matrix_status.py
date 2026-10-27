@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from tests.traceability._runs import RunSpec, T, coverage, red, registry, write_artifacts
 from traceability.evidence import ArtifactResultSource
-from traceability.matrix import Status, build_matrix
+from traceability.matrix import Status, build_matrix, render_markdown
 
 M = "tests/test_m.py::"
 
@@ -82,8 +82,8 @@ def test_one_failing_case_outweighs_passing_ones(tmp_path):
     assert _matrix(tmp_path, [run], "REQ-1").row("REQ-1").status is Status.FAILING
 
 
-def test_a_cleared_or_mismatched_detector_is_failing_not_known(tmp_path):
-    for verdict in ("cleared", "signature_mismatch", "closed_regressed"):
+def test_a_mismatched_or_regressed_detector_is_failing_not_known(tmp_path):
+    for verdict in ("signature_mismatch", "closed_regressed"):
         root = tmp_path / verdict
         run = RunSpec(
             "r1",
@@ -91,6 +91,52 @@ def test_a_cleared_or_mismatched_detector_is_failing_not_known(tmp_path):
             verdicts=[red("r1", M + "a", "BUG-1", verdict)],
         )
         assert _matrix(root, [run], "REQ-1").row("REQ-1").status is Status.FAILING
+
+
+def test_a_cleared_detector_is_fix_observed_not_failing(tmp_path):
+    # Was FAILING before: a detector that stops reproducing is a fix to verify, not a failure.
+    run = RunSpec(
+        "r1",
+        [T(M + "a", "failed", reqs=("REQ-1",))],
+        verdicts=[red("r1", M + "a", "BUG-1", "cleared")],
+    )
+    m = _matrix(tmp_path, [run], "REQ-1")
+    assert m.row("REQ-1").status is Status.FIX_OBSERVED
+    assert m.row("REQ-1").cells[0].state == "fix_observed"
+    assert "detector cleared: verify, then remove the wrapper" in render_markdown(m)
+
+
+def test_a_real_failure_outranks_a_cleared_detector(tmp_path):
+    run = RunSpec(
+        "r1",
+        [T(M + "a", "failed", reqs=("REQ-1",)), T(M + "b", "failed", reqs=("REQ-1",))],
+        verdicts=[red("r1", M + "a", "BUG-1", "cleared")],
+    )
+    assert _matrix(tmp_path, [run], "REQ-1").row("REQ-1").status is Status.FAILING
+
+
+def test_a_pass_after_a_failed_attempt_is_flaky_and_keeps_the_first_message(tmp_path):
+    run = RunSpec(
+        "r1",
+        [T(M + "a", reqs=("REQ-1",), failed_first="AssertionError: total was 9.99")],
+        verdicts=[coverage("r1", M + "a", "REQ-1 x")],
+    )
+    m = _matrix(tmp_path, [run], "REQ-1")
+    assert m.row("REQ-1").status is Status.FLAKY
+    assert "AssertionError: total was 9.99" in render_markdown(m)
+
+
+def test_flaky_ranks_below_failing_and_above_known_defect(tmp_path):
+    flaky = T(M + "a", reqs=("REQ-1",), failed_first="boom")
+    known = T(M + "b", "xfailed", reqs=("REQ-1",), defect="BUG-2")
+    run = RunSpec("r1", [flaky, known])
+    assert _matrix(tmp_path / "1", [run], "REQ-1").row("REQ-1").status is Status.FLAKY
+    run = RunSpec("r1", [flaky, T(M + "c", "failed", reqs=("REQ-1",))])
+    assert _matrix(tmp_path / "2", [run], "REQ-1").row("REQ-1").status is Status.FAILING
+    order = list(Status)
+    assert order.index(Status.FAILING) < order.index(Status.FIX_OBSERVED)
+    assert order.index(Status.FIX_OBSERVED) < order.index(Status.KNOWN_DEFECT)
+    assert order.index(Status.FLAKY) < order.index(Status.KNOWN_DEFECT)
 
 
 def test_a_recorded_coverage_verdict_is_not_proof(tmp_path):

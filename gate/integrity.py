@@ -165,6 +165,8 @@ class TestResult:
     reason: str = ""
     defect: str | None = None  # expected-red defect id, when the test carries one
     cleared: bool = False  # an expected-red test that unexpectedly passed
+    failed_attempts: int = 0  # earlier attempts in this run that failed and were retried
+    first_failure: str = ""  # the first failed attempt's message (a flaky pass keeps it)
 
     def to_json(self) -> dict:
         data = asdict(self)
@@ -182,6 +184,8 @@ class TestResult:
                 reason=str(data.get("reason") or ""),
                 defect=data.get("defect"),
                 cleared=bool(data.get("cleared", False)),
+                failed_attempts=int(data.get("failed_attempts") or 0),
+                first_failure=str(data.get("first_failure") or ""),
             )
         except (KeyError, ValueError, TypeError):
             return None
