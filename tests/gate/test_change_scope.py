@@ -161,9 +161,12 @@ def test_browser_jobs_skip_on_docs_only_with_a_job_if(name):
 
 
 def test_the_offline_suite_never_reads_the_classifier():
+    """The offline suite runs on every change, docs-only included: it may wait for other
+    jobs (the coalescing window), never for the docs classifier."""
     jobs = _jobs()
     assert "docs_only" not in yaml.safe_dump(jobs["offline"])
-    assert "needs" not in jobs["offline"]
+    needs = jobs["offline"].get("needs", [])
+    assert "changes" not in ([needs] if isinstance(needs, str) else needs)
 
 
 def test_no_trigger_uses_paths_ignore():
