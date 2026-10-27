@@ -467,11 +467,21 @@ logged and listed in `CleanupReport.refused`; the item stays.
 ```python
 from test_data.ownership import refusal
 
+
 def guard():
     rows = api.get("messages", params={"subscription": number}).json()
-    return refusal(msg_id, number, rows, run_started=started, skew=timedelta(minutes=2),
-                   key_of=lambda r: r["subscription_number"], created_of=lambda r: r["created_at"],
-                   state_of=lambda r: r["status"], initial_states={"NEW"})
+    return refusal(
+        msg_id,
+        number,
+        rows,
+        run_started=started,
+        skew=timedelta(minutes=2),
+        key_of=lambda r: r["subscription_number"],
+        created_of=lambda r: r["created_at"],
+        state_of=lambda r: r["status"],
+        initial_states={"NEW"},
+    )
+
 
 cleanup_ledger.record_owned("message", msg_id, lambda: api.delete(f"messages/{msg_id}"), guard)
 ```

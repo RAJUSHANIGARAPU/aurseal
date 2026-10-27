@@ -231,8 +231,12 @@ reading the profile's `read_only`); pass `read_only=False` to state it.
 from api.clients.route_probe import probe_write, service_refusal
 
 probe_write(
-    engine, "POST", "gw/tasks", {},
-    control=("POST", "gw/tasksx"), positive="gw/tasks",
+    engine,
+    "POST",
+    "gw/tasks",
+    {},
+    control=("POST", "gw/tasksx"),
+    positive="gw/tasks",
     accept=service_refusal({422}, keys=("fields",), body_contains=("title",)),
 ).require()
 ```
