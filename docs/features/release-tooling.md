@@ -26,15 +26,35 @@ know what the promotion ships and what it takes away. Given two version manifest
 local clones of the services, `promotion_diff.py` reports, per service:
 
 - **What ships.** The commits FROM has and TO lacks (merges excluded). Ticket keys come
-  out of the subjects through a configurable regex. A commit without a key is either
-  **noise**, when its subject matches a pattern in the noise file (dependency bumps,
-  release bookkeeping, formatting), or an **unkeyed change**, listed in full. A key wins
-  over a noise pattern.
+  out of the subject through a configurable regex, or out of the body when the subject
+  has none; placeholder keys named with `--ignore-key` are skipped, and keys are listed
+  in order of first appearance. A commit without a key is either **noise**, when its
+  subject matches a pattern in the noise file (dependency bumps, release bookkeeping,
+  formatting), or an **unkeyed change**, listed in full. A key wins over a noise pattern.
+  When that range holds only merge commits (`log --no-merges` is empty but
+  `rev-list --count` is not), the merges along the first parent are listed and the
+  service is marked **merge commits used**.
+- **Already in target.** A FROM-only commit whose patch-id also appears in `base..TO`
+  (base = the merge base) is left out of the shipped list and shown as a count:
+  "N already in target under another SHA".
 - **What it would regress.** Commits only TO has, typically hotfixes made directly on the
   target. A TO-only commit is cleared when FROM already carries it, in order of
-  strength: the same patch (`git cherry`, by patch-id), the same subject, or identical
-  content in every file it touched. Anything left is listed under **Would regress**, with
-  the tags that contain it.
+  strength: the same patch (`git cherry`, by patch-id), the same subject (compared
+  lowercased, whitespace collapsed, a trailing pull-request reference such as `(#12)`
+  stripped; `--pr-suffix-pattern`), or identical content in every file it touched.
+  Anything left is listed under **Would regress**, with the tags that contain it. When
+  `git diff base TO` is empty (TO's divergence nets to nothing, e.g. a change and its
+  revert), the TO-only commits are still listed but count as zero regressions
+  (**net zero**).
+- **Fixed in.** For each regressing commit the tool looks for its equivalent on the
+  default branch (`origin/HEAD`, else main/master, or `--default-branch`): the same
+  patch-id in `base..default`, else the oldest commit there with the same normalised
+  subject. It reports the lowest version tag that contains an equivalent of every
+  regressing commit ("Fixed in v1.2.0-hotfix-1"), or "No released tag carries all of
+  them". Tags sort by semver, a suffixed tag (`v1.2.0-hotfix-1`) after its base.
+- **Downgrade.** When FROM is an ancestor of TO the target is ahead: the row is noted
+  **downgrade** and `--strict` exits 2.
+- **Settings drift.** Optional, see below.
 - **Where the tests are.** With `--test-root`, each key lists the test files that
   mention it. A mention is not an assertion, and the column claims no more than that.
 
@@ -45,13 +65,28 @@ compared** with the reason, never as unchanged.
 
 JSON or YAML. Either a flat `{service: ref}` mapping or a `services:` block. A ref is
 anything `git rev-parse` resolves: a tag, a branch, a sha. `repo` overrides the clone
-directory, relative to the workspace.
+directory, relative to the workspace. A ref that does not resolve but ends in
+`-<7 to 40 hex>` (a build number plus a sha, `512-3f2c1e0`) resolves to that commit.
 
 ```yaml
+settings: settings/{env}/{service}.env   # optional; {env} = manifest file stem
 services:
   orders: v1.4.2
-  billing: {ref: 3f2c1e0, repo: billing-service}
+  billing: {ref: 3f2c1e0, repo: billing-service, settings: billing.env}
 ```
+
+### Settings drift
+
+When a manifest names a settings file per service (the `settings` template, or a
+per-service `settings`; paths are relative to the manifest), the two sides are compared
+as a multiset of normalised lines: comments (`#`, `//`, `;`) and blank lines dropped,
+whitespace collapsed, version pins masked (`--settings-mask REGEX`, repeatable; default
+a semver pattern). The report lists target-only and source-only lines. A hazard list
+(`--settings-hazards FILE`, default `tools/promotion_diff/settings_hazards.json`; entries
+`{pattern, side: to|either, message}`) turns matching lines into warnings: `to` matches
+only lines the target has and the promotion would drop, `either` matches both sides.
+Warnings never change the exit status. A side without a file is reported as not
+compared.
 
 ### Configuration
 
@@ -62,10 +97,15 @@ services:
 | `--workspace` / `PROMOTION_DIFF_WORKSPACE` | `.` | directory holding one clone per service |
 | `--noise-file` | `tools/promotion_diff/noise_patterns.txt` | one case-insensitive regex per line, `#` comments |
 | `--key-pattern` | `\b[A-Z][A-Z0-9]{1,9}-\d+\b` | regex for ticket keys |
+| `--ignore-key KEY` | none | placeholder key to skip (repeatable, or comma-separated) |
+| `--pr-suffix-pattern` | `\s*\((?:pull request \|pr )?#\d+\)\s*$` | trailing pull-request reference stripped before comparing subjects |
+| `--default-branch` | `origin/HEAD`, main, master | where fixed-in equivalents are searched |
+| `--settings-mask`, `--settings-hazards` | see above | settings drift normalisation and warnings |
+| `--json --candidate-id ID` | off | write the JSON form instead of markdown |
 | `--test-root DIR` | none | where to look for tests mentioning a key (repeatable) |
 | `--no-fetch` | fetch | use local refs only; otherwise `git fetch --tags` per clone that has a remote, warning on failure |
 | `--keys` | off | print only the shipped keys, one per line |
-| `--strict` | off | exit 2 when a commit would regress, or a service pinned in both manifests could not be compared |
+| `--strict` | off | exit 2 when a commit would regress, a service would be downgraded, or a service pinned in both manifests could not be compared |
 | `-o FILE` | stdout | write the report to a file |
 
 Exit status: 0 report written, 1 bad input (missing manifest, bad regex, unknown test
@@ -80,17 +120,19 @@ python tools/promotion_diff/promotion_diff.py \
 ```
 
 ```markdown
-| Service | staging | production | Commits | Keys | Regress |
-|---|---|---|---|---|---|
-| orders | v1.1 | v1.0.1 | 5 | 3 | 1 |
+| Service | staging | production | Commits | Keys | Regress | Notes |
+|---|---|---|---|---|---|---|
+| orders | v1.1 | v1.0.1 | 4 | 2 | 1 | 1 already in target |
 
 ## orders
 
-Ships 3 key(s):
-- BUG-142: BUG-142 fix rounding (11e50c4a) (tests mentioning it: tests/test_rounding.py)
+Ships 2 key(s):
+- ORD-42: ORD-42 ORD-43 new totals (11e50c4a) (tests mentioning it: tests/test_totals.py)
 ...
+1 already in target under another SHA.
 **Would regress 1 commit(s) only production has:**
 - BUG-150 hotfix null check (227db636) (in tags: v1.0.1)
+No released tag carries all of them.
 ```
 
 
@@ -193,3 +235,26 @@ Records: 412 read, 409 valid under the new config, 1 rejected, 1 orphaned, 0 stu
 |---|---|---|---|---|---|---|
 | S-4 | subscription | active | pause | action is not offered in state active | events | finding |
 ```
+
+### JSON for the release verdict
+
+`--json --candidate-id ID` writes one document per run, validated in the tests against
+`traceability/schemas/promotion-diff.schema.json` (the schema is the contract; this is
+the summary):
+
+```text
+{schemaVersion: 1, candidateId, from, to, generated, pins: {from: {svc: ref}, to: {...}},
+ services: [{service, fromRef, toRef, notCompared,
+             functional: [{key, commits: [{sha, subject}], tests}],
+             unkeyed, noise, regressing: [{sha, subject, tags, equivalent, fixedTags}],
+             fixedIn, fixedInChecked, targetOnly, alreadyInTarget,
+             mergeCommitsUsed, netZero, downgrade}],
+ settingsDrift: [{service, fromFile, toFile, toOnly, fromOnly, warnings, notCompared}]}
+```
+
+A `null` means not measured, never none: `tests` is null without `--test-root`;
+`notCompared` carries the reason a service was skipped (its lists are then empty and
+mean nothing); `fixedIn` is null either because nothing regresses or, with `regressing`
+non-empty and `fixedInChecked` true, because no released tag carries all of them.
+The release verdict is meant to read this file as an optional input; that consumer is
+not part of this tool.

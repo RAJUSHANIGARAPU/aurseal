@@ -1,0 +1,20 @@
+{
+  "description": "Settings lines worth a warning when they differ between the environments. side 'to': only a line the target has and the promotion would drop; side 'either': a line only one side has. pattern is a Python regex searched in the normalised line.",
+  "hazards": [
+    {
+      "pattern": "(?i)(enabled|enable|active)\\s*[:=]\\s*false",
+      "side": "to",
+      "message": "the target switches something off that the promotion would switch back on"
+    },
+    {
+      "pattern": "(?i)(kill[_-]?switch|maintenance[_-]?mode)",
+      "side": "either",
+      "message": "a kill switch or maintenance flag differs"
+    },
+    {
+      "pattern": "(?i)(timeout|retries|max[_-]?attempts)\\s*[:=]",
+      "side": "either",
+      "message": "a timeout or retry budget differs"
+    }
+  ]
+}
