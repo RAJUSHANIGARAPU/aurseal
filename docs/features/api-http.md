@@ -207,3 +207,33 @@ shapes = NotFoundShapes(
 )
 classify_not_found(r, shapes)
 ```
+
+## Write-route probe without side effects
+
+**What it does.** `probe_write(engine, method, path, body, *, control,
+positive, accept)` proves a new write route reaches its service with a
+request the service must refuse before changing anything (a random id, an
+invalid body). `accept` is a predicate on the service's own refusal; build it
+with `service_refusal(statuses, keys=..., body_contains=...)`. The
+`control` (`(method, path)` outside the route predicate) must be answered by
+the gateway's own no-route body, and `positive` (a GET on a known routed path)
+must answer 2xx. The result is a `WriteProbe` with one `WriteVerdict`:
+`REACHES_SERVICE` is the only pass; an accepted probe is `SIDE_EFFECT`.
+
+`probe_head(engine, path_for, create, discard)` proves a body-less method on
+a resource the test created: HEAD answers 200, the resource is discarded
+(even when the first HEAD raises), HEAD answers 404.
+
+Both skip on a read-only environment (`gate.read_only.require_writable`,
+reading the profile's `read_only`); pass `read_only=False` to state it.
+
+```python
+from api.clients.route_probe import probe_write, service_refusal
+
+probe_write(
+    engine, "POST", "gw/tasks", {},
+    control=("POST", "gw/tasksx"), positive="gw/tasks",
+    accept=service_refusal({422}, keys=("fields",), body_contains=("title",)),
+).require()
+```
+
