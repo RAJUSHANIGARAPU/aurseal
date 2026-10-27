@@ -105,6 +105,16 @@ python -m gate.merge --manifests reports/shards --shards 3 \
 python -m gate.integrity --lane browser
 ```
 
+### In CI (pilot)
+
+Dispatch `tests.yml` with `shards` 2-4 (and optionally `shard_users`, one login per
+shard). The `shard-plan` job validates the inputs and writes the plan to the step summary,
+`browser-shard` runs one leg per shard through `python -m gate.run_inputs run --shard k/N`,
+and `browser-shard-merge` merges the manifests and JUnit files, then runs
+`python -m gate.integrity --lane browser --merge shards-in/shard-*`: the shard markers of the
+shared `TEST_RUN_ID` judged once, at the full executed floor (each shard alone answers to
+`ceil(min/N)`). See `docs/ci-decisions.md#sharding-pilot` for what a sharded run refuses.
+
 ## Configuration
 
 | Option / variable | Default | Meaning |

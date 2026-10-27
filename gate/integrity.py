@@ -651,6 +651,66 @@ def check_marker(
     return 0
 
 
+SHARD_VERDICTS = Path("verdicts") / "verdicts.jsonl"
+SHARD_PROVENANCE = Path("data-origin.jsonl")
+
+
+def merge_shard_markers(
+    directories: Sequence[str | Path],
+    *,
+    run_id: str,
+    lane: str,
+    out_dir: str | Path,
+    thresholds: Thresholds | None = None,
+) -> tuple[Result | None, list[str]]:
+    """Judge a sharded run once: the union of every shard's tests, at the full thresholds.
+
+    Each shard is held to ``ceil(min / N)`` on its own; the merged run answers to the
+    real floor. Every directory must hold a marker of the same run and lane (a shard
+    without one never judged itself, which must not shrink the run quietly). A shard's
+    ``verdicts/verdicts.jsonl`` and ``data-origin.jsonl``, when present, feed the detector
+    and provenance rules. Returns the result (None when a marker is missing) and problems.
+    """
+    from gate.provenance import read_rows
+    from gate.verdicts import read_verdict_rows
+
+    problems: list[str] = []
+    tests: dict[str, TestResult] = {}
+    rows: list[VerdictRow] = []
+    fixtures: list[FixtureRow] = []
+    for directory in directories:
+        marker = read_marker(directory, lane)
+        if marker is None:
+            problems.append(f"{directory}: no run-trust marker for lane {lane!r}")
+            continue
+        if marker.get("run_id") != run_id:
+            problems.append(f"{directory}: marker is from run {marker.get('run_id')!r}")
+            continue
+        for nodeid, data in (marker.get("tests") or {}).items():
+            parsed = TestResult.from_json(nodeid, data) if isinstance(data, Mapping) else None
+            if parsed is not None:
+                tests[nodeid] = parsed
+        rows += read_verdict_rows(Path(directory) / SHARD_VERDICTS, run_id=run_id)
+        fixtures += read_rows(Path(directory) / SHARD_PROVENANCE, run_id=run_id)
+    if not directories:
+        problems.append("no shard directory was given")
+    if problems:
+        return None, problems
+    gate = RunTrustGate(thresholds or Thresholds.from_env())
+    tally = build_tally(tests.values(), rows, fixtures)
+    result = gate.evaluate(tally)
+    write_markers(
+        out_dir,
+        run_id=run_id,
+        lane=lane,
+        tests=tests.values(),
+        tally=tally,
+        result=result,
+        gate=gate,
+    )
+    return result, []
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m gate.integrity")
     parser.add_argument("--dir", default=os.environ.get(DIR_ENV) or str(DEFAULT_DIR))
@@ -658,7 +718,22 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--allow-missing", action="store_true", help="exit 0 when no marker was written"
     )
+    parser.add_argument(
+        "--merge",
+        nargs="+",
+        metavar="DIR",
+        help="judge a sharded run once: merge these shards' markers into --dir first",
+    )
+    parser.add_argument("--run-id", default=os.environ.get("TEST_RUN_ID", ""))
     args = parser.parse_args(argv)
+    if args.merge is not None:
+        _, problems = merge_shard_markers(
+            args.merge, run_id=args.run_id, lane=args.lane, out_dir=args.dir
+        )
+        if problems:
+            for problem in problems:
+                print(f"run trust merge: {problem}")
+            return 2
     return check_marker(args.dir, args.lane, require=not args.allow_missing)
 
 

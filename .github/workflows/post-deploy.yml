@@ -1,0 +1,142 @@
+name: Post-deploy
+
+# A run after a deployment, started by the deploying system (repository_dispatch, type
+# "deployed", client_payload {env, preset, source, ref}) or by hand. It has its own queue
+# per environment, so it never waits behind the merge gate in tests.yml. On an environment
+# the merge gate also uses, only the read-only smoke preset may run. A refused trigger is a
+# red run and an alert, never a silent green.
+# Why: docs/ci-decisions.md#post-deploy-runs
+on:
+  repository_dispatch:
+    types: [deployed]
+  workflow_dispatch:
+    inputs:
+      env:
+        description: "Environment that was deployed (config/environments.json)"
+        type: choice
+        options: [qa, staging]
+        default: staging
+      preset:
+        description: "Test preset (an environment shared with the merge gate allows smoke only)"
+        type: choice
+        options: [smoke, regression, all]
+        default: smoke
+      source:
+        description: "What deployed (blank = manual)"
+        type: string
+        default: ""
+      ref:
+        description: "Version or ref that was deployed"
+        type: string
+        default: ""
+
+# One queue per environment; a deploy run is never cancelled (a cancelled run leaves no
+# verdict). Distinct from tests.yml's group by construction (gate.workflow_lint checks it).
+concurrency:
+  group: post-deploy-${{ inputs.env || github.event.client_payload.env || 'unknown' }}
+  cancel-in-progress: false
+
+env:
+  TEST_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+
+permissions:
+  contents: read
+
+jobs:
+  # No environment here: an unknown env from a payload is refused before any GitHub
+  # Environment (and its secrets) is touched.
+  validate:
+    name: Validate the trigger
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      description: ${{ steps.check.outputs.description }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - run: pip install -r requirements.txt
+      - name: Validate env, preset, source and ref
+        id: check
+        run: python -m gate.run_inputs post-deploy
+        env:
+          INPUT_ENV: ${{ inputs.env || github.event.client_payload.env }}
+          INPUT_PRESET: ${{ inputs.preset || github.event.client_payload.preset }}
+          INPUT_SOURCE: ${{ inputs.source || github.event.client_payload.source }}
+          INPUT_REF: ${{ inputs.ref || github.event.client_payload.ref }}
+
+  run:
+    name: Post-deploy run
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: ${{ inputs.env || github.event.client_payload.env }}
+    env:
+      RUN_TRUST: fail
+      RUN_TRUST_LANE: post-deploy
+      INPUT_ENV: ${{ inputs.env || github.event.client_payload.env }}
+      INPUT_PRESET: ${{ inputs.preset || github.event.client_payload.preset }}
+      INPUT_SOURCE: ${{ inputs.source || github.event.client_payload.source }}
+      INPUT_REF: ${{ inputs.ref || github.event.client_payload.ref }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - run: pip install -r requirements.txt
+      - name: Login credentials for the target environment
+        run: python -m gate.credentials preflight --env "$INPUT_ENV"
+        env:
+          LOGIN_USERNAME: ${{ vars.LOGIN_USERNAME }}
+          LOGIN_PASSWORD: ${{ secrets.LOGIN_PASSWORD }}
+          SHARED_LOGIN_USERNAME: ${{ vars.SHARED_LOGIN_USERNAME }}
+          SHARED_LOGIN_PASSWORD: ${{ secrets.SHARED_LOGIN_PASSWORD }}
+      - name: Install Chrome + system deps
+        run: playwright install chrome --with-deps
+      # The validated preset with --reruns 0: a deploy check reports its first answer.
+      - name: Run the preset
+        run: python -m gate.run_inputs post-deploy --execute
+      - name: Run trust
+        if: always()
+        run: python -m gate.integrity --lane post-deploy
+      - name: Stage evidence
+        if: always()
+        run: python -m gate.evidence stage --job post-deploy
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: evidence-post-deploy
+          path: evidence/
+          if-no-files-found: warn
+          retention-days: 7
+
+  # Alerts on failed (a refused trigger included) or not evidence, on any branch; the
+  # message names the triggering source and ref.
+  notify:
+    name: Notify
+    needs: [validate, run]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - run: pip install -r requirements.txt
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          pattern: evidence-*
+          path: evidence-in/
+      - name: Notify when the run failed or is not evidence
+        run: python -m gate.notify send --reports evidence-in --needs-json "$NEEDS_JSON" --description "$DESCRIPTION"
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+          DESCRIPTION: ${{ needs.validate.outputs.description || 'post-deploy trigger refused (see the Validate the trigger job)' }}
+          NOTIFY_WEBHOOK_URL: ${{ secrets.NOTIFY_WEBHOOK_URL }}
+          NOTIFY_ALL_BRANCHES: "true"
