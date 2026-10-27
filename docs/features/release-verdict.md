@@ -101,6 +101,14 @@ Waivers are file-only until the platform has writer roles; there is no waiver en
 | `--policy` | `release-policy.yaml` | policy file |
 | `--waivers` | `release-waivers.yaml` | waivers file (absent = none) |
 | `--plan` | — | fold a plan's exit criteria in and scope requirements to it |
+| `--release-line` | — | the release line this candidate belongs to |
+| `--known-defects` | — | known-defects manifest (file or directory) whose `fix_line` per defect scopes detectors |
+
+A detector whose defect has a `fix_line` other than `--release-line` is listed under
+**Out of scope**: it neither blocks nor counts as no verdict, because this release does
+not contain that fix. On the test side, `@pytest.mark.known_defect(..., fix_line="2.4")`
+with `pytest --release-line 2.3` (or `RELEASE_LINE=2.3`) deselects it from that gate; it
+still runs on demand without the option.
 
 ## Honest limits
 

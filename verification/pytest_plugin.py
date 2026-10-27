@@ -23,6 +23,10 @@ apply unchanged. What the marker adds over a bare strict xfail:
   plain failure, so an unrelated break cannot hide behind the marker. The
   pattern must say more than the defect id (see
   ``verification.defect_detector.require_usable_signature``);
+* ``fix_line="2.4"``: the release line the fix ships in. With ``--release-line`` (or
+  ``$RELEASE_LINE``) set to another line, the test is deselected from that run, so a fix
+  the release does not contain cannot hold its gate; without it the test runs as usual,
+  so it stays runnable on demand;
 * one verdict per marked test in the run's verdict file
   (``verification.verdicts``): ``reproduces``, ``cleared``,
   ``signature_mismatch``, ``held_empty``, ``closed_pass`` or
@@ -41,6 +45,7 @@ Registered from the root ``conftest.py``; elsewhere use ``-p verification.pytest
 
 from __future__ import annotations
 
+import os
 import re
 from collections.abc import Callable, Iterable
 
@@ -58,6 +63,8 @@ from verification.status_report import VerdictStatusPlugin
 from verification.verdicts import Kind, RedVerdict, record_verdict
 
 MARKER = "known_defect"
+RELEASE_LINE_OPTION = "--release-line"
+RELEASE_LINE_ENV = "RELEASE_LINE"
 PLUGIN_NAME = "known-defect"
 STATUS_PLUGIN_NAME = "verdict-status"
 __all__ = ["CLOSED_ENV", "MARKER", "KnownDefectPlugin", "register"]
@@ -80,7 +87,10 @@ class KnownDefectPlugin:
         return cls.from_closed_ids(closed_defects())
 
     @pytest.hookimpl(tryfirst=True)
-    def pytest_collection_modifyitems(self, items: list[pytest.Item]) -> None:
+    def pytest_collection_modifyitems(
+        self, config: pytest.Config, items: list[pytest.Item]
+    ) -> None:
+        _deselect_other_lines(config, items)
         for item in items:
             marker = item.get_closest_marker(MARKER)
             if marker is None:
@@ -179,6 +189,30 @@ class KnownDefectPlugin:
         )
 
 
+def release_line(config: pytest.Config) -> str | None:
+    """The release line this run gates: ``--release-line``, else ``$RELEASE_LINE``."""
+    try:
+        chosen = config.getoption(RELEASE_LINE_OPTION)
+    except ValueError:  # the option is registered by the root conftest only
+        chosen = None
+    chosen = chosen or os.environ.get(RELEASE_LINE_ENV, "")
+    return chosen.strip() or None
+
+
+def _deselect_other_lines(config: pytest.Config, items: list[pytest.Item]) -> None:
+    line = release_line(config)
+    if line is None:
+        return
+    kept, dropped = [], []
+    for item in items:
+        marker = item.get_closest_marker(MARKER)
+        fix_line = marker.kwargs.get("fix_line") if marker is not None else None
+        (dropped if fix_line is not None and str(fix_line) != line else kept).append(item)
+    if dropped:
+        config.hook.pytest_deselected(items=dropped)
+        items[:] = kept
+
+
 def _in_browser_scope(item: pytest.Item, marker: pytest.Mark) -> bool:
     """False when the marker is scoped to engines this item does not run on."""
     scope = marker.kwargs.get("browsers")
@@ -204,7 +238,8 @@ def _message(call: pytest.CallInfo[None], report: pytest.TestReport) -> str:
 def register(config: pytest.Config) -> None:
     config.addinivalue_line(
         "markers",
-        f"{MARKER}(defect_id, reason='', raises=None, match=None, browsers=None): expected "
+        f"{MARKER}(defect_id, reason='', raises=None, match=None, browsers=None, "
+        f"fix_line=None): expected "
         f"to fail while the defect is open; an unexpected pass fails the run "
         f"({CLOSED_ENV} lists fixed ids)",
     )

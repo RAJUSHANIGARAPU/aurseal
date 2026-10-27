@@ -34,6 +34,13 @@ def pytest_addoption(parser):
         default=None,
         help="bearer JWT for AUTH_MODE=token (prefer the SUPPLIED_TOKEN env var)",
     )
+    parser.addoption(
+        "--release-line",
+        action="store",
+        default=None,
+        help="deselect known_defect tests whose fix_line is another release line "
+        "(default: $RELEASE_LINE)",
+    )
 
 
 # =========================================================

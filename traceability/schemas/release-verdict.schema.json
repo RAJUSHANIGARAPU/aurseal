@@ -26,7 +26,7 @@
         "type": "object",
         "required": ["kind", "severity", "criterion", "exhibit", "message"],
         "properties": {
-          "severity": {"enum": ["block", "no_verdict", "attention", "info", "waived"]}
+          "severity": {"enum": ["block", "no_verdict", "attention", "info", "waived", "out_of_scope"]}
         }
       }
     },
