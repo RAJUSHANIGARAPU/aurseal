@@ -368,6 +368,24 @@ results = smoke.run_smoke(dh.GetOnlyApi.over(api), checks)
 assert all(r.ok for r in results), smoke.describe(results)
 ```
 
+**Anonymous release smoke behind auth.** Two more expectations prove the
+service itself answered without holding a token. `api_document(title, paths,
+security_scheme=None)` requires a 200 JSON API document carrying the
+service's own `info.title`, a GET operation on every path in `paths` and,
+when given, the security scheme. `auth_challenge(scheme="Bearer")` requires
+401 with a `WWW-Authenticate` challenge for that scheme, so the refusal came
+from the service's security chain rather than from a proxy in front of it.
+
+```python
+from oracles import smoke
+
+checks = [
+    smoke.SmokeCheck("doc", "/v3/api-docs", (smoke.api_document("Plans", ["/plans"], "bearer"),)),
+    smoke.SmokeCheck("challenge", "/plans", (smoke.auth_challenge(),)),
+]
+results = smoke.run_smoke(GetOnlyApi.over(anonymous_engine), checks)
+```
+
 ## Validation reporting
 
 `with reporting.validating("refund is negative", expected="< 0"):` wraps an
@@ -546,6 +564,23 @@ assert report.ok, "\n".join(report.problems())
 and optionally `segment`. `padded_length` defaults to 6, and
 `expected_prefix` is optional.
 
+### Hand-over from migrated numbering
+
+`handover_violations(numbers, origin_of, legacy, new)` names every number of
+the `new` origin at or below the highest `legacy` number (counters compared
+with `parse_counter`, so padding does not decide the order). It is only
+meaningful over the complete list: `require_complete(read, total)` raises
+`IncompleteRead` when the read came back short of the reported total. With no
+numbers of either origin the check abstains (`no_verdict`): it would be vacuous.
+
+```python
+from oracles.id_sequences import handover_violations, require_complete
+
+require_complete(len(rows), page.total)
+numbers = {r["number"]: r["origin"] for r in rows}
+assert handover_violations(numbers, numbers.get, "migrated", "native") == []
+```
+
 ## Job-registration classifier
 
 **What it does.** `oracles/job_registration.py` reads how a schedule's rows
@@ -684,3 +719,43 @@ new_files = produced_since(
 
 **Configuration.** `type_key` / `time_key` (defaults `type` / `created_at`);
 `record_type=None` keeps every type.
+
+## Audit-trail release check
+
+**What it does.** `oracles/audit_trail.py` runs the audit part of a release
+check. `export_window` requests an export for the window since the deploy,
+polls the export list until the export reaches a terminal status (`COMPLETED`,
+`FAILED`, `CANCELLED` by default), then downloads and parses it
+(`read_export_rows`: every `.json` and `.csv` entry in the zip). A failed export
+raises `ExportFailed`, a slow one `ExportTimeout`.
+
+The control comes next: `require_own_activity(rows, app)` requires rows the
+service produced itself, so an empty match cannot be read as "nothing was
+audited". `events` matches structured category and event codes exactly,
+`check_events` checks the actor of each match and runs `secret_like` over every
+row (the same name rule as `contract_testing/redaction.py`). With no matching
+event in the window it abstains.
+
+```python
+from oracles import audit_trail as at
+
+rows = at.export_window(engine, deployed_at, now, create=create, list=listing, download=fetch)
+at.require_own_activity(rows, "plans-service")
+assert at.check_events(rows, category="PLAN", event="UPDATED", actor="release-bot") == []
+```
+
+## Served schema declares the required inputs
+
+**What it does.** `oracles/schema_required.py` reads the schema a service
+validates against and returns the field names that must be required but are
+not: `missing_required(document, locate, required)`. `locate` is a node name
+(searched recursively, exactly one match) or a callable. When none of the
+expected names is declared under `properties`, it raises `NotExpanded`
+instead of reporting them: an unexpanded schema cannot say "not required".
+`served_missing_required` does the GET through a `GetOnlyApi`.
+
+```python
+from oracles.schema_required import served_missing_required
+
+assert served_missing_required(api, "/api/machines/subscription", "cancelInput", ["reason"]) == []
+```
