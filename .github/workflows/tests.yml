@@ -121,6 +121,32 @@ jobs:
           NIGHTLY_ENABLED: ${{ vars.NIGHTLY_ENABLED }}
           RENDER_TOKEN_PRESENT: ${{ secrets.RENDER_TOKEN != '' }}
 
+  # Classifies the push or pull request: a change that touches only documentation skips
+  # the browser and live-site jobs below (their `if:` reads docs_only); the offline suite
+  # still runs. A job-level `if:`, not paths-ignore, so required checks still report.
+  # Why: docs/ci-decisions.md#docs-only-changes
+  changes:
+    name: Classify the change
+    if: github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      docs_only: ${{ steps.classify.outputs.docs_only }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version: "3.11"
+      - name: Classify the changed paths
+        id: classify
+        run: python -m gate.change_scope classify
+        env:
+          CHANGE_EVENT: ${{ github.event_name }}
+          CHANGE_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          CHANGE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+
   # The framework's own logic: contract testing, flakiness detection, memory,
   # web discovery, plugins, autonomous UI healing. 514 tests, no browser, no
   # network, ~25 seconds. None of it ran in CI until now — the marker-based
@@ -294,9 +320,9 @@ jobs:
   # for what it is, rather than looking like a defect in framework code.
   browser:
     name: Browser suite
-    if: "!startsWith(github.ref, 'refs/heads/bringup/') && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')"
+    if: "!startsWith(github.ref, 'refs/heads/bringup/') && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false') && needs.changes.outputs.docs_only != 'true'"
     # Unit lane first: a red framework suite stops the run before the live site is touched.
-    needs: offline
+    needs: [changes, offline]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     # Per-target login secrets live in a GitHub Environment of the same name.
@@ -516,8 +542,8 @@ jobs:
   # chromium-linux/) were taken in, so fonts match.
   visual:
     name: Visual regression
-    if: "!startsWith(github.ref, 'refs/heads/bringup/') && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')"
-    needs: offline
+    if: "!startsWith(github.ref, 'refs/heads/bringup/') && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false') && needs.changes.outputs.docs_only != 'true'"
+    needs: [changes, offline]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     # Image tag == the playwright== pin in requirements.txt (gate.workflow_lint checks it).
@@ -637,8 +663,8 @@ jobs:
   # The offline job does not install the extras, so there they are not collected.
   platform:
     name: Platform suite
-    if: "!startsWith(github.ref, 'refs/heads/bringup/') && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')"
-    needs: offline
+    if: "!startsWith(github.ref, 'refs/heads/bringup/') && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false') && needs.changes.outputs.docs_only != 'true'"
+    needs: [changes, offline]
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -683,8 +709,8 @@ jobs:
   # known_defect(browsers=(...)), never with continue-on-error.
   browser-matrix:
     name: Smoke on ${{ matrix.browser }}
-    if: (github.ref == 'refs/heads/main' || github.event_name == 'schedule' || inputs.browser_matrix || contains(inputs.lanes, 'browser-matrix')) && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')
-    needs: offline
+    if: (github.ref == 'refs/heads/main' || github.event_name == 'schedule' || inputs.browser_matrix || contains(inputs.lanes, 'browser-matrix')) && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false') && needs.changes.outputs.docs_only != 'true'
+    needs: [changes, offline]
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     environment: ${{ inputs.env || 'qa' }}

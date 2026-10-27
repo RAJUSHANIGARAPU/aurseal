@@ -314,3 +314,19 @@ build under an unrelated change.
 or `exclude_docs` with a reason. Build locally before pushing:
 `pip install -r requirements-docs.txt`, then `mkdocs build --strict`. The README check
 runs in the offline suite too (`tests/tools/test_docs_site_hooks.py`).
+
+## Docs-only changes
+
+**Rule.** The `changes` job classifies every push and pull request (`gate.change_scope`).
+When every changed path matches `DOCS_ONLY_PATTERNS` (`docs/**`, top-level `*.md`,
+`.claude/**`), the browser, visual, platform and browser-matrix jobs are skipped by a
+job-level `if:`; the offline suite, the checks, drafts and security jobs still run. A
+scheduled or manual run, a branch's first push, an empty or failed diff and any other path
+run everything.
+
+**Prevents.** A typo fix in a guide paying for a browser run against a live site; and,
+because it is an `if:` and not `paths-ignore`, a required check waiting forever for a job
+that never started.
+
+**Change safely.** Edit `DOCS_ONLY_PATTERNS` and nothing else; the tests pin the list.
+Never add a path that code or a test reads at run time (a spec, a plan, a template).
