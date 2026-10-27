@@ -10,6 +10,10 @@ the session, so there is no attribute to reach through.
 Python cannot make that absolute, so :func:`find_write_calls` checks the source
 of the modules that must stay read-only (the counterpart of a bytecode check),
 and a test asserts it returns nothing.
+
+:func:`require_writable` is the environment half of the same policy: a
+write-shaped probe (one that sends POST/PUT/DELETE even if the service must
+refuse it) skips on an environment whose profile says ``read_only``.
 """
 
 from __future__ import annotations
@@ -19,6 +23,8 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
+
+import pytest
 
 MUTATING_VERBS = frozenset({"post", "put", "patch", "delete"})
 
@@ -72,6 +78,34 @@ class ReadOnlyClient:
         if self._head is None:
             raise NotImplementedError("this client was built without HEAD")
         return self._head(self.url(path), kwargs)
+
+
+_TRUE = {"1", "true", "yes", "on"}
+_FALSE = {"0", "false", "no", "off"}
+
+
+def env_read_only(config: Any = None) -> bool:
+    """The active environment's ``read_only`` flag, parsed strictly (a typo raises)."""
+    if config is None:
+        from core.config_reader import ConfigReader
+
+        config = ConfigReader()
+    value = config.get("read_only")
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in _TRUE:
+        return True
+    if text in _FALSE:
+        return False
+    raise ValueError(f"read_only={value!r} is not a boolean")
+
+
+def require_writable(what: str, *, read_only: bool | None = None, config: Any = None) -> None:
+    """Skip ``what`` when the environment is read-only (``read_only`` overrides the config)."""
+    protected = env_read_only(config) if read_only is None else read_only
+    if protected:
+        pytest.skip(f"{what} sends a write-shaped request; this environment is read-only")
 
 
 @dataclass(frozen=True)

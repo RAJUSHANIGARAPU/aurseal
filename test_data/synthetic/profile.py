@@ -85,6 +85,9 @@ def field_violations(spec: FieldSpec, values: Mapping[str, Any]) -> list[str]:
     value = values[name]
     if not _type_ok(spec, value):
         return [f"{name}.type"]
+    if spec.required and spec.kind in ("string", "email", "date") and not value.strip():
+        # An empty or blank string satisfies a presence check, never "required".
+        return [f"{name}.required"]
     broken: list[str] = []
     if spec.kind == "choice" and value not in spec.choices:
         broken.append(f"{name}.choices")

@@ -156,6 +156,16 @@ def test_tasks_and_audit_trail(demo_sut, demo_seed):
     assert any(a["path"] == f"/api/tasks/{task['id']}/actions/complete" for a in audit)
 
 
+@pytest.mark.parametrize("fault_on", [False, True])
+def test_task_title_presence_only_fault(demo_sut, demo_control, fault_on):
+    if fault_on:
+        demo_control.fault("task_title_presence_only")
+    for blank in ("", "   "):
+        response = demo_sut.client.post("/api/tasks", {"title": blank})
+        assert response.status == (201 if fault_on else 422), response.json()
+    assert demo_sut.client.post("/api/tasks", {}).status == 422, "absence is always refused"
+
+
 def test_run_tag_header_is_stored(demo_sut, demo_control):
     response = demo_sut.client.request(
         "POST", "/api/tasks", {"title": "Tagged"}, headers={"X-Test-Run-Id": "run-77"}

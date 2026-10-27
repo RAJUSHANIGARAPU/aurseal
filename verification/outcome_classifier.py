@@ -33,18 +33,24 @@ Three classifiers ship here:
 * :func:`submit_rule_outcome`: a validation that fires on submit, judged from a
   :class:`ui.components.submit_outcome.SubmitResult`. An unmet precondition (another
   required input empty, the probe value gone before the click) is an abstention.
+
+And one stage classifier, :func:`stage_of`: which check in a chain refused a
+request sent with a credential that can never succeed (lookup vs credential),
+so a probe learns how far a request gets without any side effect.
+:func:`probe_stage` treats a success as a harness error: the probe credential
+was valid, and the probe must never be granted.
 """
 
 from __future__ import annotations
 
 import re
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Generic, Protocol, TypeVar
 
-from verification.evidence_verdict import EvidenceVerdict
+from verification.evidence_verdict import EvidenceVerdict, HarnessError
 
 ObsT = TypeVar("ObsT")
 
@@ -702,8 +708,86 @@ def submit_rule_outcome(
     )
 
 
+# ---------------------------------------------------------------------------
+# failure stage: which check in a chain refused a request
+# ---------------------------------------------------------------------------
+
+OTHER = "OTHER"
+
+
+@dataclass(frozen=True)
+class StageRule:
+    """One check in the chain: the statuses it answers with and text its body carries.
+
+    ``body_contains`` fragments must all appear in the body (case-insensitive);
+    an empty tuple matches any body with one of the statuses.
+    """
+
+    name: str
+    status_set: frozenset[int]
+    body_contains: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.name or self.name == OTHER:
+            raise ValueError(f"a stage needs a name other than {OTHER!r}")
+        object.__setattr__(self, "status_set", frozenset(self.status_set))
+        object.__setattr__(self, "body_contains", tuple(self.body_contains))
+
+    def matches(self, status: int, body: str) -> bool:
+        lowered = body.lower()
+        return status in self.status_set and all(f.lower() in lowered for f in self.body_contains)
+
+
+@dataclass(frozen=True)
+class Stage:
+    """Where a probe was refused: the first matching rule's name, else :data:`OTHER`."""
+
+    name: str
+    status: int
+    body: str = ""
+
+    @property
+    def known(self) -> bool:
+        return self.name != OTHER
+
+    def __str__(self) -> str:
+        return f"{self.name} (HTTP {self.status})"
+
+
+def stage_of(status: int, body: str | None, stages: Sequence[StageRule]) -> Stage:
+    """The first rule in ``stages`` that matches; order them from the most specific."""
+    text = body or ""
+    for rule in stages:
+        if rule.matches(status, text):
+            return Stage(rule.name, status, text)
+    return Stage(OTHER, status, text)
+
+
+def probe_stage(send: Callable[[], object], stages: Sequence[StageRule]) -> Stage:
+    """Send the probe once and classify where it stopped.
+
+    ``send`` returns anything with ``status`` and ``text`` (an
+    :class:`~api.clients.http_engine.ApiResponse`). A 2xx is a
+    :class:`HarnessError`: the credential the probe was built on is valid, so
+    the probe may have changed something and its answer says nothing about the
+    chain.
+    """
+    response = send()
+    status = getattr(response, "status", None)
+    if not isinstance(status, int):
+        raise TypeError(f"probe returned {response!r}, which has no integer status")
+    body = str(getattr(response, "text", "") or "")
+    if 200 <= status < 300:
+        raise HarnessError(
+            f"the stage probe was granted (HTTP {status}): its credential is valid, so it is no "
+            f"longer a probe. Rotate it to one that can never succeed. Body: {body[:200]}"
+        )
+    return stage_of(status, body, stages)
+
+
 __all__ = [
     "DEFAULT_REFUSAL_MESSAGE",
+    "OTHER",
     "OutcomeClassifier",
     "OutcomeState",
     "PriceProbe",
@@ -714,6 +798,8 @@ __all__ = [
     "RefusalClassifier",
     "RefusalObservations",
     "RefusalState",
+    "Stage",
+    "StageRule",
     "StepObservations",
     "StepOutcomeClassifier",
     "StepState",
@@ -722,7 +808,9 @@ __all__ = [
     "Verdict",
     "expected_step_state",
     "join_block_values",
+    "probe_stage",
     "refusal_outcome",
+    "stage_of",
     "step_outcome",
     "submit_rule_outcome",
 ]

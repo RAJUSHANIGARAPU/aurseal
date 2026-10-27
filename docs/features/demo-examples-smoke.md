@@ -30,6 +30,15 @@ NotFoundShapes(
 )
 ```
 
+## Write route reaches its service without writing
+
+`test_write_route_probe.py` sends `POST /gw/tasks` with an empty body through
+`api.clients.route_probe.probe_write`: the task service must refuse it with its
+own 422 naming `title`, a path outside the route predicate must get the
+gateway's 404, and a read on the route must answer 200. The task count is the
+same before and after. The second test sends a valid title and shows that an
+accepted probe is reported as `SIDE_EFFECT`, never as a pass.
+
 ## Fix delta judged per environment
 
 **What it shows.** `test_fix_scope_delta.py` starts a second demo instance. The two instances

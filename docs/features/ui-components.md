@@ -152,6 +152,15 @@ select_by_label(page, "Billing period", "Yearly")
 select_option(page, page.get_by_test_id("plan-picker"), "Pro", attempts=2)
 ```
 
+### Choosing a different value for a change test
+
+`choose_other(current, preferred, offered, same=eq)` picks the value a change
+test switches to from what the control offers: `preferred` when it is offered
+and differs from `current`, else the first offered value that differs. When
+none does it raises `NothingToChange`; skip that candidate rather than
+submit a change that changes nothing. A fixed input label is checked against
+the served code list first with `test_data/codelists.py::require_offered`.
+
 ## Wizard submit and settle waits
 
 ### What it does

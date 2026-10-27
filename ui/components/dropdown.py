@@ -14,11 +14,17 @@ Two failure modes this guards against, both observed with Material-style widgets
   The trigger is opened with a dispatched click (no hit-testing), the option is
   picked by role and name, and the trigger's text is **read back**; on a mismatch
   the popup is closed with Escape and the whole thing is retried.
+
+And one choice rule for change tests, :func:`choose_other`: the target value is
+drawn from what the control offers and must differ from the current value. A
+fixed target that happens to equal the current value "changes" nothing and
+passes every assertion about the change.
 """
 
 from __future__ import annotations
 
 import re
+from collections.abc import Callable, Iterable
 
 from core.logger import logger
 from ui.components.wizard import settle
@@ -28,6 +34,35 @@ DEFAULT_ATTEMPTS = 3
 
 class DropdownError(AssertionError):
     pass
+
+
+class NothingToChange(LookupError):
+    """The control offers no value different from the current one; the change cannot be made."""
+
+
+def choose_other(
+    current: str | None,
+    preferred: str | None,
+    offered: Iterable[str],
+    same: Callable[[str | None, str], bool] = lambda a, b: a == b,
+) -> str:
+    """A value to change to: ``preferred`` when offered and different, else the first offered
+    value that differs from ``current``.
+
+    ``same`` decides equality (pass a normalising comparison for labels that
+    differ only in case or spacing). Raises :class:`NothingToChange` when every
+    offered value equals ``current``; a test should skip that candidate rather
+    than submit a change that changes nothing.
+    """
+    options = [o for o in offered if o is not None]
+    if preferred is not None and preferred in options and not same(current, preferred):
+        return preferred
+    for option in options:
+        if not same(current, option):
+            return option
+    raise NothingToChange(
+        f"no offered value differs from the current {current!r}; offered: {options}"
+    )
 
 
 def combobox_by_label(page, label: str | re.Pattern[str]):

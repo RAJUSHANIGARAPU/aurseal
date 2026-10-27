@@ -12,6 +12,12 @@ things a test can check from the outside:
   (:func:`unstable_entities`); a second number on a later version means the
   "draw once" guard let a re-entry draw again.
 
+A fourth promise holds across a migration: numbers the new system issues all
+sit above the highest number of the migrated records
+(:func:`handover_violations`). It is only meaningful over the complete list,
+so :func:`require_complete` refuses a read that came back short of the
+reported total, and the check abstains when either origin is absent.
+
 The shape is a caller-supplied regex with named groups ``prefix``,
 ``segment`` (optional) and ``counter``. Numbers in different series
 (prefix + segment) are never compared with each other.
@@ -20,8 +26,10 @@ The shape is a caller-supplied regex with named groups ``prefix``,
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
+
+from verification.evidence_verdict import EvidenceVerdict
 
 DEFAULT_PADDED_LENGTH = 6
 DEFAULT_PATTERN = re.compile(r"^(?P<prefix>[A-Z]+)-(?:(?P<segment>[A-Z0-9]+)-)?(?P<counter>\d+)$")
@@ -169,3 +177,63 @@ def check_sequence(
         {i.entity: [n for n in i.numbers if n] for i in in_issue_order}
     )
     return report
+
+
+# ---------------------------------------------------------------------------
+# hand-over: new numbering continues above migrated numbering
+# ---------------------------------------------------------------------------
+
+_TRAILING_COUNTER = re.compile(r"(\d+)\D*$")
+
+
+class IncompleteRead(AssertionError):
+    """The listing returned fewer (or more) records than it reported in total."""
+
+
+def parse_counter(raw: str) -> int:
+    """The trailing counter of a business number (``SUB-000123`` -> 123); raises when none."""
+    m = _TRAILING_COUNTER.search(str(raw or "").strip())
+    if m is None:
+        raise ValueError(f"{raw!r} carries no numeric counter")
+    return int(m.group(1))
+
+
+def require_complete(read: int, total: int) -> None:
+    """Raise :class:`IncompleteRead` unless every reported record was read."""
+    if read != total:
+        raise IncompleteRead(
+            f"read {read} of {total} reported records: a hand-over check over a partial list "
+            "can miss exactly the number that breaks it"
+        )
+
+
+def handover_violations(
+    numbers: Iterable[str],
+    origin_of: Callable[[str], str | None],
+    legacy: str,
+    new: str,
+    compare: Callable[[str], int] = parse_counter,
+    *,
+    verdict: EvidenceVerdict | None = None,
+) -> list[str]:
+    """New-origin numbers at or below the highest legacy number, as worded findings.
+
+    Abstains (``no_verdict``) when either origin has no numbers: with nothing on
+    one side, "every new number is above the migrated ones" is vacuous.
+    """
+    by_origin: dict[str, list[str]] = {legacy: [], new: []}
+    for number in numbers:
+        origin = origin_of(number)
+        if origin in by_origin:
+            by_origin[origin].append(number)
+    empty = [o for o, found in by_origin.items() if not found]
+    if empty:
+        coverage = verdict or EvidenceVerdict(f"numbering hand-over {legacy} -> {new}")
+        coverage.no_verdict(f"no {' or '.join(repr(o) for o in empty)} numbers to compare")
+    highest = max(by_origin[legacy], key=compare)
+    ceiling = compare(highest)
+    return [
+        f"{n} ({new}) is not above the highest {legacy} number {highest}"
+        for n in by_origin[new]
+        if compare(n) <= ceiling
+    ]

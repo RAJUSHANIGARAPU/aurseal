@@ -506,7 +506,12 @@ class TasksService:
         self.ctx = ctx
 
     def create(self, body: dict[str, Any]) -> dict[str, Any]:
-        if not str(body.get("title") or "").strip():
+        title = body.get("title")
+        if self.ctx.fault("task_title_presence_only"):
+            missing = title is None
+        else:
+            missing = not str(title or "").strip()
+        if missing:
             raise Invalid("Title is required.", {"title": "Title is required."})
         sub = None
         if body.get("subscription_id") is not None:

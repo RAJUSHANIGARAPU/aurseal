@@ -45,6 +45,14 @@ REQUIRED_ENV = "COVERAGE_VERDICT_REQUIRED"
 _TRUTHY = frozenset({"1", "true", "yes", "on"})
 
 
+class HarnessError(RuntimeError):
+    """The harness, not the product, is wrong: a stale constant, a probe that was granted.
+
+    Raised where reporting the problem as a product failure would send the reader
+    to the wrong code. It is still red; it just points at the test.
+    """
+
+
 def verdict_required() -> bool:
     return os.environ.get(REQUIRED_ENV, "").strip().lower() in _TRUTHY
 

@@ -200,6 +200,7 @@ set.
 | `doc_amount_unformatted` | the account-opened letter prints the charge per period as a bare number |
 | `form_resets_select_after_error` | after a validation error on the closure screen the reason list jumps back to its first option |
 | `create_throttled_every_other` | every second subscription create answers 429 with `Retry-After: 0` and stores nothing |
+| `task_title_presence_only` | a task title is checked for presence only, so `""` or a blank title is stored |
 
 ## Settings
 
