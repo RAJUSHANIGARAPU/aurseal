@@ -42,6 +42,10 @@ def storage_state_for(
             f"AUTH_MODE=ui needs {', '.join(missing)} (set them in .env.<env> or the environment)"
         )
 
+    from ui.components.universal_login import refuse_if_rejected
+
+    refuse_if_rejected(settings.username)  # before a browser context is opened
+
     def login(page) -> None:
         login_page_factory(page).login(
             settings.login_url,
