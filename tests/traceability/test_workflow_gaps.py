@@ -121,7 +121,10 @@ def test_a_new_gap_and_a_stale_entry_both_fail(tree, capsys):
         ),
     ],
 )
-def test_an_unbound_config_dir_is_not_measured_never_zero(tmp_path, capsys, setup, reason):
+def test_an_unbound_config_dir_is_not_measured_never_zero(
+    tmp_path, capsys, monkeypatch, setup, reason
+):
+    monkeypatch.delenv("EXT_CONFIG_PATH", raising=False)  # CI binds it before the suite runs
     config = setup(tmp_path)
     args = ["workflow-gaps", "--out", str(tmp_path / "out"), "--tests", str(tmp_path)]
     if config is not None:
