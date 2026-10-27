@@ -8,7 +8,12 @@ instead and the transaction states flip in the same request.
 
 from __future__ import annotations
 
+import pytest
+
 from api.clients.billing_runner import BillingRunner
+
+# The services this module exercises, for gate.service_selection (source "tag").
+pytestmark = pytest.mark.service("scheduler", "billing")
 
 
 def states(billing, sub_id):

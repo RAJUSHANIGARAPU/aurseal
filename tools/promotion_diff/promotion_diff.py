@@ -776,6 +776,17 @@ def _commit_json(commit: Commit) -> dict[str, str]:
     return {"sha": commit.sha, "subject": commit.subject}
 
 
+def service_status(d: ServiceDelta) -> str:
+    """One word per service for consumers that only need to know whether it moved.
+
+    ``one-sided`` is a service pinned on one side only, ``not-compared`` one the diff could
+    not read; both count as changed for anything that selects work from the delta.
+    """
+    if d.problem:
+        return "one-sided" if d.problem.startswith(("not in FROM", "not in TO")) else "not-compared"
+    return "unchanged" if d.from_ref == d.to_ref else "changed"
+
+
 def to_json(
     deltas: Sequence[ServiceDelta],
     labels: tuple[str, str],
@@ -791,6 +802,7 @@ def to_json(
         services.append(
             {
                 "service": d.service,
+                "status": service_status(d),
                 "fromRef": d.from_ref,
                 "toRef": d.to_ref,
                 "notCompared": d.problem,

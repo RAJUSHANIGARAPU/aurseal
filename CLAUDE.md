@@ -21,6 +21,13 @@ pytest -m regression -n auto   # CI runs this on main only
 # Records a new workflow config would reject, before deploying it (docs/features/release-tooling.md)
 python -m tools.config_preflight --old v1.yaml --new v2.yaml --records export.jsonl --fail-on-reject
 
+# Opt-in narrowed runs (CI: SELECTIVE_TESTS=true). Unknown or shared changes run everything.
+python -m gate.selective select --base origin/main      # offline tests a diff can affect
+python -m gate.selective check                          # area map vs the import graph
+python -m gate.service_selection select --services billing --format markdown
+python -m gate.service_selection derive --write         # regenerate config/service_map.json
+python -m gate.change_scope classify --paths docs/x.md  # docs-only? (skips browser jobs)
+
 docker compose up
 
 # Release reports (docs/features/release-tooling.md)
