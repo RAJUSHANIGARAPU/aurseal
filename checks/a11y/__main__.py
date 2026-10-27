@@ -15,9 +15,9 @@ from checks._outcome import CheckOutcome, exit_code
 from checks._sink import JsonlSink
 from checks.a11y.assertions import load_known
 from checks.a11y.axe import AxeUnavailable
-from checks.a11y.judge import KIND, judge, record
+from checks.a11y.judge import KIND, judge, manifest_hosts, record
 from checks.a11y.policy import IMPACTS, A11yPolicy
-from checks.a11y.runner import scan_routes
+from checks.a11y.runner import ScannerDoesNotBite, scan_routes
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -35,8 +35,8 @@ def main(argv: list[str] | None = None) -> int:
         outcome = CheckOutcome.unknown(KIND, "no routes were given")
     else:
         try:
-            reports = scan_routes(args.route, policy, args.browser)
-        except (AxeUnavailable, BrowserUnavailable) as exc:
+            reports = scan_routes(args.route, policy, args.browser, hosts=manifest_hosts(manifest))
+        except (AxeUnavailable, BrowserUnavailable, ScannerDoesNotBite) as exc:
             outcome = CheckOutcome.unknown(KIND, str(exc))
         else:
             if not args.no_record:

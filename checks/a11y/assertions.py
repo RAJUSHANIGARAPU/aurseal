@@ -8,7 +8,7 @@ from typing import Any
 
 from checks._sink import MetricSink
 from checks.a11y.axe import A11yReport, scan
-from checks.a11y.judge import judge, record
+from checks.a11y.judge import judge, manifest_hosts, record
 from checks.a11y.policy import A11yPolicy
 from verification.known_defects_manifest import ManifestEntry, load_manifest
 
@@ -32,7 +32,7 @@ def assert_accessible(
     no rules is not evidence.
     """
     entries = list(manifest)
-    report = scan(page, policy, include=include, exclude=exclude)
+    report = scan(page, policy, include=include, exclude=exclude, hosts=manifest_hosts(entries))
     if sink is not None:
         record([report], sink, entries)
     outcome = judge([report], policy, entries)

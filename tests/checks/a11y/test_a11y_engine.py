@@ -243,3 +243,178 @@ class TestRecord:
         sink = MemorySink()
         record([A11yReport(route="http://h/x", error="unreachable")], sink)
         assert sink.rows == {}
+
+
+# ---------------------------------------------------------------------- element scope
+
+
+def _node(target, hosts=(), text=None, fg=None):
+    node = {
+        "target": [target],
+        "html": f"<span>{text}</span>",
+        "_hosts": list(hosts),
+        "_text": text,
+    }
+    if fg:
+        node["any"] = [{"id": "color-contrast", "data": {"fgColor": fg}}]
+    return node
+
+
+def _contrast(violations=(), passes=()):
+    raw = _axe(passes=())
+    raw["violations"] = (
+        [{**_rule("color-contrast"), "nodes": list(violations)}] if violations else []
+    )
+    raw["passes"] = [{"id": "color-contrast", "nodes": list(passes)}, {"id": "document-title"}]
+    return raw
+
+
+SCOPED = [
+    {
+        "template": "/ui/things",
+        "open_issues": [
+            {
+                "issue": "BUG-301",
+                "summary": "a11y",
+                "seen_in": "pager label",
+                "finding": "color-contrast",
+                "host": "app-pager",
+                "text": "Next page",
+                "fg_color": "#999999",
+            }
+        ],
+    }
+]
+
+
+class TestElementScope:
+    def test_nodes_keep_target_text_and_measured_colour(self):
+        report = parse_results(
+            "/r", _contrast([_node("#n", ["app-pager"], "Next page", "#999999")])
+        )
+        node = report.nodes[0]
+        assert (node.outcome, node.target, node.text, node.fg_color, node.hosts) == (
+            "violation",
+            "#n",
+            "Next page",
+            "#999999",
+            ("app-pager",),
+        )
+
+    def test_passes_are_requested_from_axe(self):
+        assert A11yPolicy().axe_options()["resultTypes"] == ["violations", "passes"]
+
+    def test_hosts_are_passed_to_the_page_only_when_named(self):
+        page = FakePage(_axe())
+        scan(page, source="S", hosts=["app-pager"])
+        assert page.calls[1][1][2] == ["app-pager"]
+
+    def test_the_matching_element_reproduces_and_another_element_is_unexplained(self):
+        manifest = parse_manifest(SCOPED)
+        own = _node("#n", ["app-pager"], "Next page", "#999999")
+        other = _node("#m", ["app-footer"], "Imprint", "#999999")
+        ok = judge(
+            [parse_results("/ui/things", _contrast([own]))],
+            manifest=manifest,
+            record_verdicts=False,
+        )
+        assert ok.status == "pass"
+        assert ok.findings[0]["open_issues"] == [{"issue": "BUG-301", "verdict": "reproduces"}]
+        mixed = judge(
+            [parse_results("/ui/things", _contrast([own, other]))],
+            manifest=manifest,
+            record_verdicts=False,
+        )
+        assert mixed.status != "pass" and "color-contrast" in mixed.reason
+
+    def test_a_matching_pass_node_clears(self):
+        report = parse_results(
+            "/ui/things", _contrast(passes=[_node("#n", ["app-pager"], "Next page", "#999999")])
+        )
+        outcome = judge([report], manifest=parse_manifest(SCOPED), record_verdicts=False)
+        assert outcome.status != "pass" and "KNOWN DEFECT CLEARED BUG-301" in outcome.reason
+
+    def test_a_missing_element_is_held_empty_never_cleared(self):
+        report = parse_results(
+            "/ui/things", _contrast(passes=[_node("#z", ["app-footer"], "Imprint", "#000000")])
+        )
+        outcome = judge([report], manifest=parse_manifest(SCOPED), record_verdicts=False)
+        assert outcome.status == "pass"
+        assert outcome.findings[0]["open_issues"] == [{"issue": "BUG-301", "verdict": "held_empty"}]
+
+    def test_manifest_rails(self):
+        from verification.known_defects_manifest import check_manifest
+
+        loose = [
+            {
+                **SCOPED[0],
+                "open_issues": [{**SCOPED[0]["open_issues"][0], "text": None, "fg_color": None}],
+            }
+        ]
+        assert any(
+            "needs a host plus text or fg_color" in p for p in check_manifest(parse_manifest(loose))
+        )
+        hostless = [{**SCOPED[0], "open_issues": [{**SCOPED[0]["open_issues"][0], "host": None}]}]
+        assert any("needs a host" in p for p in check_manifest(parse_manifest(hostless)))
+        many = [
+            {"template": f"/r{i}", "open_issues": [{"issue": f"BUG-{i}", "summary": "s"}]}
+            for i in range(16)
+        ]
+        assert any("exceed the cap of 15" in p for p in check_manifest(parse_manifest(many)))
+        assert check_manifest(parse_manifest(many), max_issues=None) == []
+
+
+# ---------------------------------------------------------------------- instrument control
+
+
+class ControlPage(FakePage):
+    def __init__(self, result, url="http://127.0.0.1:9/ui/things"):
+        super().__init__(result)
+        self.url = url
+        self.content = None
+
+    def set_content(self, html):
+        self.content = html
+
+    def evaluate(self, expression, arg=None):  # noqa: ANN001
+        self.calls.append((expression, arg))
+        return None if expression == "S" else self.result
+
+
+class TestInstrumentControl:
+    def test_a_scanner_that_reports_nothing_does_not_bite(self):
+        from checks.a11y.runner import ScannerDoesNotBite, instrument_control
+
+        page = ControlPage(_axe())  # a fake axe that never reports a violation
+        with pytest.raises(ScannerDoesNotBite, match="scanner does not bite"):
+            instrument_control(page, source="S")
+        assert "<img" in page.content and "alt" not in page.content
+
+    def test_a_scanner_that_reports_image_alt_passes(self):
+        from checks.a11y.runner import instrument_control
+
+        report = instrument_control(ControlPage(_axe([_rule("image-alt", "critical")])), source="S")
+        assert [v.rule_id for v in report.violations] == ["image-alt"]
+
+    def test_a_redirect_makes_the_route_not_scanned(self, monkeypatch):
+        import contextlib
+
+        from checks.a11y import runner
+
+        page = ControlPage(
+            _axe([_rule("image-alt", "critical")]), url="http://h.example.test/login"
+        )
+
+        class Context:
+            def new_page(self):
+                return page
+
+        page.goto = lambda route, **kw: None
+        monkeypatch.setattr(runner, "axe_source", lambda: "S")
+        monkeypatch.setattr(
+            runner, "browser_context", lambda *a, **k: contextlib.nullcontext(Context())
+        )
+        reports = runner.scan_routes(["http://h.example.test/ui/things"])
+        assert not reports[0].scanned
+        assert "not_scanned" in reports[0].error and "/login" in reports[0].error
+        assert runner.landed_elsewhere("http://h/ui/a?x=1", "http://h/ui/a#top") is False

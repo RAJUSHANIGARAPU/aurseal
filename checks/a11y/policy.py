@@ -42,7 +42,9 @@ class A11yPolicy:
     def axe_options(self) -> dict:
         options: dict = {
             "runOnly": {"type": "tag", "values": list(self.tags)},
-            "resultTypes": ["violations"],
+            # Passes too: an element-scoped known issue needs to see axe decide on its
+            # element either way, or it cannot tell "fixed" from "not looked at".
+            "resultTypes": ["violations", "passes"],
         }
         if self.disabled_rules:
             options["rules"] = {r: {"enabled": False} for r in self.disabled_rules}

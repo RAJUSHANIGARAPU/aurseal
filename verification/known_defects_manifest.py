@@ -13,7 +13,11 @@ finding ids keeps what is known to be wrong next to the data rather than in code
          "fix_line": "2.4"},
         {"issue": "BUG-150", "summary": "wording", "notes": "old footer text"}]}]
 
-For an accessibility manifest the ``template`` is the route path of the screen.
+For an accessibility manifest the ``template`` is the route path of the screen. An
+accessibility issue can be scoped to one element instead of a whole rule: ``host`` (a CSS
+selector of the enclosing component), plus the element's exact ``text`` and/or its measured
+foreground colour ``fg_color``. Never the generated CSS path, which changes with every
+layout tweak (see ``checks.a11y.judge``).
 
 **An open issue never makes a check pass.** ``finding`` decides what an issue does:
 
@@ -57,6 +61,13 @@ class OpenIssue:
     seen_in: str = ""
     finding: str | None = None
     fix_line: str | None = None
+    host: str | None = None  # element scope: enclosing component selector
+    text: str | None = None  # element scope: the element's exact text
+    fg_color: str | None = None  # element scope: measured foreground colour
+
+    @property
+    def element_scoped(self) -> bool:
+        return bool(self.host or self.text or self.fg_color)
 
     @property
     def is_detector(self) -> bool:
@@ -125,6 +136,9 @@ def parse_manifest(raw: object, source: Path | None = None) -> list[ManifestEntr
                 seen_in=str(d.get("seen_in") or ""),
                 finding=d.get("finding") or None,
                 fix_line=str(d["fix_line"]).strip() if d.get("fix_line") else None,
+                host=d.get("host") or None,
+                text=d.get("text") or None,
+                fg_color=d.get("fg_color") or None,
             )
             for d in item.get("open_issues") or ()
         )
@@ -269,6 +283,7 @@ def check_manifest(
     known_envs: Collection[str] | None = None,
     oracle_inputs: Mapping[str, str] | None = None,
     max_excused_share: float = 0.5,
+    max_issues: int | None = 15,
 ) -> list[str]:
     """Every consistency and gate-safety problem in the manifest ([] when sound).
 
@@ -284,7 +299,10 @@ def check_manifest(
       it declares never happens;
     * a sample that is missing or is not valid JSON;
     * excused detectors reaching ``max_excused_share`` of all open issues: that is a
-      quarantine list, not a policy.
+      quarantine list, not a policy;
+    * an element-scoped issue without a ``host``, or with a host but neither ``text`` nor
+      ``fg_color`` (it would match any element of that rule inside the component);
+    * more than ``max_issues`` open issues in the manifest (``None`` turns the cap off).
     """
     entries = list(entries)
     problems: list[str] = []
@@ -308,6 +326,11 @@ def check_manifest(
                     f"{e.template!r}: {d.issue} is asserted as {d.finding}, which no check "
                     f"emits (emitted: {sorted(emitted_kinds)})"
                 )
+            if d.element_scoped and not (d.host and (d.text or d.fg_color)):
+                problems.append(
+                    f"{e.template!r}: {d.issue} is element-scoped and needs a host plus text "
+                    f"or fg_color (never a generated CSS path)"
+                )
             needs = (oracle_inputs or {}).get(d.finding or "")
             if d.is_detector and needs and not e.data.get(needs):
                 problems.append(
@@ -323,6 +346,11 @@ def check_manifest(
         problems += _sample_problems(e)
     asserted, noted = detector_split(entries)
     total = asserted + noted
+    if max_issues is not None and total > max_issues:
+        problems.append(
+            f"{total} open issues exceed the cap of {max_issues}: the manifest is becoming a "
+            f"place to park findings"
+        )
     if total and asserted >= max(2, total * max_excused_share):
         problems.append(
             f"{asserted} of {total} open issues are excused from the main checks; the suite "
