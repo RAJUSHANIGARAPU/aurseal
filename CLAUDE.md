@@ -18,45 +18,21 @@ pytest tests/ -n auto
 pytest -m "smoke or api or contract" -n auto --env=qa
 pytest -m regression -n auto   # CI runs this on main only
 
-# Records a new workflow config would reject, before deploying it (docs/features/release-tooling.md)
-python -m tools.config_preflight --old v1.yaml --new v2.yaml --records export.jsonl --fail-on-reject
-
-# Opt-in narrowed runs (CI: SELECTIVE_TESTS=true). Unknown or shared changes run everything.
-python -m gate.selective select --base origin/main      # offline tests a diff can affect
-python -m gate.selective check                          # area map vs the import graph
-python -m gate.service_selection select --services billing --format markdown
-python -m gate.service_selection derive --write         # regenerate config/service_map.json
-python -m gate.change_scope classify --paths docs/x.md  # docs-only? (skips browser jobs)
+# Opt-in narrowed runs, service selection, docs-only skip: docs/ci-decisions.md#selective-tests
+python -m gate.selective check && python -m gate.service_selection derive --write   # after moving tests
 
 docker compose up
 
-# Release reports (docs/features/release-tooling.md)
-python -m tools.hotfix_mergeback --workspace ~/src --since 2026-10-01   # hotfix tags not on main
-python -m tools.release_leadtime --manifest deploy/production.yaml --deployments deploy/log.csv
-
-# Coverage ratchets (what CI runs; /detect-coverage-gaps runs them with --report-only)
-python -m traceability gaps --openapi demo_sut/openapi.json --specs specs \
-  --requirements --baseline traceability/gap-baseline.json
-python -m traceability workflow-gaps --config-dir demo_sut/config \
-  --baseline traceability/workflow-gap-baseline.json   # GAPS= ACTIONS= NEW= STALE=
-
-# Promotion diff between two environments' version manifests (docs/features/release-tooling.md)
-python tools/promotion_diff/promotion_diff.py --from staging.yaml --to production.yaml \
-  --workspace ~/src --strict [--json --candidate-id rc-1]
+# Release tooling (promotion diff, config preflight, hotfix merge-back, lead time):
+# docs/features/release-tooling.md. Coverage ratchets: docs/features/coverage-gaps.md
 
 # Parallel locally: N shards + serial lane + merge, one pool user per worker,
 # headed browser on a virtual display in the Playwright container (--on-host, --headless)
 scripts/run-parallel.sh --env qa --workers 3
 ```
 
-Parallel runs (details: `docs/features/sharded-execution.md`):
-- **User pool** — `.env.<env>.pool` (git-ignored, `POOL_<n>_USERNAME` / `POOL_<n>_PASSWORD`):
-  each test process leases its own user via an OS file lock (`gate.user_pool`). An exported
-  `AUTH_USERNAME` still wins; no pool file, no change.
-- **Rejected password** — a 400 on the password step latches the username; later logins as
-  it in the same process fail at once instead of piling attempts towards a lockout.
-- **Serial lane** — `--serial-lane` on every shard, then `--shard=serial/N`: tests not shown
-  to be isolated run after the shards. An empty serial lane passes and has no say in the merge.
+Parallel runs: one pool user per process (`.env.<env>.pool`), a rejected password is never
+retried, a serial lane after the shards. Details: `docs/features/sharded-execution.md`.
 
 ## Project structure
 ```
