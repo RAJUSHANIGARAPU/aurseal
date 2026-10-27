@@ -1,0 +1,40 @@
+# Files that are not product code. A hotfix commit touching ONLY files matching
+# these globs is NOT-NEEDED on the default branch: nothing the product runs would
+# be lost without it. One fnmatch glob per line, matched against the repository
+# path ("*" crosses "/"). Empty lines and #-comments are skipped.
+# Pass --non-product-file to use a different list.
+
+# CI configuration
+.github/*
+.gitlab-ci.yml
+Jenkinsfile*
+.circleci/*
+azure-pipelines.yml
+bitbucket-pipelines.yml
+
+# dependency manifests and lock files
+*.lock
+package-lock.json
+pnpm-lock.yaml
+requirements*.txt
+go.sum
+
+# documentation
+docs/*
+*.md
+*.rst
+CHANGELOG*
+
+# test-only files
+tests/*
+test/*
+*/tests/*
+*/test/*
+src/test/*
+test_*.py
+*/test_*.py
+*_test.py
+*_test.go
+*.spec.ts
+*.test.ts
+*.test.js
