@@ -112,7 +112,7 @@ target.
 release candidate (`RELEASE_CANDIDATE`) and a `shard_users` list whose length is not
 `shards` (with one shard, any list). `shard-plan` writes the plan to the step summary; each
 `browser-shard` leg runs `-p gate.pytest_shard --shard=k/N` with its own
-`TEST_AUTH_CACHE_DIR`, data prefix `w<k>` (`TEST_DATA_PREFIX`), login (secret
+`TEST_AUTH_CACHE_DIR`, data prefix `w<k>` (`TEST_WORKER_PREFIX`, read by the shard plugin and `core.run_id`), login (secret
 `LOGIN_PASSWORD_<k>`, else the environment's) and executed floor `ceil(min/N)`;
 `browser-shard-merge` runs `gate.merge` (an incomplete merge fails the run) and judges run
 trust once over the shared `TEST_RUN_ID` at the full floor (`gate.integrity --merge`).

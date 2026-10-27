@@ -64,7 +64,7 @@ def test_each_shard_gets_its_own_variables_and_a_proportional_floor():
     env = shard_env(planned, 2, 3, environ={"RUN_TRUST_MIN_EXECUTED": "10"})
     assert env == {
         "TEST_AUTH_CACHE_DIR": "reports/auth-cache/w2",
-        "TEST_DATA_PREFIX": "w2",
+        "TEST_WORKER_PREFIX": "w2",
         "RUN_TRUST_MIN_EXECUTED": "4",  # ceil(10 / 3)
         "LOGIN_USERNAME": "u2",
     }
@@ -95,7 +95,7 @@ def test_run_with_shard_spawns_the_shard_command_and_environment():
     assert code == 0
     argv, env = spawned[0]
     assert "--shard=1/2" in argv and env["LOGIN_USERNAME"] == "one"
-    assert env["TEST_DATA_PREFIX"] == "w1"
+    assert env["TEST_WORKER_PREFIX"] == "w1"
 
 
 def test_run_with_a_bad_shard_is_an_input_error():

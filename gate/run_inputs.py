@@ -61,7 +61,7 @@ RELEASE_CANDIDATE_ENV = "RELEASE_CANDIDATE"
 # Per-shard isolation the shard's tests read (the data prefix and the user pool are wired
 # by the parallel-run work; this module only sets the variables).
 AUTH_CACHE_ENV = "TEST_AUTH_CACHE_DIR"
-DATA_PREFIX_ENV = "TEST_DATA_PREFIX"
+DATA_PREFIX_ENV = "TEST_WORKER_PREFIX"
 MIN_EXECUTED_ENV = "RUN_TRUST_MIN_EXECUTED"
 DEFAULT_MIN_EXECUTED = 10
 
