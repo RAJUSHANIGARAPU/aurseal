@@ -63,6 +63,29 @@ $ echo $?
 1
 ```
 
+## Consumer fields against the published API document
+
+`contract_testing/consumed_fields.py` needs no older document and no live
+call: it reads the API document the deployed service publishes and requires
+every field and route its consumers declare they read.
+
+```bash
+python -m contract_testing.consumed_fields published-openapi.json consumed.yaml
+```
+
+```yaml
+schemas:
+  Subscription: [id, number, status]
+routes:
+  - GET /subscriptions/{id}
+  - [POST, "/subscriptions/{id}/drafts"]
+```
+
+`missing(document, consumed, routes)` returns `Schema.field` and `METHOD path`
+entries the document lacks. Schema properties are read through `$ref` and
+`allOf`; a path matches once a servlet or gateway prefix is dropped, and path
+parameters match whatever they are named. Exit 1 when something is missing.
+
 ## Honest limits
 
 - The schema diff only knows what the spec says; an undocumented behaviour change passes.
