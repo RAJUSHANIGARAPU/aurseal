@@ -30,6 +30,9 @@ Three classifiers ship here:
   rejection signal.
 * :func:`refusal_outcome`: a forbidden change inside an edit flow. Only
   ``REFUSED`` passes.
+* :func:`submit_rule_outcome`: a validation that fires on submit, judged from a
+  :class:`ui.components.submit_outcome.SubmitResult`. An unmet precondition (another
+  required input empty, the probe value gone before the click) is an abstention.
 """
 
 from __future__ import annotations
@@ -39,7 +42,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Generic, TypeVar
+from typing import Generic, Protocol, TypeVar
 
 from verification.evidence_verdict import EvidenceVerdict
 
@@ -636,6 +639,69 @@ def refusal_outcome(
     return RefusalClassifier(expected_message).classify(observations)
 
 
+# ---------------------------------------------------------------------------
+# a validation that fires on submit
+# ---------------------------------------------------------------------------
+
+
+class SubmitObservation(Protocol):
+    """What :func:`submit_rule_outcome` reads; ``SubmitResult`` satisfies it."""
+
+    exercised: bool
+    not_exercised_reason: str | None
+    status: int | None
+    advanced: bool | None
+
+    @property
+    def rejected(self) -> bool: ...
+
+    def mentions(self, text: str) -> bool: ...
+
+    def describe(self) -> str: ...
+
+
+class SubmitRuleState(OutcomeState):
+    REFUSED_AT_SUBMIT = (True, True)
+    REFUSED_WITHOUT_THE_MESSAGE = (True, False)
+    ACCEPTED = (True, False)
+    NOT_EXERCISED = (False, False)
+    NO_VERDICT_OUTCOME_UNKNOWN = (False, False)
+
+
+def submit_rule_outcome(
+    result: SubmitObservation, expected_message: str | None = None
+) -> Verdict[SubmitObservation]:
+    """Refused (with ``expected_message`` when given), accepted, or no verdict at all."""
+    s = SubmitRuleState
+    tail = f"Observed: {result.describe()}."
+    if not result.exercised:
+        return Verdict(
+            s.NOT_EXERCISED,
+            f"NOT EXERCISED: {result.not_exercised_reason}; nothing was submitted. {tail}",
+            result,
+        )
+    if result.rejected:
+        if expected_message and not result.mentions(expected_message):
+            return Verdict(
+                s.REFUSED_WITHOUT_THE_MESSAGE,
+                f'REFUSED, UNATTRIBUTED: the submit was refused but "{expected_message}" never '
+                f"appeared, so the refusal cannot be credited to this rule. {tail}",
+                result,
+            )
+        return Verdict(s.REFUSED_AT_SUBMIT, f"REFUSED AT SUBMIT as required. {tail}", result)
+    if result.advanced or (result.status is not None and 200 <= result.status < 300):
+        return Verdict(
+            s.ACCEPTED,
+            f"ACCEPTED: the bad value was submitted and nothing refused it. {tail}",
+            result,
+        )
+    return Verdict(
+        s.NO_VERDICT_OUTCOME_UNKNOWN,
+        f"NOT EVALUATED: no rejection signal and no sign of acceptance. {tail}",
+        result,
+    )
+
+
 __all__ = [
     "DEFAULT_REFUSAL_MESSAGE",
     "OutcomeClassifier",
@@ -651,9 +717,12 @@ __all__ = [
     "StepObservations",
     "StepOutcomeClassifier",
     "StepState",
+    "SubmitObservation",
+    "SubmitRuleState",
     "Verdict",
     "expected_step_state",
     "join_block_values",
     "refusal_outcome",
     "step_outcome",
+    "submit_rule_outcome",
 ]

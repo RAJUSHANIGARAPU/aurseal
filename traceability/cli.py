@@ -388,6 +388,13 @@ def _release(sub: argparse._SubParsersAction) -> None:
     d.add_argument("--rootdir", default=".")
     d.add_argument("--out", default="reports/release")
     d.add_argument("--save", action="store_true", help="with --db: store candidate + verdict")
+    d.add_argument(
+        "--release-line", help="detectors whose fix ships in another line are out of scope"
+    )
+    d.add_argument(
+        "--known-defects",
+        help="known-defects manifest file or directory: the fix_line of each defect",
+    )
     d.set_defaults(func=_release_decide)
 
 
@@ -416,6 +423,12 @@ def _release_decide(args: argparse.Namespace) -> int:
     candidate = Candidate(
         args.release_id, args.candidate, args.version, args.commit, plan.id if plan else None
     )
+    fix_lines = None
+    if args.known_defects:
+        from verification.known_defects_manifest import fix_lines as manifest_fix_lines
+        from verification.known_defects_manifest import load_manifest
+
+        fix_lines = manifest_fix_lines(load_manifest(args.known_defects))
     source, _scope, store = source_from_args(args)
     try:
         decision = decide_release(
@@ -427,6 +440,8 @@ def _release_decide(args: argparse.Namespace) -> int:
             plan=plan,
             selection=selection,
             open_defects=open_defects_provider(),
+            release_line=args.release_line,
+            fix_lines=fix_lines,
         )
         doc = decision_json(decision)
         if store is not None and args.save:

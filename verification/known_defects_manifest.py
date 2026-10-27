@@ -9,7 +9,8 @@ finding ids keeps what is known to be wrong next to the data rather than in code
       "samples": ["samples/monthly-statement.complete.json"],
       "open_issues": [
         {"issue": "BUG-142", "summary": "rounding", "notes": "totals off by a cent",
-         "seen_in": "statement 2024-03, line 4", "finding": "TOTAL-MISMATCH"},
+         "seen_in": "statement 2024-03, line 4", "finding": "TOTAL-MISMATCH",
+         "fix_line": "2.4"},
         {"issue": "BUG-150", "summary": "wording", "notes": "old footer text"}]}]
 
 For an accessibility manifest the ``template`` is the route path of the screen.
@@ -22,6 +23,12 @@ For an accessibility manifest the ``template`` is the route path of the screen.
 * without ``finding`` it is a *note*: quoted in the failure message, so a red check reads
   "known broken, tracked as BUG-150" instead of looking like a broken test. It excuses
   nothing.
+
+``fix_line`` (optional) names the release line the fix ships in. A release verdict for
+another line lists that detector as out of scope (``python -m traceability release decide
+--release-line``; :func:`fix_lines` builds the mapping), and ``known_defect(...,
+fix_line=...)`` with ``--release-line`` deselects the test from that line's gate. It is
+still runnable on demand: without ``--release-line`` nothing is deselected.
 
 Excusing is silent and asserting is not, so the deal needs guards. :func:`check_manifest`
 lists every way an issue could be excused without being asserted (a finding id nothing
@@ -49,6 +56,7 @@ class OpenIssue:
     notes: str = ""
     seen_in: str = ""
     finding: str | None = None
+    fix_line: str | None = None
 
     @property
     def is_detector(self) -> bool:
@@ -116,6 +124,7 @@ def parse_manifest(raw: object, source: Path | None = None) -> list[ManifestEntr
                 notes=str(d.get("notes") or ""),
                 seen_in=str(d.get("seen_in") or ""),
                 finding=d.get("finding") or None,
+                fix_line=str(d["fix_line"]).strip() if d.get("fix_line") else None,
             )
             for d in item.get("open_issues") or ()
         )
@@ -130,6 +139,25 @@ def parse_manifest(raw: object, source: Path | None = None) -> list[ManifestEntr
             )
         )
     return entries
+
+
+def fix_lines(entries: Iterable[ManifestEntry]) -> dict[str, str]:
+    """``{issue id: release line}`` for every open issue that names its ``fix_line``.
+
+    The same issue on two templates with two different lines is a manifest error.
+    """
+    lines: dict[str, str] = {}
+    for entry in entries:
+        for issue in entry.open_issues:
+            if not issue.fix_line:
+                continue
+            known = lines.setdefault(issue.issue, issue.fix_line)
+            if known != issue.fix_line:
+                raise ValueError(
+                    f"{issue.issue} names two fix lines ({known}, {issue.fix_line}) "
+                    f"in {entry.source or 'the manifest'}"
+                )
+    return lines
 
 
 def by_template(entries: Iterable[ManifestEntry], template: str) -> ManifestEntry | None:

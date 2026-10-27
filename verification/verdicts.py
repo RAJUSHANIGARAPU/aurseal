@@ -125,6 +125,11 @@ def current_nodeid() -> str:
     return _CURRENT_TEST.sub("", os.environ.get("PYTEST_CURRENT_TEST", ""))
 
 
+def _prefixed(detail: object) -> object:
+    prefix = getattr(_suppressed, "prefix", "")
+    return f"{prefix} {detail or ''}".strip() if prefix else detail
+
+
 def flatten(detail: object, limit: int = DETAIL_LIMIT) -> str:
     """One readable line: whitespace collapsed, cut at ``limit`` characters."""
     flat = " ".join(str(detail or "").split())
@@ -145,6 +150,22 @@ def suppress_recording() -> Iterator[None]:
         yield
     finally:
         _suppressed.on = previous
+
+
+@contextmanager
+def detail_prefix(prefix: str) -> Iterator[None]:
+    """Prefix every verdict detail recorded inside the block (this thread only).
+
+    For a qualification that applies to every verdict of a stretch of code, such as
+    ``[version 2.4.0 stated, not measured]``: the caveat travels with each row instead
+    of living in one log line nobody reads next to the verdict.
+    """
+    previous = getattr(_suppressed, "prefix", "")
+    _suppressed.prefix = f"{previous} {prefix}".strip() if prefix else previous
+    try:
+        yield
+    finally:
+        _suppressed.prefix = previous
 
 
 def record_verdict(
@@ -173,7 +194,7 @@ def record_verdict(
         "kind": kind.value,
         "ticket": ticket,
         "verdict": verdict.value,
-        "detail": flatten(detail),
+        "detail": flatten(_prefixed(detail)),
         "subject": subject if subject is not None else ticket,
         "timestamp": datetime.now(tz=timezone.utc).isoformat(),
     }

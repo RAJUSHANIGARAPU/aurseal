@@ -15,6 +15,11 @@ The verdict summarises evidence; it does not invent any. Composition, in order:
 5. **Plan exit criteria**, folded in as they are: ``unmet`` blocks, ``no_evidence`` is no
    verdict.
 
+**Release lines.** A detector whose defect is fixed in another release line (``fix_line``
+on its known-defects manifest entry) cannot hold this release: with ``release_line`` set,
+its verdict is listed under *out of scope* and neither blocks nor counts as no verdict. A
+fix this release does not contain is not this release's evidence either way.
+
 A **waiver** (criterion, owner, reason, expiry) turns one blocking or no-verdict reason
 into a waived one; the result is GO_WITH_WAIVERS and every waiver is printed. An expired
 waiver is ignored (and said so). The decision carries a hash of all its inputs: the same
@@ -51,6 +56,7 @@ KNOWN_RED = {
 }
 
 BLOCK, NO_VERDICT, ATTENTION, INFO, WAIVED = "block", "no_verdict", "attention", "info", "waived"
+OUT_OF_SCOPE = "out_of_scope"
 
 
 class ReleaseVerdict(str, Enum):
@@ -89,7 +95,7 @@ class Candidate:
 @dataclass(frozen=True)
 class Reason:
     kind: str  # integrity | detector | requirement | defect | plan | waiver | policy
-    severity: str  # block | no_verdict | attention | info | waived
+    severity: str  # block | no_verdict | attention | info | waived | out_of_scope
     criterion: str  # what a waiver names, e.g. "requirement:REQ-4"
     exhibit: str  # where to look: run id + marker, verdict row, matrix row, defect id
     message: str
@@ -274,6 +280,7 @@ class ReleaseDecision:
             (NO_VERDICT, "No verdict"),
             (WAIVED, "Waived"),
             (ATTENTION, "Attention"),
+            (OUT_OF_SCOPE, "Out of scope"),
             (INFO, "Information"),
         ):
             group = [r for r in self.reasons if r.severity == severity]
@@ -335,9 +342,15 @@ def _requirement_reasons(matrix: Matrix, policy: ReleasePolicy) -> list[Reason]:
     return out
 
 
-def _detector_reasons(verdicts: Iterable[Mapping[str, Any]], policy: ReleasePolicy) -> list[Reason]:
+def _detector_reasons(
+    verdicts: Iterable[Mapping[str, Any]],
+    policy: ReleasePolicy,
+    release_line: str | None = None,
+    fix_lines: Mapping[str, str] | None = None,
+) -> list[Reason]:
     rows = list(verdicts)
     out = []
+    fix_lines = fix_lines or {}
     for record in rows:
         if record.get("kind") not in ("expected_red", "coverage"):
             out.append(
@@ -362,7 +375,18 @@ def _detector_reasons(verdicts: Iterable[Mapping[str, Any]], policy: ReleasePoli
     for ticket, agg in aggregate_defects(rows).items():
         criterion = f"detector:{ticket}"
         exhibit = f"verdicts for {ticket} ({agg.records} row(s))"
-        if agg.verdict in policy.detector_block:
+        line = fix_lines.get(ticket)
+        if release_line and line and line != release_line:
+            out.append(
+                Reason(
+                    "detector",
+                    OUT_OF_SCOPE,
+                    criterion,
+                    exhibit,
+                    f"{agg.verdict}: fix ships in release line {line}, not {release_line}",
+                )
+            )
+        elif agg.verdict in policy.detector_block:
             out.append(
                 Reason("detector", BLOCK, criterion, exhibit, f"{agg.verdict}: {agg.detail}")
             )
@@ -487,8 +511,14 @@ def decide_release(
     plan: Any | None = None,
     selection: Any | None = None,
     open_defects: Callable[[], list[Mapping[str, Any]]] | None = None,
+    release_line: str | None = None,
+    fix_lines: Mapping[str, str] | None = None,
 ) -> ReleaseDecision:
-    """Compose the verdict for ``candidate`` from the runs ``source`` exposes."""
+    """Compose the verdict for ``candidate`` from the runs ``source`` exposes.
+
+    ``fix_lines`` maps a defect id to the release line its fix ships in; with
+    ``release_line`` set, detectors for other lines are out of scope.
+    """
     today = (now or datetime.now(tz=timezone.utc)).date()
     all_runs = source.runs()
     view = EvidenceView(source)
@@ -515,7 +545,7 @@ def decide_release(
                 "no run is evidence (no run with run-trust PASS)",
             )
         )
-    reasons += _detector_reasons(view.verdicts(), policy)
+    reasons += _detector_reasons(view.verdicts(), policy, release_line, fix_lines)
     requirement_ids: tuple[str, ...] = ()
     if plan is not None:
         from traceability.plans import plan_requirements
@@ -572,7 +602,10 @@ def decide_release(
             if w.applies(candidate.release_id, today)
         ),
     }
-    order = {BLOCK: 0, NO_VERDICT: 1, WAIVED: 2, ATTENTION: 3, INFO: 4}
+    if release_line:  # absent otherwise, so earlier verdicts keep their hash
+        inputs["release_line"] = release_line
+        inputs["fix_lines"] = sorted((fix_lines or {}).items())
+    order = {BLOCK: 0, NO_VERDICT: 1, WAIVED: 2, ATTENTION: 3, OUT_OF_SCOPE: 4, INFO: 5}
     reasons.sort(key=lambda r: (order[r.severity], r.kind, r.criterion))
     return ReleaseDecision(
         candidate=candidate,

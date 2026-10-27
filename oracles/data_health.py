@@ -14,6 +14,10 @@ Three pieces, kept apart so each is testable without an environment:
 * :class:`Scanner` — pages through listings with hard caps; whenever a cap cuts
   the scan short the report says so, because a capped scan that reports
   "0 findings" is not a clean bill of health.
+* :func:`windowed` — reads a listing in creation-date windows, oldest first, one page
+  per window, for listings whose order is unstable under a filter or whose page-size cap
+  hides older records. A window that reports more records than it returned is noted and
+  the read marked incomplete; records on a window edge are counted once.
 
 Built-in rule factories cover the common defect shapes; write your own as any
 ``(record) -> list[str]`` callable. Return :class:`Unverified` for a result the
@@ -535,6 +539,87 @@ class Scanner:
             if report.abort_reason:
                 break
         return report
+
+
+# ---------------------------------------------------------------------------
+# windowed paging
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class WindowedListing:
+    rows: list[Record] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+    """Why the read is incomplete (a truncated window, a refused read)."""
+    requests: int = 0
+    windows: int = 0
+
+    @property
+    def complete(self) -> bool:
+        return not self.notes
+
+
+def windowed(
+    get: Callable[[str, Mapping[str, Any] | None], ApiResponse] | GetOnlyApi,
+    path: str,
+    *,
+    start: datetime,
+    end: datetime,
+    window: timedelta,
+    from_param: str,
+    to_param: str,
+    total_of: Callable[[Any], int | None],
+    page_size: int,
+    items_path: str = "items",
+    size_param: str = "size",
+    id_of: Callable[[Record], str] = lambda r: str(r.get("id", "?")),
+    report: ScanReport | None = None,
+) -> WindowedListing:
+    """Read ``path`` in ``[t, t + window)`` slices from ``start`` to ``end``, one page each.
+
+    ``total_of(body)`` is the record count the window reports (None when the listing
+    does not say); more than the page returned means the window was truncated: noted,
+    and the read is incomplete, so narrow the window rather than trust the result. Rows
+    are de-duplicated by ``id_of`` across window edges. With ``report`` the notes and
+    the request count are added to that scan report too.
+    """
+    if window <= timedelta(0):
+        raise ValueError("windowed needs a positive window")
+    fetch = get.get if isinstance(get, GetOnlyApi) else get
+    listing = WindowedListing()
+    seen: set[str] = set()
+    t = start
+    while t < end:
+        upper = min(t + window, end)
+        params = {from_param: t.isoformat(), to_param: upper.isoformat(), size_param: page_size}
+        listing.requests += 1
+        listing.windows += 1
+        label = f"{path} [{t.isoformat()}, {upper.isoformat()})"
+        response = fetch(path, params)
+        if not response.is_success:
+            listing.notes.append(f"{label}: HTTP {response.status}; later windows not read")
+            break
+        try:
+            body = response.json()
+            items = resolve_path(body, items_path) if items_path else body
+        except (ValueError, KeyError, IndexError, TypeError) as exc:
+            listing.notes.append(f"{label}: unreadable listing ({exc}); later windows not read")
+            break
+        total = total_of(body)
+        if total is not None and total > len(items):
+            note = f"{label}: reports {total} record(s), read {len(items)}; narrow the window"
+            listing.notes.append(note)
+            logger.warning("data-health windowed read truncated: %s", note)
+        for item in items:
+            key = id_of(item)
+            if key not in seen:
+                seen.add(key)
+                listing.rows.append(item)
+        t = upper
+    if report is not None:
+        report.requests += listing.requests
+        report.notes.extend(listing.notes)
+    return listing
 
 
 # ---------------------------------------------------------------------------

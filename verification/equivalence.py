@@ -9,7 +9,14 @@ Rules are matched by path pattern (see ``verification._paths``):
 
 * ``ignore``      — volatile fields such as ids, timestamps and versions;
 * ``tolerances``  — numeric fields compared within ``abs_tol``/``rel_tol``;
-* ``date_shifts`` — date fields where ``right`` is expected at ``left`` + shift.
+* ``date_shifts`` — date fields where ``right`` is expected at ``left`` + shift;
+* ``keyed``       — lists paired by a business key (``{pattern: key_fn}``) instead of by
+  position. Generated ids get renumbered and array order is creation order, not
+  meaning: pairing ``invoice.lines`` by ``(code, period)`` compares the line that means
+  the same thing on both sides. A key on one side only is ``missing_left``/``right``; a
+  key that occurs twice on one side is a ``duplicate_key`` difference, never a guess.
+  Keyed items render as ``lines.<SEATS|2026-01>``, so ``lines[*].id`` still addresses
+  their ids.
 
 Ignored paths are reported too: an oracle that ignores everything compares
 nothing, and that should be visible in the output rather than look like a pass.
@@ -18,7 +25,7 @@ nothing, and that should be visible in the output rather than look like a pass.
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Hashable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date
 from enum import Enum
@@ -44,6 +51,7 @@ class DiffKind(str, Enum):
     MISSING_LEFT = "missing_left"
     MISSING_RIGHT = "missing_right"
     LENGTH = "length"
+    DUPLICATE_KEY = "duplicate_key"
 
 
 @dataclass(frozen=True)
@@ -109,11 +117,13 @@ class EquivalenceOracle:
         ignore: Iterable[str] = (),
         tolerances: Mapping[str, Tolerance] | None = None,
         date_shifts: Mapping[str, Shift] | None = None,
+        keyed: Mapping[str, Callable[[Any], Hashable]] | None = None,
     ) -> None:
         self.ignore = tuple(ignore)
         self.tolerances = dict(tolerances or {})
         self.date_shifts = dict(date_shifts or {})
-        for pattern in (*self.ignore, *self.tolerances, *self.date_shifts):
+        self.keyed = dict(keyed or {})
+        for pattern in (*self.ignore, *self.tolerances, *self.date_shifts, *self.keyed):
             _paths.parse(pattern)  # fail at construction on a malformed pattern
 
     def compare(self, left: Any, right: Any) -> EquivalenceReport:
@@ -136,6 +146,10 @@ class EquivalenceOracle:
                     self._walk(left[key], right[key], child, report)
             return
         if _is_list(left) and _is_list(right):
+            key_pattern = _paths.matches_any(self.keyed, path)
+            if key_pattern is not None:
+                self._walk_keyed(left, right, path, self.keyed[key_pattern], report)
+                return
             if len(left) != len(right):
                 report.differences.append(
                     Difference(_paths.render(path), DiffKind.LENGTH, len(left), len(right), "exact")
@@ -147,6 +161,36 @@ class EquivalenceOracle:
         verdict = self._leaf(left, right, path)
         if verdict is not None:
             report.differences.append(verdict)
+
+    def _walk_keyed(
+        self,
+        left: Sequence[Any],
+        right: Sequence[Any],
+        path: Path,
+        key_fn: Callable[[Any], Hashable],
+        report: EquivalenceReport,
+    ) -> None:
+        sides = (_group(left, key_fn), _group(right, key_fn))
+        keys = list(dict.fromkeys([*sides[0], *sides[1]]))
+        for key in keys:
+            child = (*path, _key_segment(key))
+            lefts, rights = sides[0].get(key, []), sides[1].get(key, [])
+            if len(lefts) > 1 or len(rights) > 1:
+                report.differences.append(
+                    Difference(
+                        _paths.render(child),
+                        DiffKind.DUPLICATE_KEY,
+                        len(lefts),
+                        len(rights),
+                        "unique key (occurrences per side)",
+                    )
+                )
+            elif not rights:
+                self._missing(child, lefts[0], DiffKind.MISSING_RIGHT, report)
+            elif not lefts:
+                self._missing(child, rights[0], DiffKind.MISSING_LEFT, report)
+            else:
+                self._walk(lefts[0], rights[0], child, report)
 
     def _missing(self, path: Path, value: Any, kind: DiffKind, report: EquivalenceReport) -> None:
         if _paths.matches_any(self.ignore, path):
@@ -198,6 +242,18 @@ def assert_equivalent(
     if not report.equivalent:
         raise AssertionError(report.render(left_label, right_label))
     return report
+
+
+def _group(items: Sequence[Any], key_fn: Callable[[Any], Hashable]) -> dict[Hashable, list[Any]]:
+    grouped: dict[Hashable, list[Any]] = {}
+    for item in items:
+        grouped.setdefault(key_fn(item), []).append(item)
+    return grouped
+
+
+def _key_segment(key: Hashable) -> str:
+    parts = key if isinstance(key, tuple) else (key,)
+    return "<" + "|".join(str(p) for p in parts) + ">"
 
 
 def _is_list(value: Any) -> bool:

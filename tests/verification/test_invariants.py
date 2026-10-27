@@ -109,3 +109,42 @@ def test_sets_compose_and_custom_rules_plug_in():
 def test_no_item_in_state_requires_a_state():
     with pytest.raises(ValueError):
         no_item_in_state("tasks", "status")
+
+
+# --- known wrong readings ---------------------------------------------------------
+
+
+def test_a_miss_equal_to_the_old_value_says_unchanged():
+    rule = scaled_by("price", 1.02, rel_tol=1e-9)
+    (violation,) = InvariantSet(rule).check({"price": 100.0}, {"price": 100.0})
+    assert violation.reason.endswith("got 100.0 (unchanged)")
+
+
+def test_a_miss_names_every_matching_wrong_model():
+    rule = scaled_by(
+        "price",
+        1.02,
+        abs_tol=1e-9,
+        readings={"bare factor": lambda old: old * 0.02, "factor only": lambda _old: 0.02 * 100},
+    )
+    (violation,) = InvariantSet(rule).check({"price": 100.0}, {"price": 2.0})
+    assert "got 2.0 (bare factor, factor only)" in violation.reason
+
+
+def test_a_miss_matching_no_known_model_names_none():
+    (violation,) = InvariantSet(scaled_by("price", 1.02)).check({"price": 100.0}, {"price": 7.0})
+    assert violation.reason == "expected 102.0 (100.0 x 1.02), got 7.0"
+
+
+def test_a_date_that_did_not_move_says_unchanged_and_other_readings_apply():
+    from datetime import date, timedelta
+
+    rule = advanced_by(
+        "term_end", months=1, readings={"advanced by days": lambda old: old + timedelta(days=30)}
+    )
+    (same,) = InvariantSet(rule).check({"term_end": "2026-01-31"}, {"term_end": "2026-01-31"})
+    assert "got 2026-01-31 (unchanged)" in same.reason
+    (days,) = InvariantSet(rule).check({"term_end": "2026-01-31"}, {"term_end": "2026-03-02"})
+    assert "(advanced by days)" in days.reason
+    moved = InvariantSet(rule).check({"term_end": date(2026, 1, 31)}, {"term_end": "2026-02-28"})
+    assert moved == []
