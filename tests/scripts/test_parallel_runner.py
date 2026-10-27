@@ -69,6 +69,20 @@ class TestContainerImage:
     def test_headed_on_a_virtual_display(self):
         assert 'xvfb-run -a --server-args="-screen 0 1920x1080x24"' in CONTAINER.read_text()
 
+    def test_the_venv_is_built_without_ensurepip_and_heals(self):
+        """The image's Python has no ensurepip; a venv that cannot run pip is rebuilt."""
+        text = CONTAINER.read_text(encoding="utf-8")
+        assert "python3 -m venv --system-site-packages --without-pip /venv" in text
+        assert "/venv/bin/python -m pip install" in text and "/venv/bin/pip " not in text
+        heal = text.index("if ! /venv/bin/python -m pip --version")
+        assert heal < text.index("find /venv -mindepth 1 -delete") < text.index("-m venv")
+        # the marker is written only after the install succeeded (set -e stops before it)
+        assert text.index("-m pip install") < text.index("> /venv/.requirements.sha256")
+
+    def test_an_init_process_reaps_the_display(self):
+        """Without --init, xvfb-run as PID 1 can hang after the command has finished."""
+        assert "docker run --rm --init" in CONTAINER.read_text(encoding="utf-8")
+
     def test_no_dotted_variable_names_are_passed(self):
         """xvfb-run starts the command through /bin/sh, which drops names with a dot."""
         passed = re.findall(r"-e ([A-Za-z0-9_.]+)", CONTAINER.read_text(encoding="utf-8"))

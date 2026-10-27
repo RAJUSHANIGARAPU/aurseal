@@ -44,25 +44,30 @@ if [ -t 0 ] && [ -t 1 ]; then
     TTY_FLAGS="-it"
 fi
 
-# Runs inside the container: a venv on the shared volume (reusing the image's
-# Playwright and browsers), refreshed only when requirements.txt changed, then the
-# command on a virtual display.
+# Runs inside the container: a venv on the shared volume, refreshed only when
+# requirements.txt changed, then the command on a virtual display. The image's Python
+# has no ensurepip, so the venv is built --without-pip and installs through the
+# system pip it sees via --system-site-packages (the browsers come from the image).
+# A venv whose python cannot run pip (a half-built one from an earlier failure) is
+# wiped and rebuilt; the requirements marker is written only after an install worked.
 BOOTSTRAP='
 set -euo pipefail
-if [ ! -x /venv/bin/python ]; then
-    python -m venv --system-site-packages /venv
+if ! /venv/bin/python -m pip --version >/dev/null 2>&1; then
+    find /venv -mindepth 1 -delete
+    python3 -m venv --system-site-packages --without-pip /venv
 fi
 want="$(sha256sum requirements.txt | cut -d" " -f1)"
 have="$(cat /venv/.requirements.sha256 2>/dev/null || true)"
 if [ "$want" != "$have" ]; then
-    /venv/bin/pip install --quiet --disable-pip-version-check -r requirements.txt
+    /venv/bin/python -m pip install --quiet --disable-pip-version-check -r requirements.txt
     echo "$want" > /venv/.requirements.sha256
 fi
 export PATH="/venv/bin:$PATH"
 exec xvfb-run -a --server-args="-screen 0 1920x1080x24" "$@"
 '
 
-exec docker run --rm "$TTY_FLAGS" --ipc=host \
+# --init: with xvfb-run as PID 1 the container could hang after the command finished.
+exec docker run --rm --init "$TTY_FLAGS" --ipc=host \
     -v "$ROOT":/work -w /work \
     -v "$CACHE_VOLUME":/cache \
     -v "$VENV_VOLUME":/venv \
