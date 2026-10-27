@@ -213,6 +213,11 @@ How it works:
   no such frame, such as a plain assertion in the test body, never gates the group.
 - Timeouts don't gate the group: a timeout against a shared environment signals load, not
   a broken step. They are logged and peers keep running.
+- A failure while an upstream lookup was timing out doesn't gate either. The circuit
+  breaker counts upstream timeouts per process (`upstream_timeouts()`,
+  `last_upstream_timeout()`); the count is sampled when a grouped test starts, and a test
+  that fails after it rose logs "failed after an upstream timeout (<dependency>), peers
+  keep running". Same switch as timeouts.
 - Only a *final* failure counts. An attempt pytest-rerunfailures will retry gates nothing.
 - Every grouped test also gets `xdist_group("journey_group:<group>")`. With
   `--dist loadgroup` the whole group runs on one worker, so fail-fast holds across it.
@@ -221,7 +226,7 @@ How it works:
 | Variable | Default | Meaning |
 |---|---|---|
 | `FAILFAST_JOURNEY_GROUP` | unset | `true` enables skipping; when unset, skipping is on if `CI` is set |
-| `JOURNEY_GROUP_TOLERATE_TIMEOUTS` | `true` | `false` lets timeouts gate the group too |
+| `JOURNEY_GROUP_TOLERATE_TIMEOUTS` | `true` | `false` lets timeouts and failures after an upstream timeout gate the group too |
 | `FAILFAST_PAGE_PATHS` | `ui/pages/` | comma-separated path fragments that identify page-object frames |
 
 Failures are always recorded; only the skipping is switched.

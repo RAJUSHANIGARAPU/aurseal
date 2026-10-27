@@ -15,7 +15,9 @@ the evidence:
 | `UNCOVERED` | no test links to the requirement |
 | `NOT_RUN` | linked tests exist, none executed in scope |
 | `UNVERIFIED` | results exist only from runs whose run-trust verdict is FAIL: not evidence |
-| `FAILING` | a linked test failed or errored, or its detector reported `cleared`, `signature_mismatch` or `closed_regressed` |
+| `FAILING` | a linked test failed or errored, or its detector reported `signature_mismatch` or `closed_regressed` |
+| `FIX_OBSERVED` | a linked detector reported `cleared`: verify the fix, then remove the wrapper |
+| `FLAKY` | a linked test failed and then passed on a rerun in the same run; the notes keep the first failure's message |
 | `KNOWN_DEFECT` | linked tests fail, explained by an expected-red `reproduces` verdict or a `known_defect` xfail |
 | `DRAFT_ONLY` | only generated tests awaiting review passed |
 | `PASSING` | linked tests passed; no coverage verdict proved the requirement |
@@ -27,6 +29,17 @@ requirement. A matrix with no `PROVED` row says so in its headline
 
 Rows are listed problems first (failing, uncovered, unverified, not run, ...). Links to
 ids that are not in the registry are listed separately.
+
+**Files.** `matrix --out DIR` writes `matrix.json`, `matrix.md`, `matrix.csv` (one line per
+requirement x linked test: `requirement, status, nodeid, outcome, run_id,
+coverage_verdict, detector_verdict, defects`; a requirement with no test gets one line with
+an empty nodeid) and `headline.txt`, one machine-readable line:
+`MATRIX requirements=6 results=14 FAILING=1 PASSING=3 ...`. When no result was read at all
+the line ends with `NO-EVIDENCE`. CI appends `matrix: <that line>` (or `MISSING`) to the
+step summary.
+
+**Too coarse.** A registry entry with `kind: epic` (or `container`) groups requirements; a
+test linked straight to it is listed under "Links too coarse", report only.
 
 **Latest result.** Per test, the newest *executed* result in scope; a newer skip does not
 erase an older executed answer. Runs from all lanes in scope are considered.

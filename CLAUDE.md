@@ -84,6 +84,17 @@ tools.rules_lint` (pre-commit and the offline job) keeps them live and named her
 Pushes to `main` are blocked by the `push-guard` pre-push hook and flagged by
 `main-push-check.yml`; see `docs/features/assistant-config.md`.
 
+## Traceability gates (offline job, `python -m traceability ...`)
+- `links --check-prose`: an id named in a test's name/docstring/param id must be a
+  `requirement` marker; `traceability/prose-baseline.txt` only shrinks.
+- `defects check`: every declared defect id is in the committed
+  `defects/status-snapshot.json` (refresh with `defects refresh --keys-from declared`);
+  floors and the drift baseline live in `defects/tracking.yaml`. Never sync in the gate.
+- `gaps ... --baseline`: new gaps and stale baseline entries both fail; only
+  `--write-baseline` in a reviewed PR rewrites it.
+- `release decide`: a missing input (delta, gap report, measured build, fresh snapshot)
+  is never GO. `--enforcement report` never changes the exit code.
+
 ## Constraints
 - No hardcoded URLs — use config files
 - Screenshots and artifacts go to `reports/` only

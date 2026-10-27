@@ -92,6 +92,10 @@ a case's links over REST.
 # Collect-only check of every marker id (exit 1 in strict mode when any is bad)
 REQUIREMENTS_STRICT=true python -m traceability links --check
 
+# Ids named only in prose (test name, docstring, class docstring, param id) must also be
+# marker links; traceability/prose-baseline.txt tolerates old mentions and only shrinks
+python -m traceability links --check-prose --baseline traceability/prose-baseline.txt
+
 # Show the links a run wrote, or store them (plus the registry) in the results store
 python -m traceability links --reports reports/traceability
 python -m traceability links --reports reports/traceability --db reports/results/results.db
