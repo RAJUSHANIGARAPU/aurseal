@@ -22,6 +22,10 @@ pytest -m regression -n auto   # CI runs this on main only
 python -m tools.config_preflight --old v1.yaml --new v2.yaml --records export.jsonl --fail-on-reject
 
 docker compose up
+
+# Release reports (docs/features/release-tooling.md)
+python -m tools.hotfix_mergeback --production deploy/production.yaml --fail-on-missing
+python -m tools.release_leadtime --manifest deploy/production.yaml --deployments deploy/log.csv
 ```
 
 ## Project structure

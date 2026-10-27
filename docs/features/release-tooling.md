@@ -1,13 +1,16 @@
-# Release tooling: promotion diff, config preflight
+# Release tooling: promotion diff, config preflight, hotfix merge-back, lead time
 
-Two developer tools under `tools/`. Neither is part of the test run, and both use only
-the Python standard library (the promotion diff needs PyYAML, already a project
-dependency, only for YAML manifests).
+Four developer tools under `tools/`. None is part of the test run, and all use only
+the Python standard library (PyYAML, already a project dependency, only for YAML
+manifests). The hotfix merge-back and lead-time reports reuse the promotion diff's
+manifest format, git helpers, ticket-key regex and noise file.
 
 | Tool | What it gives you |
 |---|---|
 | `tools/promotion_diff/promotion_diff.py` | what promoting one environment's versions onto another would ship, and what it would regress |
 | `tools/config_preflight/` | which stored records a new version of the workflow config would reject, before it is deployed |
+| `tools/hotfix_mergeback/` | which fixes run in production that the next release from mainline would drop ([README](../../tools/hotfix_mergeback/README.md)) |
+| `tools/release_leadtime/` | median and p90 of merge -> tag -> production per service, and the slowest changes ([README](../../tools/release_leadtime/README.md)) |
 
 Their tests are offline and run in the normal suite: `pytest tests/tools`.
 
