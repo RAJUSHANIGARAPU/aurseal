@@ -12,13 +12,23 @@ destination resolves to the default branch:
 * inside compound commands (``cd x && git push origin main``, ``;``, ``|``), but not inside
   a quoted string (``echo "git push origin main"`` is not a push).
 
-Two entry points:
+Entry points:
 
 * ``python -m tools.push_guard`` (or the file path) as a ``PreToolUse`` hook: reads the hook
   JSON from stdin, exits 2 with a one-line reason on stderr to block, 0 to allow;
 * ``python -m tools.push_guard deny-list`` prints the matching ``permissions.deny``
   entries (``origin`` and wildcard remotes, ``HEAD:`` forms, force variants) for
-  ``.claude/settings.json``.
+  ``.claude/settings.json``;
+* ``python -m tools.push_guard pre-push`` as a git ``pre-push`` hook, for every
+  contributor rather than one assistant: blocks when a pushed remote ref is the default
+  branch. As a plain git hook it reads the ``<local ref> <sha> <remote ref> <sha>`` lines
+  git writes to stdin (deletes included); under pre-commit, which keeps stdin to itself, it
+  reads ``PRE_COMMIT_REMOTE_BRANCH``. Exit 1 blocks. ``git push --no-verify`` skips any
+  pre-push hook, so the server-side rule (a ruleset requiring a pull request) stays the
+  real control;
+* ``python -m tools.push_guard merged-pr --repo owner/name --sha <sha>``: the detective
+  check CI runs on every default-branch push. Exit 0 when the commit belongs to a merged
+  pull request, 1 when it does not (a direct push), 2 when the API could not answer.
 
 The default branch name is read once, from ``PUSH_GUARD_BRANCH`` (default ``main``).
 """
@@ -30,7 +40,9 @@ import os
 import shlex
 import subprocess
 import sys
-from collections.abc import Iterator, Sequence
+import urllib.error
+import urllib.request
+from collections.abc import Callable, Iterator, Mapping, Sequence
 
 BRANCH_ENV = "PUSH_GUARD_BRANCH"
 DEFAULT_BRANCH = "main"
@@ -172,11 +184,118 @@ def hook(payload: str) -> tuple[int, str]:
     return 0, ""
 
 
+PRE_PUSH_BLOCK_EXIT = 1
+REMOTE_BRANCH_ENV = "PRE_COMMIT_REMOTE_BRANCH"
+
+
+def pushed_remote_refs(stdin_text: str, environ: Mapping[str, str]) -> list[str]:
+    """Remote refs of a push: git's stdin lines, else pre-commit's single remote branch."""
+    refs = []
+    for line in stdin_text.splitlines():
+        parts = line.split()
+        if len(parts) == 4:
+            refs.append(parts[2])
+    if not refs and (environ.get(REMOTE_BRANCH_ENV) or "").strip():
+        refs.append(environ[REMOTE_BRANCH_ENV].strip())
+    return refs
+
+
+def pre_push(
+    stdin_text: str, environ: Mapping[str, str] | None = None, branch: str | None = None
+) -> tuple[int, str]:
+    """Exit status and message for a git ``pre-push`` hook."""
+    environ = os.environ if environ is None else environ
+    target = branch or default_branch()
+    for ref in pushed_remote_refs(stdin_text, environ):
+        if ref.removeprefix("refs/heads/") == target:
+            return PRE_PUSH_BLOCK_EXIT, (
+                f"push guard: this push updates {target} ({ref}); open a pull request instead"
+            )
+    return 0, ""
+
+
+Fetch = Callable[[str, Mapping[str, str]], object]
+
+
+def _fetch_json(url: str, headers: Mapping[str, str]) -> object:
+    request = urllib.request.Request(url, headers=dict(headers))
+    with urllib.request.urlopen(request, timeout=20) as response:  # noqa: S310 - fixed API host
+        return json.loads(response.read().decode("utf-8"))
+
+
+def merged_pr(
+    repo: str,
+    sha: str,
+    environ: Mapping[str, str] | None = None,
+    fetch: Fetch = _fetch_json,
+    attempts: int = 3,
+    pause_s: float = 10.0,
+    sleep: Callable[[float], None] | None = None,
+) -> tuple[int, str]:
+    """0 when ``sha`` belongs to a merged pull request, 1 when not, 2 when unknown.
+
+    The association of a just-merged commit can lag the push event by seconds, so "no
+    merged pull request" is asked again ``attempts`` times before it is the answer.
+    """
+    import time
+
+    sleep = sleep or time.sleep
+    attempts = max(1, attempts)
+    for attempt in range(1, attempts + 1):
+        code, message = _merged_pr_once(repo, sha, environ, fetch)
+        if code != 1 or attempt == attempts:
+            return code, message
+        sleep(pause_s)
+    return code, message  # pragma: no cover - the loop always returns
+
+
+def _merged_pr_once(
+    repo: str, sha: str, environ: Mapping[str, str] | None, fetch: Fetch
+) -> tuple[int, str]:
+    environ = os.environ if environ is None else environ
+    api = (environ.get("GITHUB_API_URL") or "https://api.github.com").rstrip("/")
+    headers = {"Accept": "application/vnd.github+json"}
+    token = (environ.get("GITHUB_TOKEN") or environ.get("GH_TOKEN") or "").strip()
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    try:
+        pulls = fetch(f"{api}/repos/{repo}/commits/{sha}/pulls", headers)
+    except (urllib.error.URLError, OSError, ValueError) as exc:
+        return 2, f"merged-pr: could not ask the API about {sha[:12]}: {exc}"
+    if not isinstance(pulls, list):
+        return 2, f"merged-pr: unexpected API answer for {sha[:12]}"
+    merged = [p for p in pulls if isinstance(p, dict) and p.get("merged_at")]
+    if merged:
+        return 0, f"merged-pr: {sha[:12]} came in through pull request #{merged[0].get('number')}"
+    return 1, (
+        f"merged-pr: {sha[:12]} reached the default branch without a merged pull request "
+        "(a direct push). Require pull requests with a ruleset on the default branch."
+    )
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     if args[:1] == ["deny-list"]:
         print(json.dumps({"permissions": {"deny": deny_list()}}, indent=2))
         return 0
+    if args[:1] == ["pre-push"]:
+        stdin_text = "" if sys.stdin is None or sys.stdin.isatty() else sys.stdin.read()
+        code, message = pre_push(stdin_text)
+        if message:
+            print(message, file=sys.stderr)
+        return code
+    if args[:1] == ["merged-pr"]:
+        import argparse
+
+        parser = argparse.ArgumentParser(prog="python -m tools.push_guard merged-pr")
+        parser.add_argument("--repo", default=os.environ.get("GITHUB_REPOSITORY", ""))
+        parser.add_argument("--sha", default=os.environ.get("GITHUB_SHA", ""))
+        options = parser.parse_args(args[1:])
+        code, message = merged_pr(options.repo, options.sha)
+        stream = sys.stdout if code == 0 else sys.stderr
+        prefix = "" if code == 0 else "::error title=Direct push::" if code == 1 else "::error::"
+        print(prefix + message, file=stream)
+        return code
     code, message = hook(sys.stdin.read())
     if message:
         print(message, file=sys.stderr)

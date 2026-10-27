@@ -44,11 +44,25 @@ Wiring, in `.claude/settings.json` (keep the existing `attribution` block):
 }
 ```
 
+### Three layers, strongest last
+
+| Layer | Where | Stops | Gap |
+|---|---|---|---|
+| Commit and pre-push hooks | `.pre-commit-config.yaml`: `no-commit-to-branch --branch main`, and `push-guard` (`python -m tools.push_guard pre-push`, stage `pre-push`) | a commit on `main`, a push whose remote ref is `main` (every ref of the push when git's stdin is visible; under pre-commit, `PRE_COMMIT_REMOTE_BRANCH`) | only clones that ran `pre-commit install` (re-run it once: `pre-push` was added to `default_install_hook_types`); `--no-verify` skips it |
+| Detective CI check | `.github/workflows/main-push-check.yml` runs `python -m tools.push_guard merged-pr` on every push to `main` | nothing; it turns a direct push red, loudly | detects after the fact |
+| Assistant hook | `.claude/settings.json`: `permissions.deny` from `deny-list` plus the `PreToolUse` hook below | an assistant session pushing to `main` | only that assistant |
+
+The control that prevents rather than detects is a ruleset on `main` that requires a pull
+request: a repository setting on the hosting service, owned by the repository owner, about a
+minute to set up. Everything above is a backstop for it.
+
 ### Configuration
 
 | Variable | Default | Meaning |
 |---|---|---|
 | `PUSH_GUARD_BRANCH` | `main` | the protected default branch (read in one place) |
+| `PRE_COMMIT_REMOTE_BRANCH` | set by pre-commit | the remote ref the `pre-push` stage checks when stdin is not visible |
+| `GITHUB_TOKEN` | the job token | `merged-pr` asks `repos/{repo}/commits/{sha}/pulls`; exit 0 merged PR, 1 direct push (asked three times, the association can lag), 2 API unreachable |
 
 ### Example
 
@@ -74,6 +88,9 @@ guide (`CLAUDE.md`) does not name.
 python -m tools.rules_lint
 python -m tools.rules_lint --dir .claude/rules --guide CLAUDE.md
 ```
+
+It runs as the `rules-lint` pre-commit hook (on a change to a rules file or `CLAUDE.md`) and
+as the `Assistant rules lint` step of the offline CI job, so a rule cannot quietly rot.
 
 ### Configuration
 

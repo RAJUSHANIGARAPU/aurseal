@@ -1,0 +1,32 @@
+name: Main push check
+
+# Detective, not preventive: every commit on main should have come in through a merged pull
+# request. A direct push turns this red and says so. The preventive control is a ruleset on
+# main requiring a pull request (a repository setting), backed locally by the pre-push hook.
+# Why: docs/features/assistant-config.md#push-guard
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.sha }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  merged-pr:
+    name: Came in through a merged pull request
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version: "3.11"
+      - name: The pushed commit belongs to a merged pull request
+        run: python -m tools.push_guard merged-pr --repo "$GITHUB_REPOSITORY" --sha "$GITHUB_SHA"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
