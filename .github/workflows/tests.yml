@@ -160,8 +160,11 @@ jobs:
     timeout-minutes: 10
 
     steps:
+      # Full history only when a selective run needs the pull request's diff.
       - name: Checkout Code
         uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: ${{ (vars.SELECTIVE_TESTS == 'true' && github.event_name == 'pull_request') && '0' || '1' }}
 
       - name: Setup Python
         uses: actions/setup-python@v7.1.0
@@ -234,6 +237,7 @@ jobs:
       # The checkout directory is named after the repository; module names must not depend
       # on it. Why: docs/ci-decisions.md#repository-root
       - name: Run Offline Tests
+        if: vars.SELECTIVE_TESTS != 'true' || github.event_name != 'pull_request'
         run: pytest tests/ -n auto -m "not demo_ui and not draft and not render_check"
         env:
           RUN_TRUST: fail
@@ -241,6 +245,21 @@ jobs:
           REQUIREMENTS_STRICT: "true"
           EXT_CONFIG_REQUIRED: ${{ inputs.require_config_binding && 'true' || 'false' }}
           # No model helper may bill or hang CI; every test patches its transport anyway.
+          AI_TRANSPORT: none
+
+      # Opt-in (repository variable SELECTIVE_TESTS=true), pull requests only: the same lane
+      # narrowed to what the diff can affect; anything unmapped runs the whole lane.
+      # Why: docs/ci-decisions.md#selective-tests
+      - name: Run the offline tests this change can affect
+        if: vars.SELECTIVE_TESTS == 'true' && github.event_name == 'pull_request'
+        run: python -m gate.selective run
+        env:
+          CHANGE_BASE: ${{ github.event.pull_request.base.sha }}
+          CHANGE_HEAD: ${{ github.event.pull_request.head.sha }}
+          RUN_TRUST: fail
+          RUN_TRUST_LANE: offline
+          REQUIREMENTS_STRICT: "true"
+          EXT_CONFIG_REQUIRED: ${{ inputs.require_config_binding && 'true' || 'false' }}
           AI_TRANSPORT: none
 
       # The checkout is a second copy of a repository tree; nothing after the tests may scan it.

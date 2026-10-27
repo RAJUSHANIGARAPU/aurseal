@@ -1,0 +1,167 @@
+{
+  "_comment": "Area map for gate.selective (opt-in selective runs). An unmapped change runs the full suite. Validate with: python -m gate.selective check. Why: docs/ci-decisions.md#selective-tests",
+  "always_full": [
+    "conftest.py",
+    "**/conftest.py",
+    "core/**",
+    "gate/**",
+    "config/**",
+    "pyproject.toml",
+    "pytest.ini",
+    "requirements*.txt",
+    ".github/**"
+  ],
+  "areas": {
+    "api": {
+      "paths": ["api/**/*.py"],
+      "tests": [
+        "api/tests/",
+        "tests/api/",
+        "tests/api_agent/",
+        "tests/api_layer/",
+        "tests/core/",
+        "tests/demo_examples/",
+        "tests/memory/",
+        "tests/orchestration/"
+      ],
+      "markers": ["api", "contract"]
+    },
+    "autonomous_ui": {
+      "paths": ["autonomous_ui/**/*.py"],
+      "tests": ["tests/autonomous_ui/", "tests/core/", "tests/reporting/"]
+    },
+    "checks": {
+      "paths": ["checks/**/*.py"],
+      "tests": [
+        "tests/checks/",
+        "tests/contract_testing/",
+        "tests/core/",
+        "tests/demo_examples/",
+        "tests/gate/",
+        "tests/plugins/",
+        "tests/test_ci_selection.py"
+      ]
+    },
+    "contract_testing": {
+      "paths": ["contract_testing/**/*.py"],
+      "tests": ["tests/contract_testing/", "tests/plugins/"],
+      "markers": ["contract"]
+    },
+    "demo_sut": {
+      "paths": ["demo_sut/**/*.py"],
+      "tests": [
+        "tests/contract_testing/",
+        "tests/demo_examples/",
+        "tests/demo_sut/",
+        "tests/gate/",
+        "tests/render_lane/"
+      ]
+    },
+    "generators": {
+      "paths": ["generators/**/*.py"],
+      "tests": ["tests/demo_examples/", "tests/external_config/", "tests/generators/"]
+    },
+    "integrations": {
+      "paths": ["integrations/**/*.py"],
+      "tests": [
+        "tests/demo_examples/",
+        "tests/integrations/",
+        "tests/qaplatform/",
+        "tests/qaplatform_http/",
+        "tests/traceability/"
+      ]
+    },
+    "memory": {
+      "paths": ["memory/**/*.py"],
+      "tests": ["tests/api_agent/", "tests/memory/"]
+    },
+    "oracles": {
+      "paths": ["oracles/**/*.py"],
+      "tests": [
+        "tests/api_layer/",
+        "tests/demo_examples/",
+        "tests/oracles/",
+        "tests/render_lane/",
+        "tests/ui/"
+      ]
+    },
+    "orchestration": {
+      "paths": ["orchestration/**/*.py"],
+      "tests": ["tests/orchestration/"]
+    },
+    "plugins": {
+      "paths": ["plugins/**/*.py"],
+      "tests": [
+        "tests/demo_examples/",
+        "tests/generators/",
+        "tests/orchestration/",
+        "tests/plugins/"
+      ]
+    },
+    "qaplatform": {
+      "paths": ["qaplatform/**/*.py"],
+      "tests": ["tests/demo_examples/", "tests/qaplatform/", "tests/qaplatform_http/"]
+    },
+    "reporting": {
+      "paths": ["reporting/**/*.py"],
+      "tests": ["tests/reporting/"]
+    },
+    "results": {
+      "paths": ["results/**/*.py"],
+      "tests": [
+        "tests/autonomous_ui/",
+        "tests/core/",
+        "tests/demo_examples/",
+        "tests/generators/",
+        "tests/graphify/",
+        "tests/qaplatform/",
+        "tests/qaplatform_http/",
+        "tests/reporting/",
+        "tests/results/",
+        "tests/tools/",
+        "tests/traceability/"
+      ]
+    },
+    "scripts": {
+      "paths": ["scripts/**/*.py"],
+      "tests": ["tests/scripts/"]
+    },
+    "test_data": {
+      "paths": ["test_data/**/*.py"],
+      "tests": ["tests/demo_examples/", "tests/plugins/", "tests/test_data/"]
+    },
+    "tools": {
+      "paths": ["tools/**/*.py"],
+      "tests": ["tests/tools/"]
+    },
+    "traceability": {
+      "paths": ["traceability/**/*.py"],
+      "tests": [
+        "tests/demo_examples/",
+        "tests/qaplatform/",
+        "tests/qaplatform_http/",
+        "tests/traceability/"
+      ]
+    },
+    "ui": {
+      "paths": ["ui/**/*.py"],
+      "tests": ["tests/demo_examples/", "tests/ui/", "ui/tests/"],
+      "markers": ["smoke"]
+    },
+    "verification": {
+      "paths": ["verification/**/*.py"],
+      "tests": [
+        "tests/checks/",
+        "tests/demo_examples/",
+        "tests/oracles/",
+        "tests/plugins/",
+        "tests/ui/",
+        "tests/verification/"
+      ]
+    },
+    "web_discovery": {
+      "paths": ["web_discovery/**/*.py"],
+      "tests": ["tests/web_discovery/"]
+    }
+  }
+}

@@ -315,6 +315,25 @@ or `exclude_docs` with a reason. Build locally before pushing:
 `pip install -r requirements-docs.txt`, then `mkdocs build --strict`. The README check
 runs in the offline suite too (`tests/tools/test_docs_site_hooks.py`).
 
+## Selective tests
+
+**Rule.** Off by default. With the repository variable `SELECTIVE_TESTS=true`, a pull
+request's offline lane runs only the tests its diff can affect (`gate.selective`, map in
+`config/test_areas.json`); a push to `main`, a schedule or a manual run always runs the
+whole lane. Every doubt runs more: an `always_full` path (conftest, `core/`, `gate/`,
+`config/`, pytest and dependency files, workflows), a file every test loads through the
+root conftest, a path no area claims, a non-Python file, a test helper, an empty or
+uncomputable diff each select the full lane. The workflow keeps the literal full-lane
+step, so `tests/test_ci_selection.py` still audits it.
+
+**Prevents.** A small pull request paying for the whole lane; and, through the map check,
+an area that quietly misses a test which imports its code (`python -m gate.selective
+check`, also a unit test).
+
+**Change safely.** Add an area for a new package and run `python -m gate.selective
+check`: it names every test that loads the area's code but is not listed. Never shrink an
+area's tests to make a selection smaller; the check exists to stop exactly that.
+
 ## Docs-only changes
 
 **Rule.** The `changes` job classifies every push and pull request (`gate.change_scope`).
