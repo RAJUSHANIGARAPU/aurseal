@@ -39,7 +39,8 @@
         "tests/demo_examples/",
         "tests/gate/",
         "tests/plugins/",
-        "tests/test_ci_selection.py"
+        "tests/test_ci_selection.py",
+        "tests/scripts/"
       ]
     },
     "contract_testing": {
@@ -59,7 +60,14 @@
     },
     "generators": {
       "paths": ["generators/**/*.py"],
-      "tests": ["tests/demo_examples/", "tests/external_config/", "tests/generators/"]
+      "tests": [
+        "tests/demo_examples/",
+        "tests/external_config/",
+        "tests/generators/",
+        "tests/tools/",
+        "tests/tools/slash/",
+        "tests/traceability/"
+      ]
     },
     "integrations": {
       "paths": ["integrations/**/*.py"],
@@ -68,7 +76,8 @@
         "tests/integrations/",
         "tests/qaplatform/",
         "tests/qaplatform_http/",
-        "tests/traceability/"
+        "tests/traceability/",
+        "tests/tools/slash/"
       ]
     },
     "memory": {
@@ -82,7 +91,9 @@
         "tests/demo_examples/",
         "tests/oracles/",
         "tests/render_lane/",
-        "tests/ui/"
+        "tests/ui/",
+        "tests/test_data/",
+        "tests/verification/"
       ]
     },
     "orchestration": {
@@ -128,11 +139,16 @@
     },
     "test_data": {
       "paths": ["test_data/**/*.py"],
-      "tests": ["tests/demo_examples/", "tests/plugins/", "tests/test_data/"]
+      "tests": [
+        "tests/demo_examples/",
+        "tests/plugins/",
+        "tests/test_data/",
+        "tests/core/"
+      ]
     },
     "tools": {
       "paths": ["tools/**/*.py"],
-      "tests": ["tests/tools/"]
+      "tests": ["tests/tools/", "tests/traceability/"]
     },
     "traceability": {
       "paths": ["traceability/**/*.py"],
@@ -140,12 +156,19 @@
         "tests/demo_examples/",
         "tests/qaplatform/",
         "tests/qaplatform_http/",
-        "tests/traceability/"
+        "tests/traceability/",
+        "tests/tools/slash/"
       ]
     },
     "ui": {
       "paths": ["ui/**/*.py"],
-      "tests": ["tests/demo_examples/", "tests/ui/", "ui/tests/"],
+      "tests": [
+        "tests/demo_examples/",
+        "tests/ui/",
+        "ui/tests/",
+        "tests/test_data/",
+        "tests/verification/"
+      ],
       "markers": ["smoke"]
     },
     "verification": {
@@ -156,7 +179,10 @@
         "tests/oracles/",
         "tests/plugins/",
         "tests/ui/",
-        "tests/verification/"
+        "tests/verification/",
+        "tests/test_data/",
+        "tests/tools/slash/",
+        "tests/traceability/"
       ]
     },
     "web_discovery": {
