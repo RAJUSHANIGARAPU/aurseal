@@ -87,9 +87,26 @@ pyproject.toml       # project metadata + tool config
 - `ruff check .` before commit — CI runs it
 
 ## CI gate
-`tests/test_ci_selection.py` fails when any collected test is not selected by a pytest
-command in `.github/workflows/tests.yml`. A new test directory or marker must be wired
-into the workflow in the same change — never widen the gate to tolerate the gap.
+`tests/test_ci_selection.py` fails when a collected test is selected by no pytest command in
+`tests.yml`; wire new tests in the same change. Budget, graduation and dispatch queues:
+`.claude/rules/ci-budget.md` (loads when workflows or `gate/lanes.py` are touched).
+Post-deploy runs (`post-deploy.yml`), the sharding pilot (`shards` input) and the opt-in
+coalescing window (`COALESCE_SECONDS`): `docs/ci-decisions.md`.
+
+## Path-scoped rules
+Topic notes in `.claude/rules/` load only when their paths are touched; `python -m
+tools.rules_lint` (pre-commit and the offline job) keeps them live and named here.
+
+| File | Loads when touching |
+|---|---|
+| `page-objects.md` | `ui/pages`, `ui/components`, `ui/locators`, `ui/tests` |
+| `document-templates.md` | document examples, render lane, template and PDF oracles |
+| `ci-budget.md` | workflows, `gate/lanes.py`, `gate/workflow_lint.py`, `gate/run_inputs.py` |
+| `generators-and-healing.md` | `generators`, `autonomous_ui`, `core/ai`, `plugins`, `orchestration` |
+| `change-scenarios.md` | `tests/demo_examples/change`, `test_data/scenario_manifest.py` |
+
+Pushes to `main` are blocked by the `push-guard` pre-push hook and flagged by
+`main-push-check.yml`; see `docs/features/assistant-config.md`.
 
 ## Constraints
 - No hardcoded URLs — use config files
@@ -187,9 +204,6 @@ python scripts/auto_runner.py --no-fix
 
 ## Accumulated Patterns
 
-**Always read `docs/ai_learnings.md` before writing or fixing tests.** Key patterns:
-- Wait for page: `page.wait_for_load_state("networkidle")` or `expect(locator).to_be_visible(timeout=N)`
-- Stable selectors: `get_by_test_id` > `get_by_role` > `get_by_label` > `get_by_text`
-- Never `time.sleep()` — use Playwright's built-in waits
-- Re-resolve locators after page re-renders (never hold ElementHandle across dynamic updates)
-- Traces are timestamped: `reports/traces/{test}_{browser}_{YYYYMMDD_HHMMSS}.zip`
+**Always read `docs/ai_learnings.md` before writing or fixing tests.** Selector priority,
+waits and re-rendering: `.claude/rules/page-objects.md` (loads with UI files). Traces are
+timestamped: `reports/traces/{test}_{browser}_{YYYYMMDD_HHMMSS}.zip`.

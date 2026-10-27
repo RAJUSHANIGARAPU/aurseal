@@ -231,6 +231,10 @@ jobs:
       - name: Test plans
         run: python -m traceability plan lint plans/
 
+      # Path-scoped assistant rules cannot rot: front matter, live globs, named in CLAUDE.md.
+      - name: Assistant rules lint
+        run: python -m tools.rules_lint
+
       - name: Coverage gaps (ratchet)
         run: >
           python -m traceability gaps --openapi demo_sut/openapi.json --specs specs

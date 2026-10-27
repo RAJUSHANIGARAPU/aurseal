@@ -215,3 +215,12 @@ def test_the_detective_workflow_runs_on_every_main_push():
     job = flow["jobs"]["merged-pr"]
     assert "if" not in job
     assert "tools.push_guard merged-pr" in job["steps"][-1]["run"]
+
+
+def test_project_settings_wire_the_deny_list_and_the_hook():
+    settings = json.loads((ROOT / ".claude" / "settings.json").read_text())
+    assert set(settings["attribution"]) == {"commit", "pr", "sessionUrl"}
+    assert set(settings["permissions"]["deny"]) == set(deny_list("main"))
+    hooks = settings["hooks"]["PreToolUse"]
+    assert hooks[0]["matcher"] == "Bash"
+    assert hooks[0]["hooks"][0]["command"].endswith("python3 -m tools.push_guard")
