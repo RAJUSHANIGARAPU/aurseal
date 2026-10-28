@@ -8,6 +8,8 @@ Registered from the root ``conftest.py`` via :func:`register`; elsewhere use
 * the environment circuit breaker's abstention: once tripped, every later
   test skips before sending traffic (``gate.circuit_breaker``);
 * journey-group fail-fast (``gate.journey_group``);
+* ``@pytest.mark.only_env("qa", "staging")``: on any other environment the test skips
+  as not applicable at setup (``gate.requirement.runs_only_on``), never as a failure;
 * the run-trust gate, when ``RUN_TRUST`` is ``fail``, ``unstable`` or
   ``report`` (``gate.integrity``). Unset, the gate is off: a developer running
   one test is not held to a gate's bar.
@@ -44,6 +46,7 @@ from gate.integrity import (
 from gate.journey_group import JourneyGroupPlugin
 from gate.lanes import register_markers
 from gate.provenance import read_rows
+from gate.requirement import runs_only_on
 from gate.run_id import WORKERINPUT_KEY, ensure_run_id
 from gate.verdicts import read_verdict_rows
 
@@ -54,6 +57,7 @@ DEFECT_PROPERTY = "known_defect"  # user_properties key the expected-red marker 
 PLUGIN_NAME = "run-gate"
 INTEGRITY_PLUGIN_NAME = "run-trust"
 JOURNEY_GROUP_PLUGIN_NAME = "journey-group"
+ONLY_ENV_MARKER = "only_env"
 
 
 def _skip_reason(report: pytest.TestReport) -> str:
@@ -248,6 +252,15 @@ class RunGatePlugin:
 
     @pytest.hookimpl(tryfirst=True)
     def pytest_runtest_setup(self, item: pytest.Item) -> None:
+        # Out of scope is decided first: a tripped breaker must not turn it into an abstention.
+        marker = item.get_closest_marker(ONLY_ENV_MARKER)
+        if marker is not None:
+            runs_only_on(
+                marker.args,
+                f"{item.name}",
+                item.config.getoption("--env", default=None),
+                covered_by=marker.kwargs.get("covered_by"),
+            )
         self.breaker.assume_not_tripped()
 
     @pytest.fixture
@@ -273,6 +286,11 @@ def _configured_hosts(config: pytest.Config) -> tuple[str, ...]:
 
 def register(config: pytest.Config) -> None:
     register_markers(config)
+    config.addinivalue_line(
+        "markers",
+        f"{ONLY_ENV_MARKER}(*envs, covered_by=None): runs only on these environments; "
+        "elsewhere it skips as not applicable, even in a lane that requires verdicts",
+    )
     if config.pluginmanager.hasplugin(PLUGIN_NAME):
         return
     run_id = ensure_run_id(config)

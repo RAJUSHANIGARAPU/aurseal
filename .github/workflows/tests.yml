@@ -78,11 +78,20 @@ on:
         default: false
       changed_services:
         description: "Changed services; narrows the gate step when SELECTIVE_TESTS=true"
+      shards:
+        description: "Sharding pilot: split the gate selection over N machines (1 = off)"
+        type: choice
+        options: ["1", "2", "3", "4"]
+        default: "1"
+      shard_users:
+        description: "Comma-separated logins, one per shard (shards > 1 only; optional)"
         type: string
         default: ""
 
-# One run per ref. A newer pull-request run cancels the superseded one; a default-branch
-# run is never cancelled, because a cancelled run leaves no verdict.
+# One run per ref. A newer pull-request run cancels the superseded one; a running
+# default-branch run is never cancelled, because a cancelled run leaves no verdict. GitHub
+# keeps at most one pending run per group: a newer push replaces a pending one, so pushes
+# that land during a gate run collapse into one follow-up run.
 # Why: docs/ci-decisions.md#concurrency-and-time-budget
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -151,6 +160,30 @@ jobs:
           CHANGE_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
           CHANGE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
 
+  # Optional coalescing window, off unless the repository variable COALESCE_SECONDS is set.
+  # A default-branch push waits that long, then skips the gate when a newer push exists
+  # (its own run covers this commit). Never on a dispatch, schedule or pull request; any
+  # error runs the gate. Why: docs/ci-decisions.md#coalescing-window
+  coalesce:
+    name: Coalescing window
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      superseded: ${{ steps.window.outputs.superseded }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version: "3.11"
+      - name: Wait, then compare with the default-branch head
+        id: window
+        continue-on-error: true
+        run: python -m gate.coalesce
+        env:
+          COALESCE_SECONDS: ${{ vars.COALESCE_SECONDS || '0' }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+
   # The framework's own logic: contract testing, flakiness detection, memory,
   # web discovery, plugins, autonomous UI healing. 514 tests, no browser, no
   # network, ~25 seconds. None of it ran in CI until now — the marker-based
@@ -159,7 +192,8 @@ jobs:
   # Why: docs/ci-decisions.md#lanes and docs/ci-decisions.md#empty-selection
   offline:
     name: Offline suite
-    if: "!startsWith(github.ref, 'refs/heads/bringup/') && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')"
+    needs: coalesce
+    if: "!cancelled() && needs.coalesce.outputs.superseded != 'true' && !startsWith(github.ref, 'refs/heads/bringup/') && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')"
     runs-on: ubuntu-24.04
     timeout-minutes: 10
 
@@ -196,6 +230,10 @@ jobs:
 
       - name: Test plans
         run: python -m traceability plan lint plans/
+
+      # Path-scoped assistant rules cannot rot: front matter, live globs, named in CLAUDE.md.
+      - name: Assistant rules lint
+        run: python -m tools.rules_lint
 
       - name: Coverage gaps (ratchet)
         run: >
@@ -343,7 +381,8 @@ jobs:
   # for what it is, rather than looking like a defect in framework code.
   browser:
     name: Browser suite
-    if: "!startsWith(github.ref, 'refs/heads/bringup/') && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false') && needs.changes.outputs.docs_only != 'true'"
+    # With shards > 1 the browser-shard matrix runs the gate selection instead.
+    if: "!startsWith(github.ref, 'refs/heads/bringup/') && (inputs.shards || '1') == '1' && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false') && needs.changes.outputs.docs_only != 'true'"
     # Unit lane first: a red framework suite stops the run before the live site is touched.
     needs: [changes, offline]
     runs-on: ubuntu-24.04
@@ -400,6 +439,8 @@ jobs:
           INPUT_BROWSER_MATRIX: ${{ inputs.browser_matrix }}
           INPUT_RUN_TOKEN_LANE: ${{ inputs.run_token_lane }}
           INPUT_CHANGED_SERVICES: ${{ inputs.changed_services }}
+          INPUT_SHARDS: ${{ inputs.shards }}
+          INPUT_SHARD_USERS: ${{ inputs.shard_users }}
 
       # Why: docs/ci-decisions.md#credentials
       - name: Login credentials for the target environment
@@ -535,6 +576,170 @@ jobs:
         uses: actions/upload-artifact@v7.0.2
         with:
           name: evidence-browser
+          path: evidence/
+          if-no-files-found: warn
+          retention-days: 7
+
+  # Sharding pilot (dispatch with shards > 1): the gate selection split over N machines by
+  # gate.pytest_shard, then merged and judged once. Each shard gets its own auth cache, data
+  # prefix w<k>, login (secret LOGIN_PASSWORD_<k>, else the environment's) and executed floor
+  # ceil(min/N). The serial lane, the per-worker data prefix and the user pool behind those
+  # variables are the parallel-run work's. Why: docs/ci-decisions.md#sharding-pilot
+  shard-plan:
+    name: Shard plan
+    if: github.event_name == 'workflow_dispatch' && inputs.shards != '1' && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')
+    needs: offline
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      indices: ${{ steps.plan.outputs.indices }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - run: pip install -r requirements.txt
+      - name: Validate the inputs and write the plan to the summary
+        id: plan
+        run: python -m gate.run_inputs plan-shards
+        env:
+          INPUT_ENV: ${{ inputs.env }}
+          INPUT_PRESET: ${{ inputs.preset }}
+          INPUT_LANES: ${{ inputs.lanes }}
+          INPUT_SELECTION: ${{ inputs.selection }}
+          INPUT_SEED_MODE: ${{ inputs.seed_mode }}
+          INPUT_ENTITY_ALLOWLIST: ${{ inputs.entity_allowlist }}
+          INPUT_SHARDS: ${{ inputs.shards }}
+          INPUT_SHARD_USERS: ${{ inputs.shard_users }}
+          RELEASE_CANDIDATE: ${{ vars.RELEASE_CANDIDATE }}
+
+  browser-shard:
+    name: Browser shard ${{ matrix.k }}/${{ inputs.shards }}
+    needs: shard-plan
+    if: needs.shard-plan.result == 'success' && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: ${{ inputs.env || 'qa' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        k: ${{ fromJSON(needs.shard-plan.outputs.indices) }}
+    env:
+      RUN_TRUST: unstable
+      RUN_TRUST_LANE: browser
+      SHARD: ${{ matrix.k }}/${{ inputs.shards }}
+      TEST_ENV: ${{ inputs.env || 'qa' }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - run: pip install -r requirements.txt
+      - name: Mask the supplied token
+        run: |
+          token=$(jq -r '.inputs.token // empty' "$GITHUB_EVENT_PATH")
+          if [ -n "$token" ]; then echo "::add-mask::$token"; fi
+      - name: Login credentials for the target environment
+        run: python -m gate.credentials preflight --env "$TEST_ENV"
+        env:
+          LOGIN_USERNAME: ${{ vars.LOGIN_USERNAME }}
+          LOGIN_PASSWORD: ${{ secrets[format('LOGIN_PASSWORD_{0}', matrix.k)] || secrets.LOGIN_PASSWORD }}
+          SHARED_LOGIN_USERNAME: ${{ vars.SHARED_LOGIN_USERNAME }}
+          SHARED_LOGIN_PASSWORD: ${{ secrets.SHARED_LOGIN_PASSWORD }}
+      - name: Install Chrome + system deps
+        run: playwright install chrome --with-deps
+      - name: Run this shard
+        run: python -m gate.run_inputs run --shard "$SHARD"
+        env:
+          INPUT_ENV: ${{ inputs.env }}
+          INPUT_PRESET: ${{ inputs.preset }}
+          INPUT_AUTH_MODE: ${{ inputs.auth_mode }}
+          INPUT_TOKEN: ${{ inputs.token }}
+          INPUT_HEADLESS: ${{ inputs.headless }}
+          INPUT_STEP_SCREENSHOTS: ${{ inputs.step_screenshots }}
+          INPUT_LANES: ${{ inputs.lanes }}
+          INPUT_KEEP_ALL_EVIDENCE: ${{ inputs.keep_all_evidence }}
+          INPUT_STRICT_ORACLES: ${{ inputs.strict_oracles }}
+          INPUT_REQUIRE_CONFIG_BINDING: ${{ inputs.require_config_binding }}
+          INPUT_SEED_MODE: ${{ inputs.seed_mode }}
+          INPUT_SHARDS: ${{ inputs.shards }}
+          INPUT_SHARD_USERS: ${{ inputs.shard_users }}
+          LOGIN_USERNAME: ${{ vars.LOGIN_USERNAME }}
+          LOGIN_PASSWORD: ${{ secrets[format('LOGIN_PASSWORD_{0}', matrix.k)] || secrets.LOGIN_PASSWORD }}
+      # One fixed layout per shard, whatever subset of these files exists.
+      - name: Collect the shard results
+        if: always()
+        run: |
+          mkdir -p shard-out
+          for f in shards verdicts run-trust-browser.txt run-trust-browser.json \
+                   junit-shard-*.xml data-origin.jsonl; do
+            for p in reports/$f; do if [ -e "$p" ]; then cp -r "$p" shard-out/; fi; done
+          done
+          touch shard-out/.shard
+      - name: Upload the shard results
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: shard-${{ matrix.k }}
+          path: shard-out/
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Stage evidence
+        if: always()
+        run: python -m gate.evidence stage --job "browser-shard--${{ matrix.k }}"
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: evidence-browser-shard--${{ matrix.k }}
+          path: evidence/
+          if-no-files-found: warn
+          retention-days: 7
+
+  # One verdict for the sharded run: an incomplete merge (a shard lost, a test unreported)
+  # fails it, then run trust is judged once over the shared TEST_RUN_ID at the full floor.
+  browser-shard-merge:
+    name: Merge the shards
+    needs: [shard-plan, browser-shard]
+    if: always() && needs.shard-plan.result == 'success' && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      RUN_TRUST: unstable
+      SHARDS: ${{ inputs.shards }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - run: pip install -r requirements.txt
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          pattern: shard-*
+          path: shards-in/
+      - name: Merge and prove completeness
+        run: |
+          mkdir -p reports/shards
+          for d in shards-in/shard-*; do
+            if [ -d "$d/shards" ]; then cp "$d"/shards/* reports/shards/; fi
+          done
+          python -m gate.merge --manifests reports/shards --shards "$SHARDS" \
+            --junit shards-in/shard-*/junit-shard-*.xml --junit-out reports/junit-browser.xml
+      - name: Run trust over the whole run
+        if: always()
+        run: python -m gate.integrity --lane browser --merge shards-in/shard-*
+      - name: Stage evidence
+        if: always()
+        run: python -m gate.evidence stage --job browser-shard-merge
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: evidence-browser-shard-merge
           path: evidence/
           if-no-files-found: warn
           retention-days: 7
@@ -877,8 +1082,8 @@ jobs:
   # Store history across runners: one commit per main push on the orphan
   # results-history branch of this repository (created on first use).
   results-history:
-    needs: [offline, browser]
-    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main' && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')
+    needs: [coalesce, offline, browser]
+    if: always() && needs.coalesce.outputs.superseded != 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main' && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -920,8 +1125,8 @@ jobs:
 
   # Static HTML dashboard as an Actions artefact (no Pages).
   dashboard:
-    needs: [offline, browser]
-    if: always() && !startsWith(github.ref, 'refs/heads/bringup/') && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')
+    needs: [coalesce, offline, browser]
+    if: always() && needs.coalesce.outputs.superseded != 'true' && !startsWith(github.ref, 'refs/heads/bringup/') && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -954,8 +1159,8 @@ jobs:
 
   # The last main run's artefacts, kept as the PR-feedback baseline.
   baseline:
-    needs: [offline, browser]
-    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main' && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')
+    needs: [coalesce, offline, browser]
+    if: always() && needs.coalesce.outputs.superseded != 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main' && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -1060,7 +1265,7 @@ jobs:
   # Why: docs/ci-decisions.md#evidence-publishing
   publish:
     name: Publish evidence
-    needs: [offline, browser, checks, visual, visual-baselines, drafts, platform, browser-matrix, render, bringup]
+    needs: [offline, browser, checks, visual, visual-baselines, drafts, platform, browser-matrix, render, bringup, browser-shard, browser-shard-merge]
     if: always() && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -1101,7 +1306,7 @@ jobs:
   # Why: docs/ci-decisions.md#notification
   notify:
     name: Notify
-    needs: [publish, offline, browser, checks, visual, drafts, platform, browser-matrix, render, bringup]
+    needs: [publish, offline, browser, checks, visual, drafts, platform, browser-matrix, render, bringup, browser-shard, browser-shard-merge]
     if: always() && (github.event_name != 'schedule' || vars.NIGHTLY_ENABLED != 'false')
     runs-on: ubuntu-24.04
     timeout-minutes: 5

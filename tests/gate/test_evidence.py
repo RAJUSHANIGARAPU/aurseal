@@ -146,12 +146,17 @@ TEST_JOBS = (
     "browser-matrix",
     "render",
     "bringup",
+    "browser-shard",
 )
+# Runs no tests but judges the sharded run, so its evidence is expected too.
+MERGE_JOBS = ("browser-shard-merge",)
 
 
 def _runs_pytest(job: dict) -> bool:
     return any(
-        "pytest" in str(s.get("run")) or "gate.lanes bringup" in str(s.get("run"))
+        "pytest" in str(s.get("run"))
+        or "gate.lanes bringup" in str(s.get("run"))
+        or "gate.run_inputs run --shard" in str(s.get("run"))
         for s in job["steps"]
     )
 
@@ -159,7 +164,7 @@ def _runs_pytest(job: dict) -> bool:
 def test_every_test_job_uploads_evidence_always_and_publish_needs_them_all():
     jobs = yaml.safe_load((ROOT / ".github/workflows/tests.yml").read_text())["jobs"]
     assert {name for name, job in jobs.items() if _runs_pytest(job)} == set(TEST_JOBS)
-    for name in TEST_JOBS:
+    for name in (*TEST_JOBS, *MERGE_JOBS):
         uploads = [
             s
             for s in jobs[name]["steps"]
@@ -168,5 +173,5 @@ def test_every_test_job_uploads_evidence_always_and_publish_needs_them_all():
         ]
         assert uploads and uploads[0].get("if") == "always()", name
     publish_job = jobs["publish"]
-    assert set(publish_job["needs"]) == set(TEST_JOBS)
+    assert set(publish_job["needs"]) == {*TEST_JOBS, *MERGE_JOBS}
     assert publish_job["if"].startswith("always()")

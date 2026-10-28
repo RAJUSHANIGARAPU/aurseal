@@ -479,6 +479,24 @@ def _compare_runs(args: argparse.Namespace) -> int:
     return 0
 
 
+# ---------------------------------------------------------------------- scope
+
+
+@command
+def _scope(sub: argparse._SubParsersAction) -> None:
+    p = sub.add_parser("scope", help="tests out of scope in every recent run (removal candidates)")
+    p.add_argument("--runs", type=int, default=10, help="how many recent runs must agree")
+    p.set_defaults(func=_scope_report)
+
+
+def _scope_report(args: argparse.Namespace) -> int:
+    from results.scope import removal_candidates, report
+
+    with _store(args, readonly=True) as store:
+        print(report(removal_candidates(store, args.runs), args.runs))
+    return 0
+
+
 # ---------------------------------------------------------------------- history branch
 
 

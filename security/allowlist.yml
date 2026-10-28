@@ -130,3 +130,6 @@ entries:
   - fingerprint: "bandit:B310:tools/slash/prd.py:8b28b2b43716"
     reason: "user-given URL, scheme already restricted to http(s) before urlopen"
     expires: 2027-01-18
+  - fingerprint: "bandit:B310:tools/push_guard.py:3a0ba7f687a5"
+    reason: "fixed https API host; only the repo and commit come from the environment"
+    expires: 2027-01-28

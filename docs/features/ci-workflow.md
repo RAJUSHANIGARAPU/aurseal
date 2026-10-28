@@ -34,6 +34,7 @@ structure rules:
 | Browser container | the Playwright image is not an exact version tag, or its version differs from `playwright==` in `requirements.txt` (both named); no `--ipc=host` or `--shm-size` of at least 1g; a step-level `github.ref` condition (gate the job, so a skipped job never pulls the image) |
 | Nightly | a `schedule` cron fires on the hour; in a scheduled workflow a job (other than the secret scan) does not read `vars.NIGHTLY_ENABLED` |
 | Secret scan | see [Secret scan](#secret-scan) |
+| Dispatch queue | a `repository_dispatch`/`workflow_dispatch` workflow's concurrency group can evaluate to `tests.yml`'s (`github.workflow` filled in with each workflow's name), so it would queue behind the merge gate |
 
 ### How to use
 
@@ -156,6 +157,8 @@ gate keeps auditing a literal command; anything else runs through
 | `entity_allowlist` | empty | `ENTITY_ALLOWLIST`; only with `seed_mode=targets`, pattern `[A-Za-z0-9._-]+(,...)*` |
 | `browser_matrix` | `false` | the matrix job |
 | `run_token_lane` | `false` | the render job |
+| `shards` | `1` | sharding pilot: `2`-`4` run the gate selection on the `browser-shard` matrix instead of the browser job; needs `seed_mode=fresh`, no `selection`, no bring-up ref, no `RELEASE_CANDIDATE` |
+| `shard_users` | empty | one login per shard (`LOGIN_USERNAME` of shard k); its length must equal `shards`, and it must be empty with one shard |
 
 An unknown lane, an undeclared environment, a token without token mode, token mode without a
 token, targets without `targets` mode (or the reverse) — each fails with a message naming
@@ -166,7 +169,14 @@ the input, exit 2, nothing started.
 ```bash
 python -m gate.run_inputs run --dry-run --preset smoke --lanes slow
 python -m gate.run_inputs run --selection "tests/gate/test_lanes.py" --env staging
+INPUT_SHARDS=3 python -m gate.run_inputs plan-shards     # the plan, as the shard-plan job writes it
+INPUT_SHARDS=3 python -m gate.run_inputs run --dry-run --shard 2/3
+GITHUB_EVENT_NAME=workflow_dispatch INPUT_ENV=staging python -m gate.run_inputs post-deploy
 ```
+
+`post-deploy` validates a post-deploy trigger (`post-deploy.yml`, see
+`docs/ci-decisions.md#post-deploy-runs`) and, with `--execute`, runs the preset with
+`--reruns 0`.
 
 ### Configuration
 

@@ -65,7 +65,15 @@ from pathlib import Path
 from core.logger import logger
 from gate._env import env_float, env_int, env_str
 from gate.provenance import FixtureRow
-from gate.verdicts import EXPECTED_RED, REACHED, SILENT, VerdictRow
+from gate.verdicts import (
+    COVERAGE,
+    COVERAGE_NOT_APPLICABLE,
+    EXPECTED_RED,
+    NOT_APPLICABLE_PREFIX,
+    REACHED,
+    SILENT,
+    VerdictRow,
+)
 
 # Configuration (environment variables).
 ENFORCEMENT_ENV = "RUN_TRUST"
@@ -199,10 +207,16 @@ class RunTally:
     passed_on_acquired: int = 0
     silences: tuple[Silence, ...] = ()
     detector_silences: tuple[Silence, ...] = ()
+    # Skipped as not applicable on this environment: neither executed nor an abstention.
+    out_of_scope: tuple[Silence, ...] = ()
+
+    @property
+    def in_scope(self) -> int:
+        return self.selected - len(self.out_of_scope)
 
     @property
     def skip_ratio(self) -> float:
-        return 0.0 if self.selected <= 0 else self.skipped / self.selected
+        return 0.0 if self.in_scope <= 0 else self.skipped / self.in_scope
 
 
 @dataclass(frozen=True)
@@ -250,8 +264,24 @@ def build_tally(
     detector_markers = frozenset(detector_markers)
     seeded_markers = frozenset(seeded_markers)
 
+    not_applicable_ids = {
+        r.nodeid
+        for r in verdict_rows
+        if r.kind == COVERAGE and r.verdict == COVERAGE_NOT_APPLICABLE
+    }
+
+    def out_of_scope(t: TestResult) -> bool:
+        return t.outcome is Outcome.SKIPPED and (
+            t.reason.startswith(NOT_APPLICABLE_PREFIX) or t.nodeid in not_applicable_ids
+        )
+
+    scoped_out = tuple(
+        Silence(t.nodeid, "not applicable", t.reason) for t in tests if out_of_scope(t)
+    )
     silences = tuple(
-        Silence(t.nodeid, t.outcome.value, t.reason) for t in tests if t.outcome not in EXECUTED
+        Silence(t.nodeid, t.outcome.value, t.reason)
+        for t in tests
+        if t.outcome not in EXECUTED and not out_of_scope(t)
     )
     executed = sum(1 for t in tests if t.outcome in EXECUTED)
 
@@ -288,6 +318,7 @@ def build_tally(
         passed_on_acquired=on_acquired,
         silences=silences,
         detector_silences=detector_silences,
+        out_of_scope=scoped_out,
     )
 
 
@@ -334,6 +365,8 @@ class RunTrustGate:
             absent.append(f"skip ratio - disabled ({MAX_SKIP_RATIO_ENV} >= 1.0)")
         elif tally.selected <= 0:
             absent.append("skip ratio - nothing was selected (pytest exit code 5 covers this)")
+        elif tally.in_scope <= 0:
+            absent.append("skip ratio - every selected test is out of scope on this environment")
         else:
             applied += 1
             if tally.skip_ratio > t.max_skip_ratio:
@@ -341,7 +374,7 @@ class RunTrustGate:
                     Breach(
                         "SKIP RATIO",
                         f"{_percent(tally.skip_ratio)} abstained "
-                        f"({tally.skipped} of {tally.selected})",
+                        f"({tally.skipped} of {tally.in_scope} in scope)",
                         f"at most {_percent(t.max_skip_ratio)}",
                         MAX_SKIP_RATIO_ENV,
                         "skips exceed the allowed share of the selection - the skip reasons "
@@ -407,6 +440,7 @@ class RunTrustGate:
             _row(
                 f"selected {tally.selected} . executed {tally.executed} . skipped "
                 f"{tally.skipped} ({_percent(tally.skip_ratio)})"
+                + (f" . not applicable {len(tally.out_of_scope)}" if tally.out_of_scope else "")
             )
         )
         box.append(
@@ -430,6 +464,7 @@ class RunTrustGate:
         for title, silences in (
             ("what was skipped, and why:", tally.silences),
             ("detectors that reached no verdict:", tally.detector_silences),
+            ("not applicable here (out of scope, not counted as skips):", tally.out_of_scope),
         ):
             if not silences:
                 continue
@@ -569,6 +604,7 @@ def write_markers(
             "thresholds": thresholds,
             "breaches": [asdict(b) for b in result.breaches],
             "not_applicable": list(result.not_applicable),
+            "out_of_scope": [asdict(s) for s in tally.out_of_scope],
             "tests": {t.nodeid: t.to_json() for t in tests},
         }
         json_path.write_text(json.dumps(body, indent=2), encoding="utf-8")
@@ -615,6 +651,66 @@ def check_marker(
     return 0
 
 
+SHARD_VERDICTS = Path("verdicts") / "verdicts.jsonl"
+SHARD_PROVENANCE = Path("data-origin.jsonl")
+
+
+def merge_shard_markers(
+    directories: Sequence[str | Path],
+    *,
+    run_id: str,
+    lane: str,
+    out_dir: str | Path,
+    thresholds: Thresholds | None = None,
+) -> tuple[Result | None, list[str]]:
+    """Judge a sharded run once: the union of every shard's tests, at the full thresholds.
+
+    Each shard is held to ``ceil(min / N)`` on its own; the merged run answers to the
+    real floor. Every directory must hold a marker of the same run and lane (a shard
+    without one never judged itself, which must not shrink the run quietly). A shard's
+    ``verdicts/verdicts.jsonl`` and ``data-origin.jsonl``, when present, feed the detector
+    and provenance rules. Returns the result (None when a marker is missing) and problems.
+    """
+    from gate.provenance import read_rows
+    from gate.verdicts import read_verdict_rows
+
+    problems: list[str] = []
+    tests: dict[str, TestResult] = {}
+    rows: list[VerdictRow] = []
+    fixtures: list[FixtureRow] = []
+    for directory in directories:
+        marker = read_marker(directory, lane)
+        if marker is None:
+            problems.append(f"{directory}: no run-trust marker for lane {lane!r}")
+            continue
+        if marker.get("run_id") != run_id:
+            problems.append(f"{directory}: marker is from run {marker.get('run_id')!r}")
+            continue
+        for nodeid, data in (marker.get("tests") or {}).items():
+            parsed = TestResult.from_json(nodeid, data) if isinstance(data, Mapping) else None
+            if parsed is not None:
+                tests[nodeid] = parsed
+        rows += read_verdict_rows(Path(directory) / SHARD_VERDICTS, run_id=run_id)
+        fixtures += read_rows(Path(directory) / SHARD_PROVENANCE, run_id=run_id)
+    if not directories:
+        problems.append("no shard directory was given")
+    if problems:
+        return None, problems
+    gate = RunTrustGate(thresholds or Thresholds.from_env())
+    tally = build_tally(tests.values(), rows, fixtures)
+    result = gate.evaluate(tally)
+    write_markers(
+        out_dir,
+        run_id=run_id,
+        lane=lane,
+        tests=tests.values(),
+        tally=tally,
+        result=result,
+        gate=gate,
+    )
+    return result, []
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m gate.integrity")
     parser.add_argument("--dir", default=os.environ.get(DIR_ENV) or str(DEFAULT_DIR))
@@ -622,7 +718,22 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--allow-missing", action="store_true", help="exit 0 when no marker was written"
     )
+    parser.add_argument(
+        "--merge",
+        nargs="+",
+        metavar="DIR",
+        help="judge a sharded run once: merge these shards' markers into --dir first",
+    )
+    parser.add_argument("--run-id", default=os.environ.get("TEST_RUN_ID", ""))
     args = parser.parse_args(argv)
+    if args.merge is not None:
+        _, problems = merge_shard_markers(
+            args.merge, run_id=args.run_id, lane=args.lane, out_dir=args.dir
+        )
+        if problems:
+            for problem in problems:
+                print(f"run trust merge: {problem}")
+            return 2
     return check_marker(args.dir, args.lane, require=not args.allow_missing)
 
 

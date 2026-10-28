@@ -347,6 +347,38 @@ def test_discount_rule_covered(fixture_pool):
 
 Use `gate.requirement.Requirement("MY_LANE_REQUIRED")` to create a lane-specific switch.
 
+### Out of scope here is not "could not run"
+
+A test written for one environment has nothing to say on another, and a check that can
+never reach a verdict somewhere says so once, with a pointer to where it *is* covered.
+`not_applicable` always skips, whatever `SUITE_REQUIRED`/`VERDICT_REQUIRED` say, records a
+`not_applicable` coverage verdict, and the run-trust gate lists those tests apart ("not
+applicable here") instead of counting them as skips, so they neither redden a required lane
+nor inflate the skip ratio.
+
+```python
+from gate.requirement import not_applicable, runs_only_on
+
+
+def test_export_reaches_the_archive():
+    runs_only_on({"staging"}, "the archive export")  # skips elsewhere: "... not on 'qa'"
+    ...
+
+
+def test_mail_relay_bounce():
+    not_applicable("no mail relay on this stack", covered_by="the staging nightly lane")
+
+
+@pytest.mark.only_env("qa", "staging", covered_by="the staging nightly lane")
+def test_marked(): ...
+```
+
+`runs_only_on(envs, what, env=None, *, covered_by=None)` reads the environment from `env`,
+else `TEST_ENV`, else `qa`; the `only_env` marker is applied at setup by the gate plugin,
+before the circuit breaker can turn it into an abstention. A test that was not applicable in
+each of its last N runs never runs anywhere: `python -m results scope --runs 10` lists it as a
+removal candidate.
+
 ---
 
 ## Config binding to an external checkout

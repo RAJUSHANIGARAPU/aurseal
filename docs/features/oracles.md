@@ -52,6 +52,29 @@ pdf_text.available()  # False when pypdf is absent
 
 Install it with `pip install pypdf`.
 
+## PDF fonts
+
+**What it does.** Lists a document's fonts and whether each is embedded, so a render after
+a runtime or image change that substituted the template's font (or referenced one without
+embedding it) is caught. Every page's `/Resources /Font` is read and Form XObjects are
+followed (each resource dictionary once); a subset prefix (`ABCDEF+`) is removed; a font
+is embedded when its descriptor has `/FontFile`, `/FontFile2` or `/FontFile3` (a `Type0`
+font's descendant counts). Families compare on the part before the first `-` or `,`,
+ignoring spaces and case, so `SegoeUI-Bold` is family `Segoe UI`. Same optional `pypdf`.
+
+```python
+from oracles import pdf_fonts
+
+report = pdf_fonts.fonts(pdf_bytes)  # report.fonts, report.not_embedded, iterate Font entries
+pdf_fonts.assert_fonts(pdf_bytes, "Segoe UI")  # uses the family, every font embedded
+ok, why = pdf_fonts.produced_by_run(pdf_bytes, run_start, created_ids={doc_id})
+```
+
+The font check alone would pass on a stored file from an earlier render, so pair it with
+the control: `produced_since(created_at, run_start, skew)` (creation or modification time
+not before the run start minus clock skew, two minutes by default) or the document id being
+one this run created.
+
 ## Rendered-field cleaning
 
 **What it does.** A form field scraped from the DOM often contains its label

@@ -13,11 +13,20 @@ re-implemented per suite.
 :func:`resolve_checkout` applies the same policy to tests that bind to an
 external checkout (a configuration repository read at a pinned ref): absent
 checkout means abstain, unless the lane sets the ``required`` variable.
+
+"Out of scope here" is a third answer, apart from both. A test written for one
+environment has nothing to say about another, and a check that can never reach a
+verdict on an environment says so once, with a pointer to where the behaviour *is*
+covered. :func:`not_applicable` always skips, whatever the required switches say,
+and records a ``not_applicable`` coverage verdict; the run-trust gate lists those
+apart instead of counting them as abstentions. :func:`runs_only_on` (and the
+``only_env`` marker applied by ``gate.pytest_plugin``) is built on it.
 """
 
 from __future__ import annotations
 
 import os
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import NoReturn
@@ -25,6 +34,7 @@ from typing import NoReturn
 import pytest
 
 from gate._env import env_bool
+from gate.verdicts import NOT_APPLICABLE_PREFIX
 
 SUITE_REQUIRED_ENV = "SUITE_REQUIRED"
 VERDICT_REQUIRED_ENV = "VERDICT_REQUIRED"
@@ -72,6 +82,60 @@ def require_or_skip(usable: bool, reason: str) -> None:
 
 def require_verdict_or_skip(subject: str, reason: str) -> NoReturn:
     VERDICT.abstain(reason, subject=subject)
+
+
+# ---------------------------------------------------------------- out of scope
+
+
+def not_applicable(reason: str, *, covered_by: str, subject: str | None = None) -> NoReturn:
+    """Always skip: out of scope here is not "could not run", so no required switch applies.
+
+    ``covered_by`` is mandatory and names where the behaviour is covered instead (another
+    environment, another test, a manual check). A ``not_applicable`` coverage verdict is
+    recorded for the run-trust gate and the results store.
+    """
+    if not str(covered_by or "").strip():
+        raise ValueError("not_applicable needs covered_by: say where this behaviour is covered")
+    from verification.verdicts import CoverageOutcome, Kind, record_verdict
+
+    record_verdict(
+        Kind.COVERAGE,
+        CoverageOutcome.NOT_APPLICABLE,
+        subject=subject,
+        detail=f"{reason}; covered by {covered_by}",
+    )
+    pytest.skip(f"{NOT_APPLICABLE_PREFIX}{reason} (covered by {covered_by})")
+
+
+def active_env(env: str | None = None) -> str:
+    """The environment a check runs against: ``env``, else ``$TEST_ENV``, else ``qa``."""
+    from core.config_reader import resolve_env
+
+    return resolve_env(env)
+
+
+def runs_only_on(
+    envs: Iterable[str],
+    what: str = "this test",
+    env: str | None = None,
+    *,
+    covered_by: str | None = None,
+) -> None:
+    """Return on an environment in ``envs``; anywhere else, skip as not applicable.
+
+    Deliberately not :func:`require_verdict_or_skip`: another environment is out of scope,
+    not an unmet precondition, so a lane that requires verdicts still skips it.
+    """
+    allowed = sorted({e.strip() for e in envs if e and e.strip()})
+    if not allowed:
+        raise ValueError("runs_only_on needs at least one environment")
+    current = active_env(env)
+    if current in allowed:
+        return
+    not_applicable(
+        f"{what} only runs on {allowed}, not on {current!r}",
+        covered_by=covered_by or f"the same check on {', '.join(allowed)}",
+    )
 
 
 # ---------------------------------------------------------------- external checkout

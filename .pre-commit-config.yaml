@@ -1,4 +1,5 @@
-default_install_hook_types: [pre-commit, commit-msg]
+# pre-push installs the push guard below; re-run `pre-commit install` after pulling this.
+default_install_hook_types: [pre-commit, commit-msg, pre-push]
 
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
@@ -22,6 +23,32 @@ repos:
         language: system
         files: ^\.github/workflows/.*\.ya?ml$
         pass_filenames: true
+
+  # Changes reach main through a pull request. These stop a local commit on main and a
+  # push to main from any clone that ran `pre-commit install`; `--no-verify` skips them, so
+  # the ruleset on the hosting service stays the real control (docs/features/assistant-config.md).
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: no-commit-to-branch
+        args: [--branch, main]
+
+  - repo: local
+    hooks:
+      - id: push-guard
+        name: push guard (no push to main)
+        entry: python -m tools.push_guard pre-push
+        language: system
+        stages: [pre-push]
+        always_run: true
+        pass_filenames: false
+      # Path-scoped assistant rules: front matter, live globs, named in CLAUDE.md.
+      - id: rules-lint
+        name: assistant rules lint
+        entry: python -m tools.rules_lint
+        language: system
+        files: ^(\.claude/rules/.*\.md|CLAUDE\.md)$
+        pass_filenames: false
 
   # Leak gate (tools/leak_gate/README.md). The data lives outside the repo;
   # without it these hooks fail closed.

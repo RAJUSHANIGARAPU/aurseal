@@ -18,45 +18,21 @@ pytest tests/ -n auto
 pytest -m "smoke or api or contract" -n auto --env=qa
 pytest -m regression -n auto   # CI runs this on main only
 
-# Records a new workflow config would reject, before deploying it (docs/features/release-tooling.md)
-python -m tools.config_preflight --old v1.yaml --new v2.yaml --records export.jsonl --fail-on-reject
-
-# Opt-in narrowed runs (CI: SELECTIVE_TESTS=true). Unknown or shared changes run everything.
-python -m gate.selective select --base origin/main      # offline tests a diff can affect
-python -m gate.selective check                          # area map vs the import graph
-python -m gate.service_selection select --services billing --format markdown
-python -m gate.service_selection derive --write         # regenerate config/service_map.json
-python -m gate.change_scope classify --paths docs/x.md  # docs-only? (skips browser jobs)
+# Opt-in narrowed runs, service selection, docs-only skip: docs/ci-decisions.md#selective-tests
+python -m gate.selective check && python -m gate.service_selection derive --write   # after moving tests
 
 docker compose up
 
-# Release reports (docs/features/release-tooling.md)
-python -m tools.hotfix_mergeback --workspace ~/src --since 2026-10-01   # hotfix tags not on main
-python -m tools.release_leadtime --manifest deploy/production.yaml --deployments deploy/log.csv
-
-# Coverage ratchets (what CI runs; /detect-coverage-gaps runs them with --report-only)
-python -m traceability gaps --openapi demo_sut/openapi.json --specs specs \
-  --requirements --baseline traceability/gap-baseline.json
-python -m traceability workflow-gaps --config-dir demo_sut/config \
-  --baseline traceability/workflow-gap-baseline.json   # GAPS= ACTIONS= NEW= STALE=
-
-# Promotion diff between two environments' version manifests (docs/features/release-tooling.md)
-python tools/promotion_diff/promotion_diff.py --from staging.yaml --to production.yaml \
-  --workspace ~/src --strict [--json --candidate-id rc-1]
+# Release tooling (promotion diff, config preflight, hotfix merge-back, lead time):
+# docs/features/release-tooling.md. Coverage ratchets: docs/features/coverage-gaps.md
 
 # Parallel locally: N shards + serial lane + merge, one pool user per worker,
 # headed browser on a virtual display in the Playwright container (--on-host, --headless)
 scripts/run-parallel.sh --env qa --workers 3
 ```
 
-Parallel runs (details: `docs/features/sharded-execution.md`):
-- **User pool** — `.env.<env>.pool` (git-ignored, `POOL_<n>_USERNAME` / `POOL_<n>_PASSWORD`):
-  each test process leases its own user via an OS file lock (`gate.user_pool`). An exported
-  `AUTH_USERNAME` still wins; no pool file, no change.
-- **Rejected password** — a 400 on the password step latches the username; later logins as
-  it in the same process fail at once instead of piling attempts towards a lockout.
-- **Serial lane** — `--serial-lane` on every shard, then `--shard=serial/N`: tests not shown
-  to be isolated run after the shards. An empty serial lane passes and has no say in the merge.
+Parallel runs: one pool user per process (`.env.<env>.pool`), a rejected password is never
+retried, a serial lane after the shards. Details: `docs/features/sharded-execution.md`.
 
 ## Project structure
 ```
@@ -87,9 +63,26 @@ pyproject.toml       # project metadata + tool config
 - `ruff check .` before commit — CI runs it
 
 ## CI gate
-`tests/test_ci_selection.py` fails when any collected test is not selected by a pytest
-command in `.github/workflows/tests.yml`. A new test directory or marker must be wired
-into the workflow in the same change — never widen the gate to tolerate the gap.
+`tests/test_ci_selection.py` fails when a collected test is selected by no pytest command in
+`tests.yml`; wire new tests in the same change. Budget, graduation and dispatch queues:
+`.claude/rules/ci-budget.md` (loads when workflows or `gate/lanes.py` are touched).
+Post-deploy runs (`post-deploy.yml`), the sharding pilot (`shards` input) and the opt-in
+coalescing window (`COALESCE_SECONDS`): `docs/ci-decisions.md`.
+
+## Path-scoped rules
+Topic notes in `.claude/rules/` load only when their paths are touched; `python -m
+tools.rules_lint` (pre-commit and the offline job) keeps them live and named here.
+
+| File | Loads when touching |
+|---|---|
+| `page-objects.md` | `ui/pages`, `ui/components`, `ui/locators`, `ui/tests` |
+| `document-templates.md` | document examples, render lane, template and PDF oracles |
+| `ci-budget.md` | workflows, `gate/lanes.py`, `gate/workflow_lint.py`, `gate/run_inputs.py` |
+| `generators-and-healing.md` | `generators`, `autonomous_ui`, `core/ai`, `plugins`, `orchestration` |
+| `change-scenarios.md` | `tests/demo_examples/change`, `test_data/scenario_manifest.py` |
+
+Pushes to `main` are blocked by the `push-guard` pre-push hook and flagged by
+`main-push-check.yml`; see `docs/features/assistant-config.md`.
 
 ## Constraints
 - No hardcoded URLs — use config files
@@ -187,9 +180,6 @@ python scripts/auto_runner.py --no-fix
 
 ## Accumulated Patterns
 
-**Always read `docs/ai_learnings.md` before writing or fixing tests.** Key patterns:
-- Wait for page: `page.wait_for_load_state("networkidle")` or `expect(locator).to_be_visible(timeout=N)`
-- Stable selectors: `get_by_test_id` > `get_by_role` > `get_by_label` > `get_by_text`
-- Never `time.sleep()` — use Playwright's built-in waits
-- Re-resolve locators after page re-renders (never hold ElementHandle across dynamic updates)
-- Traces are timestamped: `reports/traces/{test}_{browser}_{YYYYMMDD_HHMMSS}.zip`
+**Always read `docs/ai_learnings.md` before writing or fixing tests.** Selector priority,
+waits and re-rendering: `.claude/rules/page-objects.md` (loads with UI files). Traces are
+timestamped: `reports/traces/{test}_{browser}_{YYYYMMDD_HHMMSS}.zip`.

@@ -31,7 +31,10 @@ Shape rules (:class:`ShapeOptions`, on by default for the CLI and
 * a ``schedule`` cron is off the hour, and in a scheduled workflow every job
   but the secret scan reads the nightly switch variable (``NIGHTLY_ENABLED``);
 * a job that runs the secret scan has no ``if:``, no ``needs:``, a full-history
-  checkout and no masked exit status.
+  checkout and no masked exit status;
+* a dispatch-triggered workflow (``repository_dispatch``/``workflow_dispatch``) does not
+  share a concurrency group with ``tests.yml``, so an externally triggered run never
+  queues behind (or replaces a pending) merge gate.
 
 ``python -m gate.workflow_lint [files...]`` is the local parse check and the
 commit guard: the pre-commit hook scoped to ``.github/workflows/`` runs it on
@@ -337,6 +340,83 @@ def _lint_secret_scan(file: str, where: str, job: dict, out: list) -> None:
             out.append(Finding(file, step_where, "secret scan masks its exit status"))
 
 
+GATE_WORKFLOW = "tests.yml"
+DISPATCH_EVENTS = ("repository_dispatch", "workflow_dispatch")
+_EXPR_RE = re.compile(r"\$\{\{\s*(.*?)\s*\}\}")
+
+
+def _group_text(data: dict) -> str | None:
+    concurrency = data.get("concurrency")
+    if isinstance(concurrency, str):
+        return concurrency
+    if isinstance(concurrency, dict) and concurrency.get("group") is not None:
+        return str(concurrency["group"])
+    return None
+
+
+def _render_workflow_name(group: str, name: str) -> str:
+    return _EXPR_RE.sub(lambda m: name if m.group(1) == "github.workflow" else m.group(0), group)
+
+
+def groups_collide(gate_group: str, gate_name: str, other_group: str, other_name: str) -> bool:
+    """Whether ``other_group`` can evaluate to a value ``gate_group`` can take.
+
+    ``github.workflow`` is replaced by each workflow's own name; any other expression of the
+    gate's group matches anything. Two groups that still hold expressions collide when their
+    texts are equal once the names are filled in.
+    """
+    gate = _render_workflow_name(gate_group, gate_name)
+    other = _render_workflow_name(other_group, other_name)
+    if _EXPR_RE.search(other):
+        return gate == other
+    pattern = "".join(
+        ".*" if part.startswith("${{") else re.escape(part)
+        for part in re.split(r"(\$\{\{.*?\}\})", gate)
+        if part
+    )
+    return re.fullmatch(pattern, other) is not None
+
+
+def shared_gate_concurrency(directory: str | Path) -> list[Finding]:
+    """Findings for dispatch-triggered workflows whose concurrency group can be the gate's."""
+    base = Path(directory)
+    gate_path = base / GATE_WORKFLOW
+    try:
+        gate = yaml.safe_load(gate_path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError):
+        return []
+    gate_group = _group_text(gate) if isinstance(gate, dict) else None
+    if gate_group is None:
+        return []
+    findings = []
+    for file in sorted([*base.glob("*.yml"), *base.glob("*.yaml")]):
+        if file.name == GATE_WORKFLOW:
+            continue
+        try:
+            data = yaml.safe_load(file.read_text(encoding="utf-8"))
+        except (OSError, yaml.YAMLError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        on = _on(data)
+        events = set(on) if isinstance(on, (dict, list)) else {on}
+        if not events & set(DISPATCH_EVENTS):
+            continue
+        group = _group_text(data)
+        if group is not None and groups_collide(
+            gate_group, str(gate.get("name", "")), group, str(data.get("name", ""))
+        ):
+            findings.append(
+                Finding(
+                    str(file),
+                    "concurrency",
+                    f"dispatch-triggered workflow shares the {GATE_WORKFLOW} concurrency group "
+                    f"({group!r}): it would queue behind the merge gate",
+                )
+            )
+    return findings
+
+
 def missing_secret_scan(directory: str | Path) -> list[Finding]:
     """A finding when no workflow under ``directory`` has a secret-scan job."""
     for file in sorted([*Path(directory).glob("*.yml"), *Path(directory).glob("*.yaml")]):
@@ -433,6 +513,7 @@ def lint_workflows(
         findings.extend(lint_workflow(file, required.get(file.name, ()), shape))
     if shape is not None and files:
         findings.extend(missing_secret_scan(base))
+        findings.extend(shared_gate_concurrency(base))
     return findings
 
 
@@ -525,7 +606,7 @@ def main(argv: Sequence[str] | None = None, out=None) -> int:
     )
     results = [parse_check(f, shape=shape) for f in files]
     if shape is not None and not args.files and files:
-        scan = missing_secret_scan(args.dir)
+        scan = missing_secret_scan(args.dir) + shared_gate_concurrency(args.dir)
         if scan:
             results.append(CheckResult("failed", scan))
     if args.actionlint:

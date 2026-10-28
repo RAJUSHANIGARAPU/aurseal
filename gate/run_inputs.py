@@ -13,7 +13,14 @@ locally the same names are CLI flags (``--env staging --preset smoke``).
 * ``python -m gate.run_inputs resolve`` validates, prints the final command (token
   masked), appends it to the step summary, exports the environment to ``$GITHUB_ENV`` and
   writes ``custom=true|false`` to ``$GITHUB_OUTPUT`` (``false`` = the literal step runs).
-* ``python -m gate.run_inputs run [--dry-run]`` validates and runs the command.
+* ``python -m gate.run_inputs run [--dry-run] [--shard K/N]`` validates and runs the
+  command; ``--shard`` runs one shard of a sharded run (``-p gate.pytest_shard``) with that
+  shard's own environment (:func:`shard_env`).
+* ``python -m gate.run_inputs plan-shards`` collects the selection once and writes the
+  shard plan (``gate.shard``) to the step summary, and ``indices=[1, ..., N]`` for the
+  matrix to ``$GITHUB_OUTPUT``.
+* ``python -m gate.run_inputs post-deploy`` validates an externally triggered post-deploy
+  run (:func:`post_deploy_plan`) and exports its command, environment and description.
 
 Exit 0 ok, 2 an input is invalid (nothing was started).
 """
@@ -22,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import re
 import secrets
@@ -46,6 +54,16 @@ SEED_MODES = ("fresh", "reuse", "targets")
 # Workflow lanes that switch jobs/steps on (read by the workflow's `if:`s).
 WORKFLOW_LANES = ("regression", "checks", "browser-matrix")
 _TARGETS_RE = re.compile(r"[A-Za-z0-9._-]+(,[A-Za-z0-9._-]+)*")
+SHARD_CHOICES = ("1", "2", "3", "4")
+SHARD_DIR = "reports/shards"
+BRINGUP_REF_PREFIX = "refs/heads/bringup/"
+RELEASE_CANDIDATE_ENV = "RELEASE_CANDIDATE"
+# Per-shard isolation the shard's tests read (the data prefix and the user pool are wired
+# by the parallel-run work; this module only sets the variables).
+AUTH_CACHE_ENV = "TEST_AUTH_CACHE_DIR"
+DATA_PREFIX_ENV = "TEST_WORKER_PREFIX"
+MIN_EXECUTED_ENV = "RUN_TRUST_MIN_EXECUTED"
+DEFAULT_MIN_EXECUTED = 10
 
 
 @dataclass(frozen=True)
@@ -74,6 +92,8 @@ INPUTS: tuple[Input, ...] = (
     Input("run_token_lane", "boolean", "false", "workflow"),
     # Read by gate.service_selection (the gate step's opt-in narrowing), not by the command.
     Input("changed_services", "string", "", "workflow"),
+    Input("shards", "choice", "1", "workflow"),
+    Input("shard_users", "string", "", "command"),
 )
 INPUT_NAMES = frozenset(i.name for i in INPUTS)
 
@@ -87,6 +107,8 @@ class Plan:
     argv: list[str]
     env: dict[str, str] = field(default_factory=dict)
     notices: list[str] = field(default_factory=list)
+    shards: int = 1
+    shard_users: tuple[str, ...] = ()
 
     def printable(self) -> str:
         return shlex.join(self.argv)
@@ -143,8 +165,14 @@ def plan(
     values: Mapping[str, str],
     environments: Sequence[str] | None = None,
     root: str | Path = ROOT,
+    context: Mapping[str, str] | None = None,
 ) -> Plan:
-    """Validate every input, then build the command and environment. Raises RunInputsError."""
+    """Validate every input, then build the command and environment. Raises RunInputsError.
+
+    ``context`` is the run's own environment (``GITHUB_REF``, ``RELEASE_CANDIDATE``): what
+    a sharded run must not be combined with is partly decided by how the run started.
+    """
+    context = context or {}
     values = {**{i.name: i.default for i in INPUTS}, **values}
     unknown = sorted(set(values) - INPUT_NAMES)
     if unknown:
@@ -228,6 +256,10 @@ def plan(
     if targets:
         env["ENTITY_ALLOWLIST"] = targets
 
+    shards = int(_choice("shards", values["shards"], SHARD_CHOICES))
+    users = tuple(u.strip() for u in values["shard_users"].split(",") if u.strip())
+    _check_shards(shards, users, seed_mode, values["selection"], context)
+
     selection = values["selection"].split()
     if selection:
         if preset != "all":
@@ -254,7 +286,149 @@ def plan(
             gate_lanes.gate_marker_expression(base, toggles),
             *GATE_EXECUTION,
         ]
-    return Plan(argv, env, notices)
+    return Plan(argv, env, notices, shards, users)
+
+
+def _check_shards(
+    shards: int,
+    users: tuple[str, ...],
+    seed_mode: str,
+    selection: str,
+    context: Mapping[str, str],
+) -> None:
+    """A sharded run refuses what would make its shards share or skip state."""
+    if shards == 1:
+        if users:
+            raise RunInputsError(
+                "input shard_users is set but shards=1: one login per shard needs shards > 1"
+            )
+        return
+    if seed_mode != "fresh":
+        raise RunInputsError(
+            f"input shards={shards} needs seed_mode='fresh', not {seed_mode!r}: shards "
+            "would share the reused or targeted entities"
+        )
+    if selection.strip():
+        raise RunInputsError(
+            f"input shards={shards} with a selection: a one-off selection is not sharded"
+        )
+    if (context.get("GITHUB_REF") or "").startswith(BRINGUP_REF_PREFIX):
+        raise RunInputsError(f"input shards={shards} on a bring-up ref: one watched run only")
+    if (context.get(RELEASE_CANDIDATE_ENV) or "").strip():
+        raise RunInputsError(
+            f"input shards={shards} with a release candidate: the verdict needs one unsharded "
+            "run while the sharded run is a pilot"
+        )
+    if users and len(users) != shards:
+        raise RunInputsError(
+            f"input shard_users names {len(users)} login(s) for {shards} shards: one per shard"
+        )
+
+
+def shard_env(
+    plan_: Plan, index: int, count: int, environ: Mapping[str, str] | None = None
+) -> dict[str, str]:
+    """The environment of shard ``index`` of ``count``: own auth cache, data prefix, login
+    and an executed floor of ``ceil(min / count)`` (the merged run is held to the full one).
+    """
+    environ = os.environ if environ is None else environ
+    if count != plan_.shards:
+        raise RunInputsError(f"--shard {index}/{count} does not match input shards={plan_.shards}")
+    raw_min = (environ.get(MIN_EXECUTED_ENV) or "").strip()
+    try:
+        minimum = int(raw_min) if raw_min else DEFAULT_MIN_EXECUTED
+    except ValueError:
+        minimum = DEFAULT_MIN_EXECUTED
+    env = {
+        AUTH_CACHE_ENV: f"reports/auth-cache/w{index}",
+        DATA_PREFIX_ENV: f"w{index}",
+        MIN_EXECUTED_ENV: str(math.ceil(minimum / count)) if minimum > 0 else str(minimum),
+    }
+    if plan_.shard_users:
+        env["LOGIN_USERNAME"] = plan_.shard_users[index - 1]
+    return env
+
+
+def shard_argv(plan_: Plan, index: int, count: int) -> list[str]:
+    """The plan's command for one shard; its JUnit file is named after the shard."""
+    argv = [
+        a if not a.startswith("--junitxml=") else f"--junitxml=reports/junit-shard-{index}.xml"
+        for a in plan_.argv
+    ]
+    return [
+        *argv,
+        "-p",
+        "gate.pytest_shard",
+        f"--shard={index}/{count}",
+        f"--shard-dir={SHARD_DIR}",
+    ]
+
+
+# ---------------------------------------------------------------- post-deploy runs
+
+POST_DEPLOY_EVENTS = ("repository_dispatch", "workflow_dispatch")
+POST_DEPLOY_PRESETS = ("smoke", "regression", "all")
+# Environments the merge gate (tests.yml) also runs against: a post-deploy run there may
+# only read, so a deploy never races the gate on shared data.
+GATE_ENVIRONMENTS = frozenset({"qa"})
+_SAFE_LABEL = re.compile(r"[A-Za-z0-9._/@:+-]{1,100}")
+
+
+@dataclass(frozen=True)
+class PostDeploy:
+    plan: Plan
+    source: str
+    ref: str
+
+    @property
+    def description(self) -> str:
+        env = self.plan.env.get("TEST_ENV", "?")
+        ref = f" @ {self.ref}" if self.ref else ""
+        return f"post-deploy {env} | triggered by {self.source}{ref}"
+
+
+def post_deploy_plan(
+    event: str,
+    payload: Mapping[str, str],
+    environments: Sequence[str] | None = None,
+) -> PostDeploy:
+    """Validate a post-deploy trigger. Raises RunInputsError; never a silent green."""
+    if event not in POST_DEPLOY_EVENTS:
+        raise RunInputsError(
+            f"event {event!r} cannot start a post-deploy run; only {list(POST_DEPLOY_EVENTS)}"
+        )
+    unknown = sorted(set(payload) - {"env", "preset", "source", "ref"})
+    if unknown:
+        raise RunInputsError(f"unknown post-deploy field(s) {unknown}")
+    environments = list(environments) if environments is not None else declared_environments()
+    env_name = (payload.get("env") or "").strip()
+    if not env_name:
+        raise RunInputsError("a post-deploy run needs env")
+    if env_name not in environments:
+        raise RunInputsError(f"post-deploy env={env_name!r} is not declared; valid: {environments}")
+    preset = (payload.get("preset") or "smoke").strip()
+    _choice("preset", preset, POST_DEPLOY_PRESETS)
+    if env_name in GATE_ENVIRONMENTS and preset != "smoke":
+        raise RunInputsError(
+            f"post-deploy env={env_name!r} is shared with the merge gate: only the read-only "
+            f"'smoke' preset may run there, not {preset!r}"
+        )
+    source = (payload.get("source") or "").strip()
+    if not source:
+        if event != "workflow_dispatch":
+            raise RunInputsError("a repository_dispatch post-deploy run needs source")
+        source = "manual"
+    ref = (payload.get("ref") or "").strip()
+    for name, value in (("source", source), ("ref", ref)):
+        if value and not _SAFE_LABEL.fullmatch(value):
+            raise RunInputsError(f"post-deploy {name}={value!r} has characters outside a label")
+    base = plan({"env": env_name, "preset": preset}, environments)
+    argv = [*base.argv, "--reruns", "0"]
+    argv = [
+        "--junitxml=reports/junit-post-deploy.xml" if a.startswith("--junitxml=") else a
+        for a in argv
+    ]
+    return PostDeploy(Plan(argv, base.env, base.notices), source, ref)
 
 
 def masked(text: str, token: str | None) -> str:
@@ -275,17 +449,90 @@ def _spawn(argv: list[str], env: dict[str, str]) -> int:
     return subprocess.run([sys.executable, "-m", *argv], env=env, check=False).returncode
 
 
+def _append(path: str | None, text: str) -> None:
+    if path:
+        with open(path, "a", encoding="utf-8") as handle:
+            handle.write(text)
+
+
+Collect = Callable[[list[str]], str]
+
+
+def _collect(argv: list[str]) -> str:
+    """``pytest --collect-only -q`` over a plan's selection; returns its stdout."""
+    selecting = [a for a in argv[1:] if not a.startswith("--junitxml=")]
+    done = subprocess.run(
+        [sys.executable, "-m", "pytest", *selecting, "--collect-only", "-q", "-n", "0"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return done.stdout
+
+
+def _plan_shards(result: Plan, args, collect: Collect, out) -> int:
+    from gate import shard as gate_shard
+
+    if result.shards < 2:
+        print("plan-shards: shards=1, nothing to plan", file=out)
+        _append(args.github_output, "indices=[1]\n")
+        return 0
+    nodeids = [line.strip() for line in collect(result.argv).splitlines() if "::" in line]
+    if not nodeids:
+        print("plan-shards: the selection collected no tests", file=sys.stderr)
+        return 2
+    durations = gate_shard.load_durations(os.environ.get(gate_shard.DURATIONS_ENV))
+    planned = gate_shard.plan_shards(nodeids, durations, result.shards)
+    loads = gate_shard.plan_load(planned, durations)
+    lines = [f"Shard plan: {len(nodeids)} tests over {result.shards} shards"]
+    lines += [
+        f"- shard {k}/{result.shards}: {len(members)} tests, ~{load}s"
+        for k, (members, load) in enumerate(zip(planned, loads, strict=True), start=1)
+    ]
+    print("\n".join(lines), file=out)
+    _append(args.summary, "\n".join(lines) + "\n")
+    _append(args.github_output, f"indices={json.dumps(list(range(1, result.shards + 1)))}\n")
+    return 0
+
+
+def _post_deploy(args, environ: Mapping[str, str], spawn: Spawn, out) -> int:
+    payload = {
+        name: (environ.get(env_var(name)) or "").strip()
+        for name in ("env", "preset", "source", "ref")
+    }
+    try:
+        run = post_deploy_plan(environ.get("GITHUB_EVENT_NAME", ""), payload)
+    except RunInputsError as exc:
+        print(f"post-deploy: {exc}", file=sys.stderr)
+        return 2
+    print(f"command: {run.plan.printable()}", file=out)
+    print(f"description: {run.description}", file=out)
+    _append(args.summary, f"Post-deploy run: {run.description}\n\n`{run.plan.printable()}`\n")
+    _append(args.github_output, f"description={run.description}\n")
+    if args.github_env:
+        _write_env(args.github_env, run.plan.env)
+    if args.dry_run or not args.execute:
+        return 0
+    child = {**environ, **run.plan.env, "PYTHONUNBUFFERED": "1"}
+    return spawn(run.plan.argv, child)
+
+
 def main(
     argv: Sequence[str] | None = None,
     environ: Mapping[str, str] | None = None,
     spawn: Spawn = _spawn,
     out=None,
+    collect: Collect = _collect,
 ) -> int:
     environ = dict(os.environ if environ is None else environ)
     out = out or sys.stdout
     parser = argparse.ArgumentParser(prog="python -m gate.run_inputs")
-    parser.add_argument("command", choices=("resolve", "run"))
+    parser.add_argument("command", choices=("resolve", "run", "plan-shards", "post-deploy"))
     parser.add_argument("--dry-run", action="store_true", help="print, do not run")
+    parser.add_argument("--shard", default=None, help="run: one shard of a sharded run (K/N)")
+    parser.add_argument(
+        "--execute", action="store_true", help="post-deploy: run the validated command"
+    )
     parser.add_argument("--github-env", default=environ.get("GITHUB_ENV"))
     parser.add_argument("--github-output", default=environ.get("GITHUB_OUTPUT"))
     parser.add_argument("--summary", default=environ.get("GITHUB_STEP_SUMMARY"))
@@ -293,16 +540,37 @@ def main(
         parser.add_argument(f"--{item.name.replace('_', '-')}", dest=item.name, default=None)
     args = parser.parse_args(argv)
 
+    if args.command == "post-deploy":
+        return _post_deploy(args, environ, spawn, out)
+
     values = read_inputs(environ)
     for item in INPUTS:
         given = getattr(args, item.name)
         if given is not None:
             values[item.name] = given
     try:
-        result = plan(values)
+        result = plan(values, context=environ)
+        shard_spec = None
+        if args.shard:
+            from gate.shard import parse_shard
+
+            try:
+                shard_spec = parse_shard(args.shard)
+            except ValueError as exc:
+                raise RunInputsError(str(exc)) from None
+            extra = shard_env(result, shard_spec.index, shard_spec.count, environ)
+            result = Plan(
+                shard_argv(result, shard_spec.index, shard_spec.count),
+                {**result.env, **extra},
+                result.notices,
+                result.shards,
+                result.shard_users,
+            )
     except RunInputsError as exc:
         print(f"run inputs: {exc}", file=sys.stderr)
         return 2
+    if args.command == "plan-shards":
+        return _plan_shards(result, args, collect, out)
     token = result.env.get("SUPPLIED_TOKEN")
     for notice in result.notices:
         print(f"run inputs: {notice}", file=out)

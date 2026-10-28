@@ -59,14 +59,69 @@ runs with `selection` reuse it.
 ## Concurrency and time budget
 
 **Rule.** One run per workflow and ref; pull-request runs cancel superseded ones, a
-default-branch run is never cancelled. Every job has `timeout-minutes`, and the critical
-path of `tests.yml` stays within 60 minutes.
+*running* default-branch run is never cancelled (`cancel-in-progress` is false there). Per
+GitHub's documented concurrency behaviour, a group holds at most one running and one pending
+run: a newer push replaces the pending run, which is then cancelled without running, so
+pushes that land while a gate runs collapse into one follow-up run on the newest commit.
+Every job has `timeout-minutes`, and the critical path of `tests.yml` stays within 60
+minutes.
 
 **Prevents.** A cancelled default-branch run leaving no verdict; a hung job holding a runner
 for six hours; a pipeline that slowly grows past anyone's patience.
 
 **Change safely.** Raise a job's timeout only with the budget in view;
 `python -m gate.workflow_lint` names the critical path.
+
+## Coalescing window
+
+**Rule.** Off by default. With the repository variable `COALESCE_SECONDS` (at most 180)
+set, the first job of a default-branch push (`coalesce`, `gate.coalesce`) waits that long
+and compares its commit with the default-branch head; when a newer push exists it writes
+"superseded by <sha>, covered by that run" to the step summary and the gate jobs skip.
+Never on a dispatch, schedule or pull request; any error runs the gate. The window job has
+its own `timeout-minutes` and sits on the critical path, inside the 60-minute budget.
+
+**Prevents.** A burst of merges each paying a full gate run when one run on the newest
+commit covers them all.
+
+**Change safely.** The value is low while GitHub's own pending-run replacement (above)
+already collapses pushes; turn it on only for bursty merge traffic, and keep the job's
+timeout above the window.
+
+## Post-deploy runs
+
+**Rule.** A deployment starts `post-deploy.yml` (`repository_dispatch` type `deployed`,
+payload `env`, `preset`, `source`, `ref`; or by hand). It queues per environment
+(`post-deploy-<env>`, never cancelled), never behind `tests.yml`. `gate.run_inputs
+post-deploy` refuses an unknown environment, a trigger without `source` (a manual dispatch
+is labelled `manual`), any other event, and on an environment the merge gate also uses
+(`qa`) anything but the read-only `smoke` preset. The preset runs with `--reruns 0`; a red
+or not-evidence result, or a refused trigger, alerts with the source and ref in the message.
+
+**Prevents.** A deploy check waiting an hour behind merge gates; a deploy run writing to
+data the gate is reading; a refused trigger looking like a green run.
+
+**Change safely.** `gate.workflow_lint` fails a dispatch-triggered workflow whose
+concurrency group can equal the gate's. Widen `GATE_ENVIRONMENTS` when the gate gains a
+target.
+
+## Sharding pilot
+
+**Rule.** Dispatch input `shards` (1-4, default 1; 1 changes nothing). With more,
+`gate.run_inputs` refuses `seed_mode` other than `fresh`, a `selection`, a bring-up ref, a
+release candidate (`RELEASE_CANDIDATE`) and a `shard_users` list whose length is not
+`shards` (with one shard, any list). `shard-plan` writes the plan to the step summary; each
+`browser-shard` leg runs `-p gate.pytest_shard --shard=k/N` with its own
+`TEST_AUTH_CACHE_DIR`, data prefix `w<k>` (`TEST_WORKER_PREFIX`, read by the shard plugin and `core.run_id`), login (secret
+`LOGIN_PASSWORD_<k>`, else the environment's) and executed floor `ceil(min/N)`;
+`browser-shard-merge` runs `gate.merge` (an incomplete merge fails the run) and judges run
+trust once over the shared `TEST_RUN_ID` at the full floor (`gate.integrity --merge`).
+
+**Prevents.** A sharded run that lost a shard, or a test, reporting a smaller green; shards
+sharing a login, a token cache or test data.
+
+**Change safely.** The serial lane, the per-worker data prefix and the user pool these
+variables feed belong to the parallel-run work; keep their names in step.
 
 ## Nightly
 

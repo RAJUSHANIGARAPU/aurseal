@@ -21,6 +21,7 @@ from gate.workflow_lint import (
     lint_workflow,
     lint_workflows,
     playwright_pin,
+    shared_gate_concurrency,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -359,3 +360,66 @@ def test_the_scanner_finds_an_invented_key_and_honours_the_allow_list(tmp_path):
         f"regexes = ['''^{fake}$''']\n"
     )
     assert subprocess.run(scan, capture_output=True, check=False).returncode == 0
+
+
+# ---------------------------------------------------------------- dispatch queue
+
+
+GATE = """
+name: Tests
+on: [push, workflow_dispatch]
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  a:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: echo
+"""
+
+
+def _dispatch(group: str, name: str = "Post-deploy") -> str:
+    return (
+        GATE.replace("name: Tests", f"name: {name}")
+        .replace(
+            "on: [push, workflow_dispatch]", "on:\n  repository_dispatch:\n    types: [deployed]"
+        )
+        .replace("${{ github.workflow }}-${{ github.ref }}", group)
+    )
+
+
+@pytest.mark.parametrize(
+    ("group", "name", "collides"),
+    [
+        ("post-deploy-${{ inputs.env }}", "Post-deploy", False),
+        ("${{ github.workflow }}-${{ github.ref }}", "Post-deploy", False),
+        ("${{ github.workflow }}-${{ github.ref }}", "Tests", True),
+        ("Tests-refs/heads/main", "Post-deploy", True),
+        ("Tests", "Post-deploy", False),
+    ],
+)
+def test_a_dispatch_workflow_must_not_share_the_gate_queue(tmp_path, group, name, collides):
+    (tmp_path / "tests.yml").write_text(textwrap.dedent(GATE))
+    (tmp_path / "deploy.yml").write_text(textwrap.dedent(_dispatch(group, name)))
+    problems = [f.problem for f in shared_gate_concurrency(tmp_path)]
+    assert bool(problems) is collides, problems
+    if collides:
+        assert "queue behind the merge gate" in problems[0]
+
+
+def test_a_workflow_without_dispatch_triggers_is_not_checked(tmp_path):
+    (tmp_path / "tests.yml").write_text(textwrap.dedent(GATE))
+    other = GATE.replace("on: [push, workflow_dispatch]", "on: [push]")
+    (tmp_path / "other.yml").write_text(textwrap.dedent(other))
+    assert shared_gate_concurrency(tmp_path) == []
+
+
+def test_the_rule_runs_with_the_directory_lint(tmp_path):
+    (tmp_path / "tests.yml").write_text(textwrap.dedent(GATE))
+    (tmp_path / "deploy.yml").write_text(
+        textwrap.dedent(_dispatch("${{ github.workflow }}-${{ github.ref }}", "Tests"))
+    )
+    found = [f.problem for f in lint_workflows(tmp_path)]
+    assert any("queue behind the merge gate" in p for p in found)

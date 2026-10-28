@@ -31,6 +31,12 @@ REACHED = frozenset({"reproduces", "cleared", "closed_pass", "closed_regressed"}
 # Verdicts that are a detector saying nothing (or answering a different question).
 SILENT = frozenset({"held_empty", "signature_mismatch"})
 COVERAGE_PROVED = "proved"
+# A coverage row saying "this test is out of scope here, see covered_by": a skip that is
+# not an abstention (gate.requirement.not_applicable writes it).
+COVERAGE_NOT_APPLICABLE = "not_applicable"
+# Every not-applicable skip reason starts with this, so the run-trust tally can tell it
+# from an abstention even when the verdict file was not written.
+NOT_APPLICABLE_PREFIX = "not applicable here: "
 
 
 @dataclass(frozen=True)
