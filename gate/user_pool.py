@@ -159,7 +159,9 @@ def lease_order(users: Sequence[PoolUser], preferred: int | None) -> list[PoolUs
 
 def lock_path(lease_dir: Path, username: str) -> Path:
     safe = re.sub(r"[^A-Za-z0-9._@-]+", "_", username.strip().lower())[:60]
-    digest = hashlib.sha1(username.strip().lower().encode("utf-8")).hexdigest()[:8]
+    digest = hashlib.sha1(
+        username.strip().lower().encode("utf-8"), usedforsecurity=False
+    ).hexdigest()[:8]
     return lease_dir / f"{safe}-{digest}.lock"
 
 
