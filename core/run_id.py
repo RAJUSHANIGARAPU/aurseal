@@ -20,6 +20,13 @@ GitHub Actions ``GITHUB_RUN_ID``-``GITHUB_RUN_ATTEMPT``), then
 Under xdist every worker is its own process and would mint its own local id a
 second apart. ``pin_for_session`` exports the controller's id as ``TEST_RUN_ID``
 before the workers start, so a run is one id however many workers it has.
+
+A sharded run is one id over several processes, so names a test mints for the data
+it seeds also carry the worker: ``TEST_WORKER_PREFIX`` (``w2`` for shard 2, ``ws``
+for the serial lane, exported by ``gate.pytest_shard``) goes in front of the tag
+(``data_tag``). Two workers then never mint the same name, and a leftover record says
+which worker made it. The prefix is ``[a-z0-9]{0,8}``; anything else fails rather
+than being dropped, since a silently unprefixed name is the collision it prevents.
 """
 
 from __future__ import annotations
@@ -36,6 +43,7 @@ HEADER = "X-Test-Run-Id"
 ID_VARIABLE = "TEST_RUN_ID"
 ENABLED_VARIABLE = "TEST_RUN_TAGGING"
 PRODUCT_VARIABLE = "TEST_RUN_PRODUCT"
+WORKER_PREFIX_VARIABLE = "TEST_WORKER_PREFIX"
 DEFAULT_PRODUCT = "test-automation"
 MAX_LENGTH = 64
 
@@ -114,6 +122,24 @@ def pin_for_session(environ: dict[str, str] | None = None) -> str:
     value = run_id(environ)
     environ[ID_VARIABLE] = value
     return value
+
+
+def worker_prefix(environ: Mapping[str, str] | None = None) -> str:
+    """This process's worker prefix (``w2``, ``ws``), or ``""`` when not sharded."""
+    environ = os.environ if environ is None else environ
+    value = (environ.get(WORKER_PREFIX_VARIABLE) or "").strip()
+    if not re.fullmatch(r"[a-z0-9]{0,8}", value):
+        raise ValueError(
+            f"{WORKER_PREFIX_VARIABLE}={value!r} is not a worker prefix: "
+            "use up to 8 lower-case letters or digits (w1, ws)"
+        )
+    return value
+
+
+def data_tag(tag: str, environ: Mapping[str, str] | None = None) -> str:
+    """``tag`` with the worker prefix in front (``w2-1a2b3c4d``); unchanged when not sharded."""
+    prefix = worker_prefix(environ)
+    return f"{prefix}-{tag}" if prefix else tag
 
 
 def user_agent_token(environ: Mapping[str, str] | None = None) -> str:

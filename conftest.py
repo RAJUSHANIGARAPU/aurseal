@@ -273,8 +273,9 @@ def browser_type_launch_args(browser_type_launch_args, browser_name):
 
 
 @pytest.fixture(scope="session")
-def browser_context_args(browser_context_args):
+def browser_context_args(browser_context_args, config):
     from core import run_id
+    from core.env_profile import browser_timezone, timezone_context_args
 
     args = {
         **browser_context_args,
@@ -286,6 +287,8 @@ def browser_context_args(browser_context_args):
         ),
         "viewport": {"width": 1280, "height": 800},
         "locale": "en-US",
+        # Dates rendered from API timestamps match the API when the zone is pinned.
+        **timezone_context_args(browser_timezone(config)),
     }
     # Tag browser traffic with the run id (User-Agent token) unless TEST_RUN_TAGGING=false.
     tagged = run_id.browser_user_agent(args.get("user_agent"))

@@ -70,6 +70,7 @@ Data directories (no code): `defects/`, `schemas/`, `security/`, `specs/`, `plan
 | `negative` | metadata | select with `-m negative` |
 | `seeded` | metadata | run-trust fixture-provenance rule (`gate.integrity`) |
 | `journey_group` | metadata | fail-fast group, `FAILFAST_JOURNEY_GROUP` (`gate.journey_group`) |
+| `serial` | metadata | serial lane of a sharded run, `--serial-lane` (`gate.pytest_shard`) |
 | `case_id` | metadata | test case catalogue (`results.catalogue`) |
 | `owner` | metadata | test case catalogue (`results.catalogue`) |
 | `priority` | metadata | test case catalogue (`results.catalogue`) |

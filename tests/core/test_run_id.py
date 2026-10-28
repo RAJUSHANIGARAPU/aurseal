@@ -140,3 +140,29 @@ class TestOneIdPerRun:
         inherited, used = lines.pop().split("|")
         # Inherited from the controller, not minted by the worker a second later.
         assert inherited and inherited == used
+
+
+class TestWorkerPrefix:
+    def test_unsharded_names_are_unchanged(self):
+        assert run_id.worker_prefix({}) == ""
+        assert run_id.data_tag("1a2b3c4d", {}) == "1a2b3c4d"
+
+    @pytest.mark.parametrize("prefix", ["w1", "ws", "w12", "abcdefgh"])
+    def test_a_sharded_name_carries_the_worker(self, prefix):
+        environ = {"TEST_WORKER_PREFIX": prefix}
+        assert run_id.data_tag("1a2b3c4d", environ) == f"{prefix}-1a2b3c4d"
+
+    @pytest.mark.parametrize("bad", ["W1", "w-1", "worker123", "w 1", "w_1"])
+    def test_a_malformed_prefix_fails_instead_of_being_dropped(self, bad):
+        with pytest.raises(ValueError, match="not a worker prefix"):
+            run_id.data_tag("1a2b3c4d", {"TEST_WORKER_PREFIX": bad})
+
+    def test_seed_tags_carry_the_prefix(self, monkeypatch):
+        from test_data.factory import new_seed_tag
+
+        monkeypatch.setenv("TEST_WORKER_PREFIX", "w2")
+        first, second = new_seed_tag(), new_seed_tag()
+        assert first.startswith("w2-") and len(first) == len("w2-") + 8
+        assert first != second
+        monkeypatch.delenv("TEST_WORKER_PREFIX")
+        assert "-" not in new_seed_tag()

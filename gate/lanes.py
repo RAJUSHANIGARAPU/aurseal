@@ -88,6 +88,7 @@ LANES: tuple[Lane, ...] = (
 GATE_MARKERS: dict[str, str] = {
     "seeded": "needs data it acquired; counted by the run-trust fixture-provenance rule",
     "journey_group(group)": "skip peers after a deterministic shared-step failure in the group",
+    "serial": "not safe next to another process; runs in the serial lane of a sharded run",
 }
 
 PARALLEL_SAFE_ENV = "E2E_PARALLEL_SAFE"

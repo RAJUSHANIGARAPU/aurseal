@@ -5,6 +5,18 @@ items it collected and deselects everything outside shard K, so xdist workers
 inside one shard agree without talking to each other. Tests marked ``e2e`` or
 ``stateful`` are kept together on one shard.
 
+With ``--serial-lane`` the tests not shown to be isolated leave the K/N shards
+and run in a pass of their own after all of them, ``--shard=serial/N``: tests
+marked ``serial``, tests in a sequential lane of :mod:`gate.lanes` (``e2e``,
+``stateful``; unless ``E2E_PARALLEL_SAFE``), and, when ``--isolated-markers``
+names some, every test that carries none of them. Every K/N shard of such a run
+must get ``--serial-lane`` too. The serial pass may select nothing; that is a
+pass, not exit 5.
+
+The shard also exports ``TEST_SHARD`` (``2/3``, ``serial/3``) and, unless it is
+already set, ``TEST_WORKER_PREFIX`` (``w2``, ``ws``) for everything the process
+starts: the user pool reads the first, seeded test-data names carry the second.
+
 Each shard leaves evidence under ``--shard-dir`` (default ``reports/shards``) for
 the merge step to prove completeness:
 
@@ -13,6 +25,8 @@ the merge step to prove completeness:
   status;
 * ``shard-K-of-N.durations.json`` — measured seconds per node id, the input of the
   next run's plan;
+
+(``shard-serial-of-N.*`` for the serial pass)
 
 plus one ``metric_shard_run`` row (planned vs actual seconds, selected vs
 executed). A bad ``--shard`` value is a usage error (exit 4), not an empty run.
@@ -23,13 +37,17 @@ from __future__ import annotations
 import json
 import os
 import time
+from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
 
+from gate import lanes
+from gate._env import env_bool
 from gate.shard import (
     DURATIONS_ENV,
     ShardSpec,
+    is_serial,
     load_durations,
     parse_shard,
     plan_load,
@@ -37,7 +55,26 @@ from gate.shard import (
 )
 
 PINNED_MARKERS = ("e2e", "stateful")
+SERIAL_MARKER = "serial"
 DEFAULT_DIR = "reports/shards"
+SHARD_ENV = "TEST_SHARD"
+WORKER_PREFIX_ENV = "TEST_WORKER_PREFIX"
+ISOLATED_MARKERS_ENV = "SHARD_ISOLATED_MARKERS"
+
+
+def serial_markers(environ: Mapping[str, str] | None = None) -> tuple[str, ...]:
+    """``serial`` plus the sequential lanes, unless the environment declares isolation."""
+    sequential = (
+        ()
+        if env_bool(lanes.PARALLEL_SAFE_ENV, False, environ)
+        else tuple(lane.marker for lane in lanes.LANES if lane.sequential)
+    )
+    return (SERIAL_MARKER, *sequential)
+
+
+def worker_prefix(spec: ShardSpec) -> str:
+    """``w2`` for shard 2, ``ws`` for the serial lane."""
+    return "ws" if spec.serial else f"w{spec.index}"
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -49,6 +86,17 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         help=f"JSON {{nodeid: seconds}} used to balance shards (env {DURATIONS_ENV})",
     )
     group.addoption("--shard-dir", default=DEFAULT_DIR, help="where shard manifests go")
+    group.addoption(
+        "--serial-lane",
+        action="store_true",
+        default=False,
+        help="move tests not shown to be isolated to a serial pass (--shard=serial/N)",
+    )
+    group.addoption(
+        "--isolated-markers",
+        default=None,
+        help=f"comma-separated markers that show a test is isolated (env {ISOLATED_MARKERS_ENV})",
+    )
 
 
 class _State:
@@ -63,7 +111,7 @@ class _State:
         self.durations: dict[str, float] = {}
 
     def file(self, kind: str) -> Path:
-        return self.out_dir / f"shard-{self.spec.index}-of-{self.spec.count}.{kind}.json"
+        return self.out_dir / f"shard-{self.spec.label}-of-{self.spec.count}.{kind}.json"
 
 
 def _is_worker(config: pytest.Config) -> bool:
@@ -86,7 +134,19 @@ def pytest_configure(config: pytest.Config) -> None:
     except ValueError as exc:
         raise pytest.UsageError(str(exc)) from exc
     state = _State(spec, Path(config.getoption("--shard-dir")))
+    os.environ[SHARD_ENV] = str(spec)
+    if not os.environ.get(WORKER_PREFIX_ENV, "").strip():
+        os.environ[WORKER_PREFIX_ENV] = worker_prefix(spec)
     config.pluginmanager.register(ShardPlugin(config, state), "gate-shard-runner")
+
+
+def _isolated_markers(config: pytest.Config) -> tuple[str, ...]:
+    raw = config.getoption("--isolated-markers") or os.environ.get(ISOLATED_MARKERS_ENV, "")
+    return tuple(name.strip() for name in raw.split(",") if name.strip())
+
+
+def _known(durations: dict[str, float], nodeid: str) -> float:
+    return float(durations.get(nodeid, 0.0))
 
 
 def _durations_path(config: pytest.Config) -> str | None:
@@ -98,25 +158,46 @@ class ShardPlugin:
         self.config = config
         self.state = state
 
+    @property
+    def serial_lane(self) -> bool:
+        return self.state.spec.serial or bool(self.config.getoption("--serial-lane"))
+
+    def _serial_ids(self, items: list[pytest.Item]) -> set[str]:
+        if not self.serial_lane:
+            return set()
+        serial, isolated = serial_markers(), _isolated_markers(self.config)
+        return {
+            item.nodeid
+            for item in items
+            if is_serial({m.name for m in item.iter_markers()}, serial, isolated)
+        }
+
     @pytest.hookimpl(trylast=True)
     def pytest_collection_modifyitems(self, items: list[pytest.Item]) -> None:
         state = self.state
-        pinned = {
-            item.nodeid
-            for item in items
-            if any(item.get_closest_marker(name) for name in PINNED_MARKERS)
-        }
         all_ids = [item.nodeid for item in items]
+        serial_ids = self._serial_ids(items)
         durations = load_durations(_durations_path(self.config))
-        plan = plan_shards(all_ids, durations, state.spec.count, pinned=pinned.__contains__)
-        keep = set(plan[state.spec.index - 1])
+        if state.spec.serial:
+            keep = set(serial_ids)
+            state.planned_s = round(sum(_known(durations, nid) for nid in keep), 3)
+        else:
+            parallel = [nid for nid in all_ids if nid not in serial_ids]
+            pinned = {
+                item.nodeid
+                for item in items
+                if item.nodeid not in serial_ids
+                and any(item.get_closest_marker(name) for name in PINNED_MARKERS)
+            }
+            plan = plan_shards(parallel, durations, state.spec.count, pinned=pinned.__contains__)
+            keep = set(plan[state.spec.index - 1])
+            state.planned_s = plan_load(plan, durations)[state.spec.index - 1]
         kept = [item for item in items if item.nodeid in keep]
         dropped = [item for item in items if item.nodeid not in keep]
         if dropped:
             self.config.hook.pytest_deselected(items=dropped)
         items[:] = kept
         state.selected = sorted(keep)
-        state.planned_s = plan_load(plan, durations)[state.spec.index - 1]
         # Every process computes the same content; an atomic replace makes concurrent
         # writes from xdist workers safe.
         _write_json(
@@ -127,6 +208,8 @@ class ShardPlugin:
                 "collected": sorted(all_ids),
                 "selected": state.selected,
                 "planned_s": state.planned_s,
+                "serial_lane": self.serial_lane,
+                "serial_selected": sorted(serial_ids),
             },
         )
 
@@ -155,6 +238,9 @@ class ShardPlugin:
             selected = data.get("selected", [])
             state.planned_s = data.get("planned_s")
         selected = selected or []
+        if state.spec.serial and not selected and exitstatus == pytest.ExitCode.NO_TESTS_COLLECTED:
+            # Nothing needed the serial lane this time: that is an answer, not a failure.
+            session.exitstatus = exitstatus = pytest.ExitCode.OK
         actual_s = round(time.monotonic() - state.started, 3)
         _write_json(
             state.file("executed"),

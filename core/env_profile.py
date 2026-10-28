@@ -17,11 +17,18 @@ name fails here rather than as an off-by-one-day date much later.
 Every value still goes through ``ConfigReader``, so ``TIMEOUT_MS=60000`` in the
 shell or in ``.env.<env>`` overrides the committed value exactly like any other
 key.
+
+One optional key sits outside the contract: ``browser_timezone`` (an IANA name such
+as ``Europe/Lisbon``; ``BROWSER_TIMEZONE``) pins the browser context's time zone, so
+a date the UI renders from an API timestamp is the date the API means rather than
+whatever zone the machine running the browser is in. Absent, the browser keeps the
+machine's zone, as before. An unknown zone name fails here instead of in Playwright.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from core.clock import CONFIG_KEY as BUSINESS_TIMEZONE_KEY
 from core.clock import DEFAULT_ZONE, zone_named
@@ -64,6 +71,7 @@ class EnvProfile:
     read_only: bool
     api_assertions_enabled: bool
     business_timezone: str = DEFAULT_ZONE
+    browser_timezone: str | None = None
 
     @classmethod
     def from_config(cls, config: ConfigReader) -> EnvProfile:
@@ -95,11 +103,36 @@ class EnvProfile:
             read_only=_bool(config, "read_only"),
             api_assertions_enabled=_bool(config, "api_assertions_enabled"),
             business_timezone=zone,
+            browser_timezone=browser_timezone(config),
         )
 
     def playwright_launch_args(self) -> dict:
         """The launch keyword arguments this profile implies."""
         return {"headless": self.headless, "slow_mo": self.slow_mo_ms}
+
+    def context_args(self) -> dict:
+        """The browser context keyword arguments this profile implies."""
+        return timezone_context_args(self.browser_timezone)
+
+
+def browser_timezone(config: ConfigReader) -> str | None:
+    """The configured browser time zone, validated; None when not configured."""
+    value = config.get_str("browser_timezone", None)
+    if value is None or not value.strip():
+        return None
+    name = value.strip()
+    try:
+        ZoneInfo(name)
+    except (ZoneInfoNotFoundError, ValueError):
+        raise ValueError(
+            f"browser_timezone={name!r} for env {config.env} is not a known IANA time zone"
+        ) from None
+    return name
+
+
+def timezone_context_args(timezone_id: str | None) -> dict:
+    """``{"timezone_id": ...}`` for ``browser.new_context``; ``{}`` leaves the default."""
+    return {"timezone_id": timezone_id} if timezone_id else {}
 
 
 def missing_keys(entry: dict) -> list[str]:

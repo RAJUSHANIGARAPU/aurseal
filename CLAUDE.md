@@ -43,7 +43,20 @@ python -m traceability workflow-gaps --config-dir demo_sut/config \
 # Promotion diff between two environments' version manifests (docs/features/release-tooling.md)
 python tools/promotion_diff/promotion_diff.py --from staging.yaml --to production.yaml \
   --workspace ~/src --strict [--json --candidate-id rc-1]
+
+# Parallel locally: N shards + serial lane + merge, one pool user per worker,
+# headed browser on a virtual display in the Playwright container (--on-host, --headless)
+scripts/run-parallel.sh --env qa --workers 3
 ```
+
+Parallel runs (details: `docs/features/sharded-execution.md`):
+- **User pool** — `.env.<env>.pool` (git-ignored, `POOL_<n>_USERNAME` / `POOL_<n>_PASSWORD`):
+  each test process leases its own user via an OS file lock (`gate.user_pool`). An exported
+  `AUTH_USERNAME` still wins; no pool file, no change.
+- **Rejected password** — a 400 on the password step latches the username; later logins as
+  it in the same process fail at once instead of piling attempts towards a lockout.
+- **Serial lane** — `--serial-lane` on every shard, then `--shard=serial/N`: tests not shown
+  to be isolated run after the shards. An empty serial lane passes and has no say in the merge.
 
 ## Project structure
 ```

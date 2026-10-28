@@ -13,9 +13,17 @@ from a green suite still look green. So merging is two things:
   agree on what was collected, and the union of executed node ids equals the full
   collection. Any gap is a failure of the merge, never a smaller green run.
 
+The serial lane (``--shard=serial/N``, see :mod:`gate.pytest_shard`) is one more
+shard to all of this: what it selected must report, and its exit status counts.
+An *empty* serial lane has no say — selecting nothing is its normal answer when
+no test needed it — but tests the parallel shards handed to it must not vanish
+with it.
+
 ``python -m gate.merge --manifests reports/shards --shards 3 --junit ... --allure ...``
-exits 1 when completeness fails. The run-trust verdict is then computed once
-over the shared ``TEST_RUN_ID`` by ``python -m gate.integrity``.
+exits 1 when completeness fails. ``--summary`` adds one line per shard and a
+verdict that also fails on a shard (with a say) that exited non-zero. The
+run-trust verdict is then computed once over the shared ``TEST_RUN_ID`` by
+``python -m gate.integrity``.
 """
 
 from __future__ import annotations
@@ -26,9 +34,10 @@ import shutil
 import sys
 import xml.etree.ElementTree as ET
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
+from gate.shard import SERIAL_INDEX, shard_label
 from reporting.allure_environment import properties_text
 
 
@@ -152,30 +161,45 @@ def merge_allure(dirs: Iterable[str | Path], out: str | Path) -> int:
     return copied
 
 
+def _empty_serial(index: int, selected: Mapping[int, set[str]] | None) -> bool:
+    """The serial lane with nothing to run: it has no say in completeness or verdict."""
+    return index == SERIAL_INDEX and not (selected or {}).get(SERIAL_INDEX)
+
+
 def check_complete(
     expected: set[str],
     executed: Mapping[int, set[str]],
     shard_count: int | None = None,
     selected: Mapping[int, set[str]] | None = None,
+    serial_expected: set[str] | None = None,
 ) -> list[str]:
-    """Problems that make a merged run incomplete; ``[]`` when it is whole."""
+    """Problems that make a merged run incomplete; ``[]`` when it is whole.
+
+    ``serial_expected`` is what the parallel shards handed to the serial lane; when it
+    is non-empty the serial lane must have left results like any other shard.
+    """
     problems: list[str] = []
     if not expected:
         problems.append("expected collection is empty: nothing to prove completeness against")
     if shard_count is not None:
         missing = sorted(set(range(1, shard_count + 1)) - set(executed))
         problems += [f"shard {k}/{shard_count} left no results" for k in missing]
+    if serial_expected and SERIAL_INDEX not in executed:
+        problems.append(
+            f"serial lane left no results ({len(serial_expected)} test(s) were handed to it)"
+        )
     for index in sorted(executed):
-        if not executed[index]:
-            problems.append(f"shard {index} executed zero tests")
+        if not executed[index] and not _empty_serial(index, selected):
+            problems.append(f"shard {shard_label(index)} executed zero tests")
     if selected:
         for index in sorted(selected):
-            if not selected[index]:
-                problems.append(f"shard {index} selected zero tests")
+            if not selected[index] and index != SERIAL_INDEX:
+                problems.append(f"shard {shard_label(index)} selected zero tests")
             lost = sorted(selected[index] - executed.get(index, set()))
             if lost and index in executed:
                 problems.append(
-                    f"shard {index}: {len(lost)} selected test(s) never reported, e.g. {lost[0]}"
+                    f"shard {shard_label(index)}: {len(lost)} selected test(s) never reported, "
+                    f"e.g. {lost[0]}"
                 )
     union = set().union(*executed.values()) if executed else set()
     not_run = sorted(expected - union)
@@ -192,6 +216,7 @@ class ShardManifests:
     executed: dict[int, set[str]]
     exit_status: dict[int, int]
     problems: list[str]
+    serial_expected: set[str] = field(default_factory=set)
 
 
 def read_manifests(directory: str | Path) -> ShardManifests:
@@ -203,11 +228,14 @@ def read_manifests(directory: str | Path) -> ShardManifests:
     executed: dict[int, set[str]] = {}
     exit_status: dict[int, int] = {}
     problems: list[str] = []
+    serial_expected: set[str] = set()
     for path in sorted(root.glob("shard-*-of-*.selected.json")):
         data = json.loads(path.read_text("utf-8"))
         counts.add(int(data["count"]))
         collections[int(data["shard"])] = frozenset(data.get("collected", []))
         selected[int(data["shard"])] = set(data.get("selected", []))
+        if int(data["shard"]) != SERIAL_INDEX:
+            serial_expected |= set(data.get("serial_selected", []))
     for path in sorted(root.glob("shard-*-of-*.executed.json")):
         data = json.loads(path.read_text("utf-8"))
         counts.add(int(data["count"]))
@@ -219,7 +247,42 @@ def read_manifests(directory: str | Path) -> ShardManifests:
         problems.append("shards collected different test sets (code or plan differs per shard)")
     expected = set().union(*collections.values()) if collections else set()
     count = max(counts) if counts else None
-    return ShardManifests(count, expected, selected, executed, exit_status, problems)
+    return ShardManifests(
+        count, expected, selected, executed, exit_status, problems, serial_expected
+    )
+
+
+def shard_summary(manifests: ShardManifests) -> list[str]:
+    """One line per shard: selected, executed, exit status (the serial lane last)."""
+    indexes = sorted(set(manifests.selected) | set(manifests.executed))
+    indexes.sort(key=lambda i: (i == SERIAL_INDEX, i))
+    lines = []
+    for index in indexes:
+        count = manifests.count or "?"
+        status = manifests.exit_status.get(index)
+        line = (
+            f"shard {shard_label(index)}/{count}: selected {len(manifests.selected.get(index, ()))}"
+            f", executed {len(manifests.executed.get(index, ()))}"
+            f", exit {'-' if status is None else status}"
+        )
+        if _empty_serial(index, manifests.selected):
+            line += " (empty serial lane: no say)"
+        lines.append(line)
+    return lines
+
+
+def verdict(
+    manifests: ShardManifests, problems: Sequence[str], totals: JunitTotals | None = None
+) -> str:
+    """``PASS`` only when the run is whole, every shard with a say exited 0, and no test failed."""
+    if problems:
+        return "FAIL"
+    for index, status in manifests.exit_status.items():
+        if status != 0 and not _empty_serial(index, manifests.selected):
+            return "FAIL"
+    if totals is not None and (totals.failures or totals.errors):
+        return "FAIL"
+    return "PASS"
 
 
 def merge_durations(directory: str | Path, out: str | Path) -> int:
@@ -243,8 +306,14 @@ def main(argv: Sequence[str] | None = None, out=None) -> int:
     parser.add_argument("--allure", nargs="*", default=[], help="Allure result directories")
     parser.add_argument("--allure-out", default="reports/allure-results")
     parser.add_argument("--durations-out", default="reports/durations.json")
+    parser.add_argument(
+        "--summary",
+        action="store_true",
+        help="print one line per shard and a verdict; exit 1 unless it is PASS",
+    )
     args = parser.parse_args(argv)
 
+    totals: JunitTotals | None = None
     if args.junit:
         totals = merge_junit(args.junit, args.junit_out)
         print(
@@ -261,15 +330,28 @@ def main(argv: Sequence[str] | None = None, out=None) -> int:
     merge_durations(args.manifests, args.durations_out)
     count = args.shards or manifests.count
     problems = manifests.problems + check_complete(
-        manifests.expected, manifests.executed, count, manifests.selected
+        manifests.expected,
+        manifests.executed,
+        count,
+        manifests.selected,
+        manifests.serial_expected,
     )
+    if args.summary:
+        for line in shard_summary(manifests):
+            print(line, file=out)
     if problems:
         print("merge: INCOMPLETE", file=out)
         for problem in problems:
             print(f"  - {problem}", file=out)
-        return 1
-    print(f"merge: complete — {len(manifests.expected)} tests across {count} shard(s)", file=out)
-    return 0
+    else:
+        print(
+            f"merge: complete — {len(manifests.expected)} tests across {count} shard(s)", file=out
+        )
+    if args.summary:
+        result = verdict(manifests, problems, totals)
+        print(f"verdict: {result}", file=out)
+        return 0 if result == "PASS" else 1
+    return 1 if problems else 0
 
 
 if __name__ == "__main__":  # pragma: no cover
