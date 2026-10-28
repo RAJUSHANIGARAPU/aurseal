@@ -133,3 +133,6 @@ entries:
   - fingerprint: "bandit:B310:tools/push_guard.py:3a0ba7f687a5"
     reason: "fixed https API host; only the repo and commit come from the environment"
     expires: 2027-01-28
+  - fingerprint: "bandit:B608:traceability/evidence.py:0ec6a36e53c5"
+    reason: "the f-string only builds ? placeholders; every value is a bound parameter"
+    expires: 2027-01-28
