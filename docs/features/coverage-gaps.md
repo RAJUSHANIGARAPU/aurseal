@@ -48,10 +48,19 @@ items. Hits prove a call happened, never that the behaviour was asserted.
 `--baseline`:
 
 - a gap **not** in the baseline fails the step (exit 1) and is printed as `NEW GAP`;
-- a baselined gap that closed passes, with a reminder to remove it from the baseline;
+- a baselined gap that closed also fails, as `stale baseline entry, delete it: <id>`, so
+  the baseline only shrinks (`--allow-stale` turns this back into a reminder);
 - the baseline changes only in a reviewed pull request (`--write-baseline` rewrites it).
 
+`gaps.json` carries `ratchet: {new, closed, passed}`; the release verdict reads it.
+
 So the report compounds without a "fix every gap first" blocker.
+
+**Report-only views** (the ratchet never reads them): `--groups FILE` maps a group (a
+deployment target) to source-item prefixes or `tag:<requirement>` and adds a "Gaps per
+group" table with an `(ungrouped)` row; `--frozen-ref REF` re-reads the same file sources
+at a git ref (a release tag), gives its gap count and the ids present on only one side, or
+"not measured" when the ref lacks a source file.
 
 ## How to use
 

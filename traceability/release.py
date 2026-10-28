@@ -13,7 +13,22 @@ The verdict summarises evidence; it does not invent any. Composition, in order:
 4. **Open defects** from the tracker: at or above a blocking severity or label they block;
    a tracker that cannot be read is no verdict, never "zero open".
 5. **Plan exit criteria**, folded in as they are: ``unmet`` blocks, ``no_evidence`` is no
-   verdict.
+   verdict. With ``plan: required`` in the policy, no plan at all is no verdict.
+6. **Change scope** from a promotion delta (``--delta``): a commit the promotion would
+   regress, a shipped key whose detector still reproduces ("claimed fixed"), a shipped key
+   no test links or mentions ("shipped untested"), and an open blocking defect that ships
+   each give a reason (``change_scope`` in the policy picks block / no_verdict / attention).
+   No delta is one reason, "change scope unknown", never a pass.
+7. **Coverage gaps**: the gap report's ratchet; a failed ratchet breaches, a missing report
+   is "coverage gaps not measured" (``coverage_gaps: block | no_verdict | ignore``).
+8. **Evidence for this build**: with a pinned version (``--version`` or a candidate file's
+   ``pins``), the version the run measured (``build-info.json``) must match it. Not
+   measured, or a different build, is no verdict; a pinned component with no probe is
+   listed as "cannot be measured".
+
+A defect snapshot older than ``defects.max_snapshot_age_hours`` (or with no readable date)
+makes the open-defects rule no verdict. Every check records its name in
+``ReleaseDecision.inputs``.
 
 **Release lines.** A detector whose defect is fixed in another release line (``fix_line``
 on its known-defects manifest entry) cannot hold this release: with ``release_line`` set,
@@ -57,6 +72,26 @@ KNOWN_RED = {
 
 BLOCK, NO_VERDICT, ATTENTION, INFO, WAIVED = "block", "no_verdict", "attention", "info", "waived"
 OUT_OF_SCOPE = "out_of_scope"
+#: Every input the verdict composes; each check appends its name to ``decision.inputs``.
+RELEASE_INPUTS = (
+    "integrity",
+    "verdicts",
+    "case_links",
+    "defect_snapshot",
+    "plan",
+    "change_scope",
+    "coverage_gaps",
+    "build_info",
+)
+CHANGE_SCOPE_CHECKS = (
+    "regressing",
+    "claimed_fixed",
+    "shipped_untested",
+    "open_defect_shipped",
+    "unknown",
+)
+DEFAULT_SNAPSHOT_AGE_HOURS = 168
+DEFAULT_COMPONENT = "app"
 
 
 class ReleaseVerdict(str, Enum):
@@ -153,6 +188,10 @@ class ReleasePolicy:
     defect_severities: frozenset[str]
     defect_labels: frozenset[str]
     check_defects: bool
+    max_snapshot_age_hours: float = DEFAULT_SNAPSHOT_AGE_HOURS
+    change_scope: dict[str, str] = field(default_factory=dict)
+    coverage_gaps: str = BLOCK
+    plan_required: bool = False
 
     @classmethod
     def from_body(cls, body: Mapping[str, Any], revision: str = "") -> ReleasePolicy:
@@ -165,6 +204,8 @@ class ReleasePolicy:
         }
         det = body.get("detectors") or {}
         defects = body.get("defects")
+        scope = {name: NO_VERDICT if name == "unknown" else BLOCK for name in CHANGE_SCOPE_CHECKS}
+        scope.update(body.get("change_scope") or {})
         return cls(
             body=dict(body),
             revision=revision,
@@ -176,6 +217,12 @@ class ReleasePolicy:
             defect_severities=frozenset((defects or {}).get("blocking_severities") or ()),
             defect_labels=frozenset((defects or {}).get("blocking_labels") or ()),
             check_defects=defects is not None,
+            max_snapshot_age_hours=float(
+                (defects or {}).get("max_snapshot_age_hours", DEFAULT_SNAPSHOT_AGE_HOURS)
+            ),
+            change_scope=scope,
+            coverage_gaps=str(body.get("coverage_gaps") or BLOCK),
+            plan_required=body.get("plan") == "required",
         )
 
 
@@ -248,6 +295,8 @@ class ReleaseDecision:
     evidence_runs: list[str]
     matrix: dict[str, Any] | None = None
     computed_at: str = field(default_factory=utc_now)
+    inputs: list[str] = field(default_factory=list)
+    enforcement: str = "fail"
 
     @property
     def waivers(self) -> list[dict[str, Any]]:
@@ -264,11 +313,23 @@ class ReleaseDecision:
             "evidence_runs": self.evidence_runs,
             "reasons": [r.to_json() for r in self.reasons],
             "waivers": self.waivers,
+            "inputs": list(self.inputs),
+            "enforcement": self.enforcement,
         }
+
+    @property
+    def first_line(self) -> str:
+        """Machine-readable: ``RELEASE=<verdict> ENFORCEMENT=<LEVEL> CANDIDATE=<id>``."""
+        return (
+            f"RELEASE={self.verdict.value} ENFORCEMENT={self.enforcement.upper()} "
+            f"CANDIDATE={self.candidate.candidate_id}"
+        )
 
     def to_markdown(self) -> str:
         c = self.candidate
         lines = [
+            self.first_line,
+            "",
             f"## Release {c.release_id} / {c.candidate_id}: {self.verdict.value}",
             "",
             f"Evidence runs: {', '.join(self.evidence_runs) or 'none'} · "
@@ -295,6 +356,15 @@ class ReleaseDecision:
                 lines.append(line)
             lines.append("")
         return "\n".join(lines)
+
+
+_STATUS_HINTS = {
+    "UNCOVERED": " (no case link names it)",
+    "PASSING": " (no proved coverage verdict)",
+    "NOT_RUN": " (no linked test ran)",
+    "FLAKY": " (passed only on a rerun)",
+    "FIX_OBSERVED": " (a detector cleared: verify the fix)",
+}
 
 
 def _requirement_reasons(matrix: Matrix, policy: ReleasePolicy) -> list[Reason]:
@@ -326,7 +396,8 @@ def _requirement_reasons(matrix: Matrix, policy: ReleasePolicy) -> list[Reason]:
                     NO_VERDICT,
                     criterion,
                     exhibit,
-                    f"{prio} requirement is {status}: not enough evidence",
+                    f"{prio} requirement is {status}: not enough evidence"
+                    + _STATUS_HINTS.get(status, ""),
                 )
             )
         if row.stale:
@@ -413,28 +484,81 @@ def _detector_reasons(
     return out
 
 
-def _defect_reasons(
-    open_defects: Callable[[], list[Mapping[str, Any]]] | None, policy: ReleasePolicy
-) -> tuple[list[Reason], list[dict[str, Any]]]:
-    if not policy.check_defects:
-        return [], []
-    if open_defects is None:
-        return [
+def _snapshot_age_reason(
+    open_defects: Callable[[], Any], policy: ReleasePolicy, now: datetime
+) -> tuple[Reason | None, str | None]:
+    """No verdict when the snapshot is older than the policy allows or has no readable date."""
+    from traceability.declared import age_line, parse_time
+
+    stamp_of = getattr(open_defects, "generated_at", None)
+    raw = stamp_of() if callable(stamp_of) else None
+    stamp = parse_time(raw)
+    if stamp is None:
+        return (
             Reason(
                 "defect",
                 NO_VERDICT,
-                "defects",
-                "tracker",
-                "the policy checks open defects but no tracker is configured",
-            )
-        ], []
+                "defects:age",
+                "defect snapshot",
+                f"defect snapshot has no readable generated_at ({raw!r}): its age is unknown",
+            ),
+            raw,
+        )
+    hours = (now - stamp).total_seconds() / 3600
+    if hours > policy.max_snapshot_age_hours:
+        return (
+            Reason(
+                "defect",
+                NO_VERDICT,
+                "defects:age",
+                "defect snapshot",
+                f"{age_line(raw, now)}: older than {policy.max_snapshot_age_hours:g} h, "
+                f"refresh with `defects sync`",
+            ),
+            raw,
+        )
+    return None, raw
+
+
+def _defect_reasons(
+    open_defects: Callable[[], list[Mapping[str, Any]]] | None,
+    policy: ReleasePolicy,
+    now: datetime | None = None,
+) -> tuple[list[Reason], list[dict[str, Any]], str | None]:
+    if not policy.check_defects:
+        return [], [], None
+    if open_defects is None:
+        return (
+            [
+                Reason(
+                    "defect",
+                    NO_VERDICT,
+                    "defects",
+                    "tracker",
+                    "the policy checks open defects but no tracker is configured",
+                )
+            ],
+            [],
+            None,
+        )
     try:
         defects = [dict(d) for d in open_defects()]
     except Exception as exc:  # an unreadable tracker is no evidence, never "zero open"
-        return [
-            Reason("defect", NO_VERDICT, "defects", "tracker", f"defect tracker unreachable: {exc}")
-        ], []
+        return (
+            [
+                Reason(
+                    "defect", NO_VERDICT, "defects", "tracker", f"defect tracker unreachable: {exc}"
+                )
+            ],
+            [],
+            None,
+        )
     out = []
+    age, generated_at = _snapshot_age_reason(
+        open_defects, policy, now or datetime.now(tz=timezone.utc)
+    )
+    if age is not None:
+        out.append(age)
     for d in sorted(defects, key=lambda x: str(x.get("id"))):
         labels = set(d.get("labels") or ())
         severity = d.get("severity")
@@ -450,7 +574,258 @@ def _defect_reasons(
                     f"open defect {d.get('id')} ({why}){title}",
                 )
             )
-    return out, defects
+    return out, defects, generated_at
+
+
+def _is_blocking_defect(d: Mapping[str, Any], policy: ReleasePolicy) -> bool:
+    labels = set(d.get("labels") or ())
+    return d.get("severity") in policy.defect_severities or bool(labels & policy.defect_labels)
+
+
+# ---------------------------------------------------------------------- change scope
+
+
+def normalise_delta(doc: Mapping[str, Any]) -> dict[str, Any]:
+    """A promotion delta in one shape: ``keys``, ``regressing``, ``not_compared``, ``pins``.
+
+    Reads the promotion-diff ``--json`` output (``services[].functional[]`` with ``key``,
+    ``tests``; ``services[].regressing``; top-level ``pins``) and also a flat
+    ``keys``/``regressing`` document.
+    """
+    if "keys" in doc:
+        return {
+            "keys": [dict(k) for k in doc.get("keys") or ()],
+            "regressing": [dict(r) for r in doc.get("regressing") or ()],
+            "not_compared": list(doc.get("not_compared") or ()),
+            "pins": _pins(doc.get("candidate_pins") or doc.get("pins")),
+        }
+    keys: dict[str, dict[str, Any]] = {}
+    regressing, not_compared = [], []
+    for svc in doc.get("services") or ():
+        name = str(svc.get("service") or "")
+        for item in svc.get("functional") or ():
+            key = str(item.get("key") or "")
+            if not key:
+                continue
+            entry = keys.setdefault(key, {"key": key, "services": [], "mentioned_by": []})
+            entry["services"].append(name)
+            entry["mentioned_by"] += [str(t) for t in item.get("tests") or ()]
+        if svc.get("regressing"):
+            regressing.append({"service": name, "commits": list(svc["regressing"])})
+        if svc.get("notCompared"):
+            not_compared.append(name)
+    return {
+        "keys": list(keys.values()),
+        "regressing": regressing,
+        "not_compared": not_compared,
+        "pins": _pins(doc.get("pins")),
+    }
+
+
+def _pins(raw: Any) -> dict[str, str]:
+    """``{component: version}``; a ``{component: {to|candidate: version}}`` form is accepted."""
+    out: dict[str, str] = {}
+    for name, value in (raw or {}).items() if isinstance(raw, Mapping) else ():
+        if isinstance(value, Mapping):
+            value = value.get("to") or value.get("candidate") or value.get("version")
+        if value:
+            out[str(name)] = str(value)
+    return out
+
+
+def _commit_label(commit: Any) -> str:
+    if isinstance(commit, Mapping):
+        return str(commit.get("sha") or commit.get("commit") or commit.get("id") or commit)[:12]
+    return str(commit)[:12]
+
+
+def _change_scope_reasons(
+    delta: Mapping[str, Any] | None,
+    policy: ReleasePolicy,
+    verdicts: Iterable[Mapping[str, Any]],
+    links: CaseLinks,
+    defects: Sequence[Mapping[str, Any]],
+) -> list[Reason]:
+    rules = policy.change_scope
+
+    def reason(check: str, criterion: str, exhibit: str, message: str) -> Reason:
+        return Reason("change", rules[check], criterion, exhibit, message)
+
+    if delta is None:
+        return [
+            reason(
+                "unknown",
+                "change-scope",
+                "promotion delta",
+                "change scope unknown: no promotion delta given (--delta), so what ships is "
+                "not checked against the evidence",
+            )
+        ]
+    out = []
+    for item in delta["regressing"]:
+        commits = ", ".join(_commit_label(c) for c in item.get("commits") or ()) or "commits"
+        out.append(
+            reason(
+                "regressing",
+                f"regressing:{item.get('service')}",
+                "promotion delta",
+                f"the promotion would regress {item.get('service')}: {commits}",
+            )
+        )
+    keys = {str(k["key"]): k for k in delta["keys"]}
+    still = {
+        t: agg
+        for t, agg in aggregate_defects(list(verdicts)).items()
+        if agg.verdict == "reproduces" and t in keys
+    }
+    for ticket in sorted(still):
+        out.append(
+            reason(
+                "claimed_fixed",
+                f"shipped:{ticket}",
+                f"verdicts for {ticket}",
+                f"{ticket} ships as fixed but its detector still reproduces",
+            )
+        )
+    linked = {r for link in links.links for r in link.requirements}
+    for key, entry in sorted(keys.items()):
+        if key not in linked and not entry.get("mentioned_by") and key not in still:
+            out.append(
+                reason(
+                    "shipped_untested",
+                    f"shipped:{key}",
+                    "promotion delta",
+                    f"{key} ships untested: no case link and no test mentions it",
+                )
+            )
+    for d in defects:
+        if str(d.get("id")) in keys and _is_blocking_defect(d, policy):
+            out.append(
+                reason(
+                    "open_defect_shipped",
+                    f"shipped:{d.get('id')}",
+                    str(d.get("id")),
+                    f"{d.get('id')} ships but is an open blocking defect",
+                )
+            )
+    for service in delta["not_compared"]:
+        out.append(
+            Reason(
+                "change",
+                ATTENTION,
+                f"not-compared:{service}",
+                "promotion delta",
+                f"{service} was not compared",
+            )
+        )
+    return out
+
+
+# ---------------------------------------------------------------------- reports
+
+
+def _report_files(reports: Path | None, name: str) -> list[Path]:
+    return sorted(Path(reports).rglob(name)) if reports is not None else []
+
+
+def _gap_reasons(reports: Path | None, policy: ReleasePolicy) -> tuple[list[Reason], Any]:
+    if policy.coverage_gaps == "ignore":
+        return [], None
+    severity = BLOCK if policy.coverage_gaps == BLOCK else NO_VERDICT
+    ratchets = []
+    for path in _report_files(reports, "gaps.json"):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(data, dict) and isinstance(data.get("ratchet"), dict):
+            ratchets.append((str(path), data["ratchet"]))
+    if not ratchets:
+        return [
+            Reason(
+                "coverage",
+                NO_VERDICT,
+                "coverage-gaps",
+                "gaps.json",
+                "coverage gaps not measured: no gap report with a ratchet result",
+            )
+        ], None
+    out = []
+    for where, r in ratchets:
+        if not r.get("passed"):
+            listed = list(r.get("new") or ()) or [f"stale: {x}" for x in r.get("closed") or ()]
+            out.append(
+                Reason(
+                    "coverage",
+                    severity,
+                    "coverage-gaps",
+                    where,
+                    "coverage-gap ratchet failed: " + ", ".join(listed[:10]),
+                )
+            )
+    return out, [r for _, r in ratchets]
+
+
+def _norm_version(raw: Any) -> str:
+    text = str(raw or "").strip()
+    return text[1:] if text[:1] in ("v", "V") else text
+
+
+def _build_reasons(
+    reports: Path | None, pins: Mapping[str, str], evidence_runs: Sequence[str]
+) -> tuple[list[Reason], list[dict[str, Any]]]:
+    if not pins:
+        return [], []
+    measured: dict[str, list[dict[str, Any]]] = {}
+    for path in _report_files(reports, "build-info*.json"):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        if data.get("run_id") and evidence_runs and data["run_id"] not in evidence_runs:
+            continue
+        measured.setdefault(str(data.get("component") or DEFAULT_COMPONENT), []).append(data)
+    out = []
+    for component, pinned in sorted(pins.items()):
+        criterion = f"build:{component}"
+        rows = measured.get(component)
+        if rows is None:
+            out.append(
+                Reason(
+                    "build",
+                    NO_VERDICT,
+                    criterion,
+                    "build-info.json",
+                    f"version not measured: {component} cannot be measured (no version probe "
+                    f"wrote a build-info.json for it)",
+                )
+            )
+            continue
+        values = {_norm_version(r.get("version")) for r in rows if r.get("measured")}
+        if not values:
+            out.append(
+                Reason(
+                    "build",
+                    NO_VERDICT,
+                    criterion,
+                    "build-info.json",
+                    f"{component}: version not measured (the probe found no version)",
+                )
+            )
+        elif values != {_norm_version(pinned)}:
+            out.append(
+                Reason(
+                    "build",
+                    NO_VERDICT,
+                    criterion,
+                    "build-info.json",
+                    f"evidence for a different build: {component} pinned {pinned}, the run "
+                    f"measured {', '.join(sorted(values))}",
+                )
+            )
+    return out, [r for rows in measured.values() for r in rows]
 
 
 def _plan_reasons(evaluation: Any | None) -> list[Reason]:
@@ -513,17 +888,33 @@ def decide_release(
     open_defects: Callable[[], list[Mapping[str, Any]]] | None = None,
     release_line: str | None = None,
     fix_lines: Mapping[str, str] | None = None,
+    delta: Mapping[str, Any] | None = None,
+    reports_dir: Path | None = None,
+    pins: Mapping[str, str] | None = None,
+    input_problems: Sequence[str] = (),
+    enforcement: str = "fail",
 ) -> ReleaseDecision:
     """Compose the verdict for ``candidate`` from the runs ``source`` exposes.
 
     ``fix_lines`` maps a defect id to the release line its fix ships in; with
     ``release_line`` set, detectors for other lines are out of scope.
+
+    ``reports_dir`` is where ``gaps.json`` and ``build-info.json`` are looked for (default:
+    the artefact source's directory). ``pins`` maps component -> version; the candidate's
+    ``version`` pins the default component.
     """
-    today = (now or datetime.now(tz=timezone.utc)).date()
+    moment = now or datetime.now(tz=timezone.utc)
+    today = moment.date()
+    if reports_dir is None:
+        reports_dir = getattr(source, "reports_dir", None)
     all_runs = source.runs()
     view = EvidenceView(source)
     evidence = view.runs()
-    reasons: list[Reason] = []
+    reasons: list[Reason] = [
+        Reason("input", ATTENTION, "input", "release decide arguments", problem)
+        for problem in input_problems
+    ]
+    considered: list[str] = ["integrity"]
     for run in all_runs:
         if not run.is_evidence:
             reasons.append(
@@ -545,6 +936,7 @@ def decide_release(
                 "no run is evidence (no run with run-trust PASS)",
             )
         )
+    considered.append("verdicts")
     reasons += _detector_reasons(view.verdicts(), policy, release_line, fix_lines)
     requirement_ids: tuple[str, ...] = ()
     if plan is not None:
@@ -553,10 +945,13 @@ def decide_release(
         requirement_ids = tuple(
             selection.requirements if selection is not None else plan_requirements(plan, registry)
         )
+    considered.append("case_links")
     matrix = build_matrix(registry, None, view, Scope(requirements=requirement_ids))
     reasons += _requirement_reasons(matrix, policy)
-    defect_reasons, defects = _defect_reasons(open_defects, policy)
+    considered.append("defect_snapshot")
+    defect_reasons, defects, snapshot_at = _defect_reasons(open_defects, policy, moment)
     reasons += defect_reasons
+    considered.append("plan")
     evaluation = None
     if plan is not None:
         from traceability.plans import evaluate_plan
@@ -565,6 +960,26 @@ def decide_release(
             plan, source, registry=registry, selection=selection, open_defects=open_defects
         )
         reasons += _plan_reasons(evaluation)
+    elif policy.plan_required:
+        reasons.append(
+            Reason(
+                "plan", NO_VERDICT, "plan", "--plan", "no test plan given; the policy requires one"
+            )
+        )
+    considered.append("change_scope")
+    scope = normalise_delta(delta) if delta is not None else None
+    reasons += _change_scope_reasons(scope, policy, view.verdicts(), view.links(), defects)
+    considered.append("coverage_gaps")
+    gap_reasons, gap_ratchets = _gap_reasons(reports_dir, policy)
+    reasons += gap_reasons
+    considered.append("build_info")
+    pinned = dict((scope or {}).get("pins") or {})
+    pinned.update(pins or {})
+    if candidate.version:
+        pinned[DEFAULT_COMPONENT] = candidate.version
+    evidence_ids = [r.run_id for r in evidence]
+    build_reasons, measured = _build_reasons(reports_dir, pinned, evidence_ids)
+    reasons += build_reasons
     reasons = _apply_waivers(reasons, waivers, candidate.release_id, today)
 
     severities = {r.severity for r in reasons}
@@ -593,6 +1008,11 @@ def decide_release(
             for r in matrix_doc["rows"]
         ],
         "defects": sorted(json.dumps(d, sort_keys=True, default=str) for d in defects),
+        "defect_snapshot_generated_at": snapshot_at,
+        "delta": scope,
+        "coverage_gaps": gap_ratchets,
+        "pins": pinned,
+        "build_info": sorted(json.dumps(m, sort_keys=True, default=str) for m in measured),
         "plan": evaluation.to_json()["criteria"] if evaluation else None,
         "plan_revision": plan.revision if plan is not None else None,
         "policy": policy.body,
@@ -615,6 +1035,8 @@ def decide_release(
         policy_revision=policy.revision,
         evidence_runs=list(dict.fromkeys(r.run_id for r in evidence)),
         matrix=matrix_doc,
+        inputs=considered,
+        enforcement=enforcement,
     )
 
 

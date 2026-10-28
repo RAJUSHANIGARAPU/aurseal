@@ -28,6 +28,13 @@ import pytest
 
 MUTATING_VERBS = frozenset({"post", "put", "patch", "delete"})
 
+#: Modules that must stay read-only; a test runs :func:`find_write_calls` over them.
+READ_ONLY_MODULES: tuple[str, ...] = (
+    "integrations/read_transport.py",
+    "integrations/requirements/base.py",
+    "gate/read_only.py",
+)
+
 
 class ReadOnlyHttp(Protocol):
     def get(self, path: str, **kwargs: Any) -> Any: ...

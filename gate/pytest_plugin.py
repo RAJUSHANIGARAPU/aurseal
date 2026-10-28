@@ -68,10 +68,25 @@ def _skip_reason(report: pytest.TestReport) -> str:
     return str(longrepr or "")[:500]
 
 
+def _failure_message(report: pytest.TestReport) -> str:
+    """The short message of a failed attempt (the crash line, else the start of the repr)."""
+    crash = getattr(report.longrepr, "reprcrash", None)
+    text = getattr(crash, "message", None) or str(report.longrepr or "")
+    return " ".join(str(text).split())[:500]
+
+
 class _Running:
     """Mutable per-test state while reports arrive."""
 
-    __slots__ = ("outcome", "markers", "reason", "defect", "cleared")
+    __slots__ = (
+        "outcome",
+        "markers",
+        "reason",
+        "defect",
+        "cleared",
+        "failed_attempts",
+        "first_failure",
+    )
 
     def __init__(self, markers: tuple[str, ...]) -> None:
         self.outcome: Outcome | None = None
@@ -79,6 +94,8 @@ class _Running:
         self.reason = ""
         self.defect: str | None = None
         self.cleared = False
+        self.failed_attempts = 0
+        self.first_failure = ""
 
 
 class RunTrustPlugin:
@@ -146,8 +163,12 @@ class RunTrustPlugin:
 
         outcome = report.outcome
         if outcome == "rerun":
-            # This attempt will be retried; only the final attempt answers.
+            # This attempt will be retried; only the final attempt answers. The failure is
+            # kept, so a pass on the retry reads as flaky rather than as a clean pass.
             state.outcome, state.reason, state.cleared = None, "", False
+            state.failed_attempts += 1
+            if not state.first_failure:
+                state.first_failure = _failure_message(report)
             return
         if report.when == "setup":
             if outcome == "failed":
@@ -185,7 +206,14 @@ class RunTrustPlugin:
                 continue
             out.append(
                 TestResult(
-                    nodeid, state.outcome, state.markers, state.reason, state.defect, state.cleared
+                    nodeid,
+                    state.outcome,
+                    state.markers,
+                    state.reason,
+                    state.defect,
+                    state.cleared,
+                    state.failed_attempts,
+                    state.first_failure,
                 )
             )
         return out

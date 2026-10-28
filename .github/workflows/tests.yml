@@ -87,6 +87,10 @@ on:
         description: "Comma-separated logins, one per shard (shards > 1 only; optional)"
         type: string
         default: ""
+      release_verdict_report:
+        description: "Compose the release verdict in report mode after the browser lane"
+        type: boolean
+        default: false
 
 # One run per ref. A newer pull-request run cancels the superseded one; a running
 # default-branch run is never cancelled, because a cancelled run leaves no verdict. GitHub
@@ -228,6 +232,13 @@ jobs:
         env:
           REQUIREMENTS_STRICT: "true"
 
+      - name: Requirement ids in prose are linked (shrink-only baseline)
+        run: python -m traceability links --check-prose --baseline traceability/prose-baseline.txt
+
+      # Offline: reads the committed snapshot only; "not measured" when none is configured.
+      - name: Declared defect ids are in the committed snapshot
+        run: python -m traceability defects check
+
       - name: Test plans
         run: python -m traceability plan lint plans/
 
@@ -329,7 +340,10 @@ jobs:
 
       - name: Traceability matrix
         if: always()
-        run: python -m traceability matrix --reports reports/ --out reports/traceability/
+        run: |
+          python -m traceability matrix --reports reports/ --out reports/traceability/ || rc=$?
+          echo "matrix: $(cat reports/traceability/headline.txt 2>/dev/null || echo MISSING)" >> "$GITHUB_STEP_SUMMARY"
+          exit "${rc:-0}"
 
       - name: Build the test case catalogue
         if: always()
@@ -441,6 +455,7 @@ jobs:
           INPUT_CHANGED_SERVICES: ${{ inputs.changed_services }}
           INPUT_SHARDS: ${{ inputs.shards }}
           INPUT_SHARD_USERS: ${{ inputs.shard_users }}
+          INPUT_RELEASE_VERDICT_REPORT: ${{ inputs.release_verdict_report }}
 
       # Why: docs/ci-decisions.md#credentials
       - name: Login credentials for the target environment
@@ -548,7 +563,27 @@ jobs:
 
       - name: Traceability matrix
         if: always()
-        run: python -m traceability matrix --reports reports/ --out reports/traceability/
+        run: |
+          python -m traceability matrix --reports reports/ --out reports/traceability/ || rc=$?
+          echo "matrix: $(cat reports/traceability/headline.txt 2>/dev/null || echo MISSING)" >> "$GITHUB_STEP_SUMMARY"
+          exit "${rc:-0}"
+
+      # Opt-in, report only: composes the verdict even after a red run and never sets the
+      # result. Without a candidate file or delta the best answer is NO_VERDICT.
+      - name: Release verdict (report only)
+        if: always() && (inputs.release_verdict_report || vars.RELEASE_VERDICT_REPORT == 'true')
+        run: |
+          python -m traceability release decide --enforcement report --release ci --candidate "$GITHUB_SHA" --reports reports/ --out reports/release/ || echo "::warning title=Release verdict::release decide could not run"
+          echo "$(head -n 1 "reports/release/ci-$GITHUB_SHA.md" 2>/dev/null || echo RELEASE=UNKNOWN)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the release verdict
+        if: always() && (inputs.release_verdict_report || vars.RELEASE_VERDICT_REPORT == 'true')
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: release-verdict-browser
+          path: reports/release/
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Export the results bundle
         if: always()

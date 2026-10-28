@@ -21,6 +21,9 @@ class FakeSession:
         self.routes = dict(routes or {})
         self.calls: list[tuple[str, str, dict]] = []
 
+    def get(self, url: str, **kw: Any) -> FakeResponse:
+        return self.request("GET", url, **kw)
+
     def request(self, method: str, url: str, **kw: Any) -> FakeResponse:
         path = urlsplit(url).path
         self.calls.append((method, path, kw))

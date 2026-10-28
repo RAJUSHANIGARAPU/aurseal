@@ -23,6 +23,27 @@ any. The code lives in `traceability/release.py`; the policy in `release-policy.
    at a blocking severity or label block. No tracker, or one that cannot be read, is no
    verdict, never "zero open".
 5. **Plan exit criteria** (with `--plan`): `unmet` blocks, `no_evidence` is no verdict.
+   With `plan: required` in the policy, no plan is no verdict.
+6. **Change scope** (`--delta`, or `delta` in `release-candidates/<candidate>.json`): the
+   promotion diff's JSON. A commit the promotion would regress, a shipped key whose
+   detector still `reproduces` ("claimed fixed"), a shipped key with no case link and no
+   mentioning test ("shipped untested") and an open blocking defect that ships each give a
+   reason; `change_scope` in the policy sets block, no_verdict or attention per check. No
+   delta is one reason, "change scope unknown" (no verdict), never a pass.
+7. **Coverage gaps**: the `ratchet` in `gaps.json` under `--reports`. A failed ratchet
+   blocks (listing the new gaps); no report is "coverage gaps not measured".
+   `coverage_gaps: block | no_verdict | ignore`.
+8. **Evidence for this build**: with a pinned version (`--version` pins the `app`
+   component; a candidate file's `pins` map adds others), the `build-info.json` that
+   `core.build_info.observe_once` wrote must match it (a leading `v` is ignored). Not
+   measured, a different build, or a component with no probe ("cannot be measured") is no
+   verdict.
+
+A defect snapshot older than `defects.max_snapshot_age_hours` (default 168), or with no
+readable `generated_at`, is no verdict; its `generated_at` is part of the inputs hash.
+A candidate id that names no file under `--candidates-dir` is listed as an input problem.
+Every check records its name in the verdict's `inputs`; a property test removes each
+input in turn from a GO fixture and requires the result to stop being GO.
 
 Then: any unwaived blocker → `NO_GO`; else any unwaived no-verdict → `NO_VERDICT`; else
 any waiver used → `GO_WITH_WAIVERS`; else `GO`.
@@ -84,7 +105,20 @@ python -m traceability release decide --release R1 --candidate rc2 \
 
 Exit codes: `0` GO and GO_WITH_WAIVERS (the waivers are printed), `1` NO_GO,
 `3` NO_VERDICT, `2` usage error. Writes `reports/release/<release>-<candidate>.json`
-(schema `release-verdict.schema.json`) and `.md`.
+(schema `release-verdict.schema.json`) and `.md`, whose first line is
+`RELEASE=<verdict> ENFORCEMENT=<LEVEL> CANDIDATE=<id>`.
+
+**Enforcement.** `--enforcement fail|unstable|report` (env `RELEASE_VERDICT_ENFORCEMENT`,
+or `RELEASE_VERDICT`; default `fail`) only decides the exit code: `report` always exits 0
+and says so, `unstable` exits 0 with a `::warning::` line for a non-GO verdict. The verdict
+never changes. The `Tests` workflow has an opt-in step after the browser lane (dispatch
+input `release_verdict_report` or repository variable `RELEASE_VERDICT_REPORT=true`, both
+off by default): `if: always()`, `--enforcement report --release ci --candidate
+$GITHUB_SHA`, first line appended to the step summary (`RELEASE=UNKNOWN` if no file) and
+the files uploaded. Without a delta its best answer is `NO_VERDICT`. A
+`gate/workflow_lint.py` rule keeps that step `always()`, report-only and free of
+`continue-on-error: false` in every pull-request or scheduled workflow; the dedicated
+`release.yml` gate keeps `fail`.
 
 | Method | Path | What |
 |---|---|---|

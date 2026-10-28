@@ -50,7 +50,33 @@ defect, once, and writes the snapshot. With `DEFECT_STATUS_FILE` set, `known_def
 start (register `traceability.defects.register` before the known_defect plugin).
 
 Plans (`max_open_defects`) and the release verdict read open defects from the same
-snapshot; no snapshot is *no evidence*, never "zero open".
+snapshot; no snapshot is *no evidence*, never "zero open". Every consumer prints
+`snapshot <date> (<n> days old)`.
+
+Tracker reads go through a GET-only transport (`integrations/read_transport.py`) limited to
+the tracker host and the issues/search paths; anything else is refused before a byte is
+sent. A tracker with `get_states_batch` is asked in chunks; a rejected chunk is split in
+half until the bad id stands alone, and that id lands in the snapshot's `missing` list.
+
+### Committed snapshot and the offline check
+
+```bash
+python -m traceability defects refresh --keys-from declared   # writes defects/status-snapshot.json
+python -m traceability defects check                          # offline, CI's offline job
+```
+
+`defects/tracking.yaml` says where detectors live and the floors. Declared ids are found
+statically: `still_reproduces` / `known_defect` / `detector_pair.judge` call sites (id from
+the first argument or `ticket=`, constants resolved) and `*.manifest.json` open issues.
+`check` reads only the committed snapshot and fails on:
+
+- a declared id with no entry ("refresh with `defects sync`");
+- fewer call sites or ids than the floor, so a narrowed scan can't pass by tracking nothing;
+- drift: a `closed=False` (or manifest) id the snapshot says is closed, or a `closed=True`
+  id it says is open, unless the line is in `defects/drift-baseline.txt`; a baseline line
+  that no longer drifts fails too.
+
+No snapshot configured prints "not measured" and passes.
 
 ## Drafts flowing out
 
@@ -62,7 +88,13 @@ python -m traceability defects draft --from-run reports/ --submit       # file n
 One draft per failed/errored test and per `closed_regressed` detector, written to
 `reports/traceability/defect-drafts/<fingerprint>.md` plus `drafts.json`. The body
 carries the node id, run id, failure message (from the failure bundle when there is one),
-failed requests and a hidden `<!-- defect-fingerprint: ... -->`.
+failed requests, the deployed build the run measured (or "not measured"), the CI run URL,
+"Possibly already filed" (the defect ids the test links to, then up to three open snapshot
+defects whose title shares three or more distinctive words with the failure) and a hidden
+`<!-- defect-fingerprint: ... -->`. The body is redacted first: bearer/basic/JWT tokens,
+`key=`/`token=`/`password=` values, credentials in URLs and the values of secret-named
+environment variables become `<redacted>`. A failure whose detector reported `reproduces`
+in the same run is a confirmed known defect and gets no draft.
 
 The **fingerprint** is `sha256(nodeid + normalised failure message)[:16]`, where
 normalising masks numbers, timestamps, UUIDs, hex ids and temp paths, so the same failure

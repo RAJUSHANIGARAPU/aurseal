@@ -27,6 +27,10 @@ class TrackerUnavailable(RuntimeError):
     """The tracker could not be read: fall back to the last snapshot, never assume closed."""
 
 
+class BadQuery(ValueError):
+    """The tracker rejected a batched lookup as a whole (one bad id spoils the query)."""
+
+
 @dataclass(frozen=True)
 class DefectState:
     id: str
@@ -90,6 +94,9 @@ class DefectTracker(Protocol):
     name: str
 
     def get_states(self, ids: Collection[str]) -> dict[str, DefectState]: ...
+
+    # Optional: ``get_states_batch(ids)`` answers many ids in one query and raises
+    # ``BadQuery`` when the query as a whole is rejected (see traceability.defects).
 
     def find_by_fingerprint(self, fp: str) -> DefectRef | None: ...
 

@@ -6,7 +6,7 @@ default_priority: must          # a requirement without a priority is treated as
 requirements:
   must:
     block: [FAILING, KNOWN_DEFECT]
-    no_verdict: [UNCOVERED, NOT_RUN, UNVERIFIED, DRAFT_ONLY, PASSING]
+    no_verdict: [UNCOVERED, NOT_RUN, UNVERIFIED, DRAFT_ONLY, PASSING, FLAKY, FIX_OBSERVED]
   should:
     block: [FAILING]
     no_verdict: [UNCOVERED, NOT_RUN, UNVERIFIED, DRAFT_ONLY]
@@ -20,3 +20,14 @@ detectors:
 defects:
   blocking_severities: [critical, high]
   blocking_labels: [blocker]
+  max_snapshot_age_hours: 168   # an older snapshot (or one with no date) is no verdict
+# What ships (release decide --delta <promotion diff json>). No delta: "change scope
+# unknown", which is no verdict, never a pass.
+change_scope:
+  regressing: block             # a commit the promotion would take back out
+  claimed_fixed: block          # a shipped key whose detector still reproduces
+  shipped_untested: block       # a shipped key no case link or test mentions
+  open_defect_shipped: block    # a shipped key that is an open blocking defect
+  unknown: no_verdict
+coverage_gaps: block            # failed gap ratchet blocks; no gap report is no verdict
+plan: optional                  # required: no --plan is no verdict

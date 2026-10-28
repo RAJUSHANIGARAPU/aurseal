@@ -23,6 +23,11 @@ worker sees it before its next test. The upstream-timeout allowance is counted
 per process.
 
 Once tripped it never resets within a run (:meth:`reset` exists for unit tests).
+
+:func:`upstream_timeouts` counts, per process, every response classified as an upstream
+timeout, and :func:`last_upstream_timeout` names the last dependency. The journey-group
+fail-fast samples the count around a test: a failure while it rose is load on a third
+party, not a broken shared step.
 """
 
 from __future__ import annotations
@@ -44,6 +49,33 @@ HOSTS_ENV = "CIRCUIT_BREAKER_HOSTS"
 UPSTREAM_LIMIT_ENV = "CIRCUIT_BREAKER_UPSTREAM_LIMIT"
 
 UpstreamClassifier = Callable[[int, str | None], str | None]
+
+_upstream_lock = threading.Lock()
+_upstream_count = 0
+_upstream_last: str | None = None
+
+
+def upstream_timeouts() -> int:
+    """How many upstream timeouts this process has seen (any breaker)."""
+    return _upstream_count
+
+
+def last_upstream_timeout() -> str | None:
+    """The dependency (host + path) of the most recent upstream timeout, or None."""
+    return _upstream_last
+
+
+def _count_upstream(dependency: str) -> None:
+    global _upstream_count, _upstream_last
+    with _upstream_lock:
+        _upstream_count += 1
+        _upstream_last = dependency
+
+
+def _reset_upstream() -> None:
+    global _upstream_count, _upstream_last
+    with _upstream_lock:
+        _upstream_count, _upstream_last = 0, None
 
 
 #: Header set by ``checks.faults`` on every response it manufactures.
@@ -202,6 +234,7 @@ class ServerErrorBreaker:
         dependency = self.upstream_timeout(status, body) if self.upstream_timeout else None
         stamp = datetime.now(tz=timezone.utc).isoformat()
         if dependency is not None:
+            _count_upstream(dependency)
             with self._lock:
                 self._upstream_seen += 1
                 seen = self._upstream_seen
@@ -294,11 +327,18 @@ class ServerErrorBreaker:
                 "so it receives no further requests."
             )
 
+    def upstream_timeouts(self) -> int:
+        return upstream_timeouts()
+
+    def last_upstream_timeout(self) -> str | None:
+        return last_upstream_timeout()
+
     def reset(self) -> None:
-        """For unit tests only."""
+        """For unit tests only. Also clears the process-wide upstream-timeout count."""
         self._tripped = None
         self._upstream_seen = 0
         self._local = threading.local()
+        _reset_upstream()
 
 
 _default: ServerErrorBreaker = ServerErrorBreaker(enabled=False)

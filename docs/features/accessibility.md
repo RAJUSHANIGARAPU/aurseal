@@ -18,6 +18,18 @@ is a thin adapter over it.
   route path, an issue's `finding` the axe rule id. A known violation is excused only on its own
   route, and asserted to still occur there; when it stops, the check fails with
   `KNOWN DEFECT CLEARED` until the entry is removed. A rule that did not run cannot "clear".
+* **Element-scoped issues.** An issue can also name `host` (a CSS selector of the enclosing
+  component) plus the element's exact `text` and/or measured `fg_color` (from axe's
+  `color-contrast` data), never the generated CSS path. It excuses only the violation nodes
+  of its rule inside that component with that text/colour; a matching violation node
+  reproduces, a matching *pass* node clears, and no matching node is `held_empty` (a skip,
+  never "fixed"). Axe is asked for passes as well as violations for this. Manifest rails:
+  an element-scoped issue needs `host` plus `text` or `fg_color`, and a manifest holds at
+  most 15 open issues (`check_manifest(max_issues=...)`).
+* **Instrument control.** `scan_routes` first loads a page with an image that has no alt
+  text and requires axe, with the same options, to report `image-alt`; otherwise it raises
+  "scanner does not bite". After each scan the page's path must equal the route's: a
+  redirect (a login page) makes the route `not_scanned` with both URLs, never clean.
 * **Verdict** (`checks._outcome`):
 
 | What happened | Status |

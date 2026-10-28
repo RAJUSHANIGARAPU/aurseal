@@ -15,6 +15,10 @@ and the first failure keeps its full diagnostics (and its reruns).
   is the signature of load, not of a broken step, and it lands at a different
   step each run. It is logged and peers stay runnable
   (``JOURNEY_GROUP_TOLERATE_TIMEOUTS=false`` restores gating on timeouts).
+* Upstream stalls do not gate either, under the same switch. The upstream-timeout count
+  (``gate.circuit_breaker.upstream_timeouts``) is sampled when each test starts; a test
+  that fails after the count rose failed while a third party behind the environment was
+  timing out, so its peers keep running.
 * Only a *final* failure counts: an attempt pytest-rerunfailures will retry
   does not gate anything.
 * Recording is always on; skipping only when ``FAILFAST_JOURNEY_GROUP`` is true,
@@ -35,6 +39,7 @@ from pathlib import PurePath
 import pytest
 
 from core.logger import logger
+from gate import circuit_breaker
 from gate._env import env_bool, env_list
 
 MARKER = "journey_group"
@@ -91,6 +96,7 @@ class JourneyGroupPlugin:
         self.page_paths = page_paths or env_list(PAGE_PATHS_ENV, DEFAULT_PAGE_PATHS)
         self.failures: dict[str, FlowBreak] = {}
         self._pending: dict[str, tuple[str, str]] = {}
+        self._upstream_at_start: dict[str, int] = {}
 
     @staticmethod
     def group_of(item: pytest.Item) -> str | None:
@@ -109,7 +115,10 @@ class JourneyGroupPlugin:
     @pytest.hookimpl(tryfirst=True)
     def pytest_runtest_setup(self, item: pytest.Item) -> None:
         group = self.group_of(item)
-        if group is None or not skip_enabled():
+        if group is None:
+            return
+        self._upstream_at_start[item.nodeid] = circuit_breaker.upstream_timeouts()
+        if not skip_enabled():
             return
         failure = self.failures.get(group)
         if failure is None or failure.nodeid == item.nodeid:
@@ -131,12 +140,21 @@ class JourneyGroupPlugin:
         found = fingerprint(exc, self.page_paths)
         if found is None:
             return
-        if env_bool(EXEMPT_TIMEOUTS_ENV, True) and is_timeout(exc):
+        tolerate = env_bool(EXEMPT_TIMEOUTS_ENV, True)
+        if tolerate and is_timeout(exc):
             logger.warning(
                 "[failfast] journey group %r timed out at %s in %s - peers keep running",
                 group,
                 found,
                 item.nodeid,
+            )
+            return
+        started = self._upstream_at_start.get(item.nodeid)
+        if tolerate and started is not None and circuit_breaker.upstream_timeouts() > started:
+            logger.warning(
+                "[failfast] %s failed after an upstream timeout (%s), peers keep running",
+                item.nodeid,
+                circuit_breaker.last_upstream_timeout(),
             )
             return
         self._pending[item.nodeid] = (group, found)

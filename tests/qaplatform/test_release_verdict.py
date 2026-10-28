@@ -5,6 +5,7 @@ from __future__ import annotations
 from qaplatform import schemas
 from qaplatform.readers import PolicyReleaseVerdicts, release_verdicts_from_env
 from tests.qaplatform._helpers import finish, new_run, push
+from traceability.defects import defects_provider
 
 POLICY = """\
 version: 1
@@ -17,7 +18,18 @@ detectors:
   block: [signature_mismatch]
 defects:
   blocking_severities: [critical]
+# The platform has no promotion delta and no gap report for a release; this policy opts
+# those two inputs out explicitly (the repository policy does not).
+change_scope:
+  unknown: attention
+coverage_gaps: ignore
 """
+
+
+def _fresh() -> str:
+    from datetime import datetime, timezone
+
+    return datetime.now(tz=timezone.utc).isoformat()
 
 
 def _policy(tmp_path) -> str:
@@ -41,7 +53,9 @@ def _verdict(api, release: str):
 
 
 def test_a_trusted_run_and_no_open_defect_is_go(service, api, tmp_path):
-    service.release_verdict_reader = PolicyReleaseVerdicts(_policy(tmp_path), open_defects=list)
+    service.release_verdict_reader = PolicyReleaseVerdicts(
+        _policy(tmp_path), open_defects=defects_provider([], _fresh())
+    )
     run_id = _passing_run(api, "2.4.0")
     doc = _verdict(api, "2.4.0")
     assert (doc["project"], doc["release"], doc["decision"]) == ("default", "2.4.0", "go")
@@ -52,7 +66,7 @@ def test_a_trusted_run_and_no_open_defect_is_go(service, api, tmp_path):
 def test_an_open_blocking_defect_is_no_go(service, api, tmp_path):
     defects = [{"id": "BUG-1", "severity": "critical", "title": "totals off"}]
     service.release_verdict_reader = PolicyReleaseVerdicts(
-        _policy(tmp_path), open_defects=lambda: defects
+        _policy(tmp_path), open_defects=defects_provider(defects, _fresh())
     )
     _passing_run(api, "2.4.0")
     doc = _verdict(api, "2.4.0")
@@ -61,7 +75,9 @@ def test_an_open_blocking_defect_is_no_go(service, api, tmp_path):
 
 
 def test_a_release_without_runs_is_not_assessed(service, api, tmp_path):
-    service.release_verdict_reader = PolicyReleaseVerdicts(_policy(tmp_path), open_defects=list)
+    service.release_verdict_reader = PolicyReleaseVerdicts(
+        _policy(tmp_path), open_defects=defects_provider([], _fresh())
+    )
     _passing_run(api, "2.4.0")  # another release's evidence never counts
     doc = _verdict(api, "9.9.9")
     assert doc["decision"] == "not_assessed"

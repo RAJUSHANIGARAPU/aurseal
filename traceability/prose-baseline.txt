@@ -1,0 +1,2 @@
+# Requirement ids mentioned in a test's prose but not linked with a marker.
+# Shrink-only: delete a line once the test carries the marker (or drops the mention).

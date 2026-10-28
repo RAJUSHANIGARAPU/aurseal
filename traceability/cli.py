@@ -38,6 +38,15 @@ def open_db(path: str | None):
 def _links(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser("links", help="requirement links: check ids, show or store them")
     p.add_argument("--check", action="store_true", help="collect-only check of every marker id")
+    p.add_argument(
+        "--check-prose",
+        action="store_true",
+        help="ids named in a test's name, docstring or param id must also be marker links",
+    )
+    p.add_argument("--baseline", help="with --check-prose: tolerated '<test> <id>' lines")
+    p.add_argument(
+        "--write-baseline", action="store_true", help="with --check-prose: rewrite the baseline"
+    )
     p.add_argument("--strict", action="store_true", help="exit 1 on any bad id (or set strict env)")
     p.add_argument("--rootdir", default=".", help="suite root to collect")
     p.add_argument("--reports", help="show the case-links file(s) of a finished run")
@@ -50,8 +59,11 @@ def _links_run(args: argparse.Namespace) -> int:
     from traceability._util import env_flag
     from traceability.requirements import STRICT_ENV, Registry
 
+    if args.check_prose:
+        return _links_prose(args)
     if args.check:
         from traceability.collect import collect
+        from traceability.matrix import CONTAINER_KINDS
 
         result = collect(Path(args.rootdir), args.pytest_args)
         strict = args.strict or env_flag(STRICT_ENV)
@@ -59,9 +71,22 @@ def _links_run(args: argparse.Namespace) -> int:
         linked = sum(1 for item in result.items if item.get("requirements"))
         for b in bad:
             print(f"{b['nodeid']}: {b['id']} ({b['problem']})")
+        # Report only, never fails: a link to an epic is too coarse to be the requirement.
+        registry = Registry.load(rootdir=Path(args.rootdir))
+        coarse = [
+            (item["nodeid"], req, entry.kind)
+            for item in result.items
+            for req in item.get("requirements") or ()
+            if (entry := registry.get(req)) is not None and entry.kind in CONTAINER_KINDS
+        ]
+        for nodeid, req, kind in coarse:
+            print(f"{nodeid}: {req} (link too coarse: kind {kind}, not a requirement)")
         for err in result.errors:
             print(f"collection: {err}", file=sys.stderr)
-        print(f"{len(result.items)} tests, {linked} linked, {len(bad)} bad requirement id(s)")
+        print(
+            f"{len(result.items)} tests, {linked} linked, {len(bad)} bad requirement id(s), "
+            f"{len(coarse)} too coarse (report only)"
+        )
         if result.errors:
             return 2
         return 1 if bad and strict else 0
@@ -79,8 +104,36 @@ def _links_run(args: argparse.Namespace) -> int:
             return 0
         print_json(doc.to_json())
         return 0
-    print("links: pass --check or --reports", file=sys.stderr)
+    print("links: pass --check, --check-prose or --reports", file=sys.stderr)
     return 2
+
+
+def _links_prose(args: argparse.Namespace) -> int:
+    from traceability.collect import collect
+    from traceability.prose import DEFAULT_BASELINE, load_baseline, ratchet, violations
+    from traceability.prose import write_baseline as write_prose_baseline
+
+    result = collect(Path(args.rootdir), ["-p", "traceability._prose_ids", *args.pytest_args])
+    for err in result.errors:
+        print(f"collection: {err}", file=sys.stderr)
+    if result.errors:
+        return 2
+    found = violations(result.items)
+    baseline = Path(args.baseline) if args.baseline else Path(args.rootdir) / DEFAULT_BASELINE
+    if args.write_baseline:
+        write_prose_baseline(found, baseline)
+        print(f"prose baseline written: {len(found)} tolerated mention(s) -> {baseline}")
+        return 0
+    outcome = ratchet(found, load_baseline(baseline))
+    for line in outcome.new:
+        print(f"PROSE-ONLY ID: {line} (add the requirement marker)")
+    for line in outcome.stale:
+        print(f"STALE BASELINE LINE, delete it: {line}")
+    print(
+        f"{len(result.items)} tests, {len(found)} prose-only id(s), {outcome.tolerated} in the "
+        f"baseline, {len(outcome.new)} new, {len(outcome.stale)} stale"
+    )
+    return 0 if outcome.ok else 1
 
 
 # ---------------------------------------------------------------------- matrix (G-004)
@@ -121,7 +174,11 @@ def source_from_args(args: argparse.Namespace, requirements: Sequence[str] = ())
 def _matrix(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser("matrix", help="requirements traceability matrix (report only)")
     add_source_args(p)
-    p.add_argument("--out", default="reports/traceability", help="writes matrix.json + .md")
+    p.add_argument(
+        "--out",
+        default="reports/traceability",
+        help="writes matrix.json, .md, .csv and headline.txt",
+    )
     p.add_argument("--requirements", nargs="+", default=[], help="only these requirement ids")
     p.add_argument("--save", action="store_true", help="with --db: store a snapshot")
     p.set_defaults(func=_matrix_run)
@@ -129,7 +186,7 @@ def _matrix(sub: argparse._SubParsersAction) -> None:
 
 def _matrix_run(args: argparse.Namespace) -> int:
     from traceability._util import write_json, write_text
-    from traceability.matrix import build_matrix, matrix_json, render_markdown
+    from traceability.matrix import build_matrix, matrix_json, render_csv, render_markdown
     from traceability.requirements import Registry
 
     registry = Registry.load(args.registry)
@@ -147,7 +204,10 @@ def _matrix_run(args: argparse.Namespace) -> int:
     out = Path(args.out)
     write_json(out / "matrix.json", doc)
     write_text(out / "matrix.md", render_markdown(matrix))
+    write_text(out / "matrix.csv", render_csv(matrix))
+    write_text(out / "headline.txt", matrix.headline_line + "\n")
     print(matrix.headline)
+    print(matrix.headline_line)
     return 0
 
 
@@ -261,6 +321,13 @@ def _gaps(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--baseline", help="ratchet against this accepted-gaps file")
     p.add_argument("--write-baseline", action="store_true", help="rewrite the baseline")
     p.add_argument("--report-only", action="store_true", help="never fail on new gaps")
+    p.add_argument(
+        "--allow-stale",
+        action="store_true",
+        help="a closed gap still in the baseline is a reminder, not a failure",
+    )
+    p.add_argument("--groups", help="report only: group name -> item prefixes or tag:<id>")
+    p.add_argument("--frozen-ref", help="report only: the same file sources at this git ref")
     p.add_argument("--rootdir", default=".")
     p.add_argument("--out", default="reports/traceability")
     p.add_argument("--db", help="also store the report (with --run-id / --branch)")
@@ -279,6 +346,9 @@ def _gaps_run(args: argparse.Namespace) -> int:
         RequirementSource,
         SpecSource,
         detect_gaps,
+        frozen_view,
+        group_gaps,
+        load_groups,
         location,
         ratchet,
         report_json,
@@ -313,7 +383,21 @@ def _gaps_run(args: argparse.Namespace) -> int:
         write_baseline(report, Path(args.baseline))
         print(f"baseline written: {len(report.gaps)} accepted gap(s)")
     elif args.baseline:
-        result = ratchet(report, Path(args.baseline))
+        result = ratchet(report, Path(args.baseline), strict=not args.allow_stale)
+    if args.groups:
+        report.groups = group_gaps(report, load_groups(Path(args.groups)))
+    if args.frozen_ref:
+        report.frozen = frozen_view(
+            report,
+            args.frozen_ref,
+            root=root,
+            openapi=args.openapi,
+            specs=args.specs,
+            postman=args.postman,
+            links=collection.items,
+        )
+        if not report.frozen.get("measured"):
+            print(f"frozen ref {args.frozen_ref}: not measured ({report.frozen.get('reason')})")
     doc = report_json(report)
     out = Path(args.out)
     write_json(out / "gaps.json", doc)
@@ -333,10 +417,8 @@ def _gaps_run(args: argparse.Namespace) -> int:
     counts = doc["counts"]
     print(" · ".join(f"{k} {v}" for k, v in counts.items()))
     if result is not None:
-        for gap in result.new_gaps:
-            print(f"NEW GAP: {gap}")
-        if result.closed_gaps:
-            print(f"{len(result.closed_gaps)} gap(s) closed: remove them from {args.baseline}")
+        for line in result.messages():
+            print(line)
         if not result.ok and not args.report_only:
             return 1
     return 0
@@ -457,6 +539,18 @@ def _release(sub: argparse._SubParsersAction) -> None:
         "--known-defects",
         help="known-defects manifest file or directory: the fix_line of each defect",
     )
+    d.add_argument("--delta", help="promotion diff JSON: what ships (change-scope rules)")
+    d.add_argument(
+        "--candidates-dir",
+        default="release-candidates",
+        help="<candidate>.json here may carry pins and a delta path",
+    )
+    d.add_argument(
+        "--enforcement",
+        choices=["fail", "unstable", "report"],
+        help="what the verdict does to the exit code (env RELEASE_VERDICT_ENFORCEMENT or "
+        "RELEASE_VERDICT; default fail). The verdict itself never changes.",
+    )
     d.set_defaults(func=_release_decide)
 
 
@@ -482,6 +576,33 @@ def _release_decide(args: argparse.Namespace) -> int:
     registry = Registry.load(args.registry, rootdir=Path(args.rootdir))
     if plan is not None:
         selection = resolve_plan(plan, Path(args.rootdir), registry)
+    import os
+
+    enforcement = (
+        args.enforcement
+        or os.environ.get("RELEASE_VERDICT_ENFORCEMENT", "").strip().lower()
+        or os.environ.get("RELEASE_VERDICT", "").strip().lower()
+        or "fail"
+    )
+    if enforcement not in ("fail", "unstable", "report"):
+        raise ValueError(f"enforcement must be fail, unstable or report, got {enforcement!r}")
+    problems: list[str] = []
+    pins: dict[str, str] = {}
+    delta_path = Path(args.delta) if args.delta else None
+    candidate_file = Path(args.candidates_dir) / f"{args.candidate}.json"
+    if candidate_file.is_file():
+        body = json.loads(candidate_file.read_text(encoding="utf-8"))
+        pins = {str(k): str(v) for k, v in (body.get("pins") or {}).items()}
+        if delta_path is None and body.get("delta"):
+            delta_path = candidate_file.parent / str(body["delta"])
+    else:
+        problems.append(f"candidate {args.candidate!r} names no file ({candidate_file})")
+    delta = None
+    if delta_path is not None:
+        if delta_path.is_file():
+            delta = json.loads(delta_path.read_text(encoding="utf-8"))
+        else:
+            problems.append(f"delta file {delta_path} does not exist")
     candidate = Candidate(
         args.release_id, args.candidate, args.version, args.commit, plan.id if plan else None
     )
@@ -504,6 +625,11 @@ def _release_decide(args: argparse.Namespace) -> int:
             open_defects=open_defects_provider(),
             release_line=args.release_line,
             fix_lines=fix_lines,
+            delta=delta,
+            reports_dir=Path(args.reports) if args.reports else None,
+            pins=pins,
+            input_problems=problems,
+            enforcement=enforcement,
         )
         doc = decision_json(decision)
         if store is not None and args.save:
@@ -524,7 +650,15 @@ def _release_decide(args: argparse.Namespace) -> int:
     write_json(out / f"{stem}.json", doc)
     write_text(out / f"{stem}.md", decision.to_markdown())
     print(decision.to_markdown())
-    return EXIT_CODES[decision.verdict]
+    code = EXIT_CODES[decision.verdict]
+    if enforcement == "report":
+        print("enforcement: report - the verdict is recorded and never changes the exit code")
+        return 0
+    if enforcement == "unstable":
+        if code:
+            print(f"::warning title=Release verdict::{decision.first_line}")
+        return 0
+    return code
 
 
 # ---------------------------------------------------------------------- defects (G-025)
@@ -549,7 +683,22 @@ def _defects(sub: argparse._SubParsersAction) -> None:
     draft.add_argument("--tracker", default="github", help="tracker name to file in")
     draft.add_argument("--trackers", help="tracker config")
     draft.add_argument("--flaky", help="JSON list of node ids never to file")
+    draft.add_argument("--snapshot", help="defect snapshot for 'possibly already filed'")
     draft.set_defaults(func=_defects_draft)
+    chk = dsub.add_parser(
+        "check", help="offline: every declared defect id is in the committed snapshot"
+    )
+    chk.add_argument("--snapshot", help="committed snapshot (default: tracking config's)")
+    chk.add_argument("--config", help="tracking config (default defects/tracking.yaml)")
+    chk.add_argument("--rootdir", default=".")
+    chk.set_defaults(func=_defects_check)
+    ref = dsub.add_parser("refresh", help="write a snapshot of the declared ids, to commit")
+    ref.add_argument("--keys-from", choices=["declared"], default="declared")
+    ref.add_argument("--out", help="snapshot path (default: tracking config's)")
+    ref.add_argument("--config", help="tracking config (default defects/tracking.yaml)")
+    ref.add_argument("--trackers", help="tracker config")
+    ref.add_argument("--rootdir", default=".")
+    ref.set_defaults(func=_defects_refresh)
 
 
 def _defects_sync(args: argparse.Namespace) -> int:
@@ -560,9 +709,12 @@ def _defects_sync(args: argparse.Namespace) -> int:
     ids = set(args.ids) | set(referenced_ids())
     if not args.no_collect:
         from traceability.collect import collect
+        from traceability.declared import TrackingConfig, scan
 
         result = collect(Path(args.rootdir), ["-p", "traceability._defect_ids"])
         ids |= {d for item in result.items for d in item.get("defects") or ()}
+        # still_reproduces ids and manifest open issues: the same scan `defects check` uses.
+        ids |= set(scan(TrackingConfig.load(rootdir=Path(args.rootdir))).ids)
     cache = StatusCache(config, Path(args.snapshot) if args.snapshot else None)
     snap = cache.sync(ids)
     if args.db:
@@ -577,7 +729,58 @@ def _defects_sync(args: argparse.Namespace) -> int:
     )
     for error in snap.errors:
         print(f"warning: {error}", file=sys.stderr)
+    print(snap.age_line())
     print(f"export DEFECT_STATUS_FILE={cache.snapshot}")
+    return 0
+
+
+def _tracking(args: argparse.Namespace):
+    from traceability.declared import TrackingConfig
+
+    return TrackingConfig.load(args.config, rootdir=Path(args.rootdir))
+
+
+def _defects_check(args: argparse.Namespace) -> int:
+    from traceability.declared import check, scan
+    from traceability.defects import Snapshot
+
+    tracking = _tracking(args)
+    target = Path(args.snapshot) if args.snapshot else tracking.path(tracking.snapshot)
+    if target is None:
+        print("defect status: not measured (no committed snapshot is configured)")
+        return 0
+    if not target.is_file():
+        print(f"no committed snapshot at {target}: refresh with `defects sync`")
+        return 1
+    snap = Snapshot.load(target)
+    found = scan(tracking)
+    result = check(tracking, snap.defects, found)
+    for line in result.problems:
+        print(line)
+    for note in result.notes:
+        print(f"note: {note}")
+    print(
+        f"{len(found.ids)} declared id(s) at {found.call_sites} call site(s); "
+        f"{snap.age_line()}; {len(result.problems)} problem(s)"
+    )
+    return 0 if result.ok else 1
+
+
+def _defects_refresh(args: argparse.Namespace) -> int:
+    from integrations.trackers.base import TrackerConfig
+    from traceability.declared import scan
+    from traceability.defects import refresh_declared
+
+    tracking = _tracking(args)
+    out = Path(args.out) if args.out else tracking.path(tracking.snapshot)
+    if out is None:
+        raise ValueError("pass --out or set 'snapshot' in the tracking config")
+    found = scan(tracking)
+    config = TrackerConfig.load(args.trackers, rootdir=Path(args.rootdir))
+    snap = refresh_declared(config, found.ids, out)
+    for error in snap.errors:
+        print(f"warning: {error}", file=sys.stderr)
+    print(f"{len(snap.defects)} declared defect(s) -> {out}; {snap.age_line()}")
     return 0
 
 
@@ -586,15 +789,30 @@ def _defects_draft(args: argparse.Namespace) -> int:
 
     from integrations.trackers.base import TrackerConfig, build
     from traceability.defects import (
+        Snapshot,
         autofile_allowed,
         draft_from_failure,
+        failure_links,
         failures_from_reports,
         file_drafts,
+        snapshot_path,
         write_drafts,
     )
 
+    snap_file = Path(args.snapshot) if args.snapshot else snapshot_path()
+    snapshot = Snapshot.load(snap_file) if snap_file.is_file() else None
+    print(snapshot.age_line() if snapshot else f"snapshot not found at {snap_file}")
+    links = failure_links(Path(args.from_run))
     drafts = [
-        draft_from_failure(None, row, nodeid=nodeid, run_id=run_id, message=message)
+        draft_from_failure(
+            None,
+            row,
+            nodeid=nodeid,
+            run_id=run_id,
+            message=message,
+            snapshot=snapshot,
+            links=links.get(nodeid, ()),
+        )
         for run_id, nodeid, message, row in failures_from_reports(Path(args.from_run))
     ]
     submit = args.submit or autofile_allowed()

@@ -76,3 +76,17 @@ def test_local_source(tmp_path):
     assert [r.id for r in LocalYamlSource(path).fetch()] == ["REQ-1"]
     with pytest.raises(SourceUnavailable):
         LocalYamlSource(tmp_path / "none.yaml").fetch()
+
+
+def test_an_epic_label_or_sub_issues_make_a_container():
+    issues = [
+        _issue(10, "REQ-10: Billing", labels=("requirement", "epic")),
+        {**_issue(11, "REQ-11: Payments"), "sub_issues_summary": {"total": 2}},
+        _issue(12, "REQ-12: Refund rounding"),
+    ]
+    session = FakeSession({("GET", f"/repos/{REPO}/issues"): lambda q: issues})
+    kinds = {r.id: r.kind for r in GitHubIssuesSource(REPO, session=session).fetch()}
+    assert kinds == {"REQ-10": "epic", "REQ-11": "epic", "REQ-12": "requirement"}
+    session = FakeSession({("GET", f"/repos/{REPO}/issues"): lambda q: issues[:1]})
+    plain = GitHubIssuesSource(REPO, session=session, container_label=None).fetch()
+    assert [r.kind for r in plain] == ["requirement"]

@@ -210,3 +210,68 @@ def test_grouped_tests_get_an_xdist_group(pytester):
     assert {i.get_closest_marker("xdist_group").kwargs["name"] for i in items} == {
         "journey_group:checkout"
     }
+
+
+UPSTREAM_PAGE = """
+from gate.circuit_breaker import ServerErrorBreaker
+
+def add_to_cart(kind):
+    if kind == "upstream":
+        breaker = ServerErrorBreaker(
+            ["sut.example.test"], upstream_timeout=lambda status, body: "payee.example.test/check"
+        )
+        breaker.record("api", "POST", "https://sut.example.test/orders", 500, "{}")
+    raise LookupError("add-to-cart button not found")
+"""
+
+
+def _upstream_group(pytester, kind: str):
+    pytester.mkpydir("shop_ui")
+    pytester.mkpydir("shop_ui/pages")
+    (pytester.path / "shop_ui" / "pages" / "cart_page.py").write_text(UPSTREAM_PAGE)
+    pytester.syspathinsert()
+    pytester.makepyfile(test_flow=GROUP.replace("{error}", kind))
+
+
+def test_a_failure_after_an_upstream_timeout_does_not_gate(pytester, monkeypatch):
+    from gate import circuit_breaker
+
+    monkeypatch.setenv("FAILFAST_JOURNEY_GROUP", "true")
+    circuit_breaker._reset_upstream()
+    _upstream_group(pytester, "upstream")
+    result = pytester.runpytest(*PLUGIN)
+    assert result.parseoutcomes() == {"failed": 1, "passed": 2}
+    assert circuit_breaker.upstream_timeouts() == 1
+    assert circuit_breaker.last_upstream_timeout() == "payee.example.test/check"
+    circuit_breaker._reset_upstream()
+
+
+def test_an_unchanged_upstream_count_still_gates(pytester, monkeypatch):
+    monkeypatch.setenv("FAILFAST_JOURNEY_GROUP", "true")
+    _upstream_group(pytester, "missing")
+    assert pytester.runpytest(*PLUGIN).parseoutcomes() == {"failed": 1, "skipped": 2}
+
+
+def test_the_switch_off_gates_after_an_upstream_timeout_too(pytester, monkeypatch):
+    from gate import circuit_breaker
+
+    monkeypatch.setenv("FAILFAST_JOURNEY_GROUP", "true")
+    monkeypatch.setenv("JOURNEY_GROUP_TOLERATE_TIMEOUTS", "false")
+    _upstream_group(pytester, "upstream")
+    assert pytester.runpytest(*PLUGIN).parseoutcomes() == {"failed": 1, "skipped": 2}
+    circuit_breaker._reset_upstream()
+
+
+def test_reset_clears_the_upstream_count():
+    from gate import circuit_breaker
+
+    breaker = circuit_breaker.ServerErrorBreaker(
+        ["sut.example.test"], upstream_timeout=lambda s, b: "dep.example.test/x"
+    )
+    breaker.record("api", "GET", "https://sut.example.test/a", 500, "{}")
+    assert breaker.upstream_timeouts() == circuit_breaker.upstream_timeouts() >= 1
+    breaker.reset()
+    assert (circuit_breaker.upstream_timeouts(), circuit_breaker.last_upstream_timeout()) == (
+        0,
+        None,
+    )

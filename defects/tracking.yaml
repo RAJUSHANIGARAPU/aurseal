@@ -1,0 +1,14 @@
+# Which defect ids the suite declares, and the offline checks over them
+# (traceability/declared.py; `python -m traceability defects check | refresh`).
+# Framework self-tests use ids of their own and are left out.
+roots: [tests, ui, api]
+exclude: [tests/verification, tests/traceability, tests/integrations, tests/gate]
+detector_calls: [still_reproduces, known_defect, detector_pair.judge]
+# Anti-shrink floors: a scan that finds fewer narrowed, it did not get cleaner. Lower them
+# only in a reviewed pull request that removes detectors on purpose.
+min_call_sites: 27
+min_ids: 15
+# Committed snapshot (`defects refresh --keys-from declared`); the gate never syncs.
+snapshot: defects/status-snapshot.json
+# Shrink-only list of declared expectations the tracker contradicts.
+drift_baseline: defects/drift-baseline.txt

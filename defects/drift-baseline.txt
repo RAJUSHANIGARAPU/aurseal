@@ -1,0 +1,2 @@
+# Declared defect expectations the tracker contradicts: "<id> declared <exp> tracker <state>".
+# Shrink-only: delete a line once the detector or the tracker is corrected.

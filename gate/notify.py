@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import urllib.error
 import urllib.request
@@ -122,6 +123,44 @@ def message(
 
 def redact(text: str, secret: str) -> str:
     return text.replace(secret, "<webhook>") if secret else text
+
+
+REDACTED = "<redacted>"
+#: Token-shaped text that must never leave a run in a message or a drafted issue.
+SECRET_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+    # A JWT: three base64url segments, the first one a JSON header ("eyJ").
+    (re.compile(r"\beyJ[\w-]{6,}\.[\w-]{6,}\.[\w-]{6,}"), REDACTED),
+    (re.compile(r"(?i)\b(bearer|basic|token)\s+[\w\-.~+/=]{8,}"), r"\1 " + REDACTED),
+    (
+        re.compile(
+            r"(?i)\b([\w-]*(?:key|token|secret|password|passwd|pwd)[\w-]*)"
+            r"(\s*[=:]\s*[\"']?)([^\s\"'&,;]+)"
+        ),
+        r"\1\2" + REDACTED,
+    ),
+    # Credentials inside a URL: scheme://user:password@host
+    (re.compile(r"(\b[a-z][a-z0-9+.-]*://[^\s/:@]+:)[^\s/@]+@"), r"\1" + REDACTED + "@"),
+)
+_SECRET_ENV_NAME = re.compile(r"(?i)(token|secret|password|passwd|api_?key|webhook)")
+
+
+def secret_env_values(environ: Mapping[str, str] | None = None) -> list[str]:
+    """Values of environment variables whose names say they are secrets (6+ characters)."""
+    env = os.environ if environ is None else environ
+    values = {v for k, v in env.items() if _SECRET_ENV_NAME.search(k) and len(v.strip()) >= 6}
+    return sorted(values, key=len, reverse=True)
+
+
+def redact_secrets(
+    text: str, extra: Iterable[str] = (), environ: Mapping[str, str] | None = None
+) -> str:
+    """``text`` with token-shaped strings and known secret values replaced by ``<redacted>``."""
+    for value in [*extra, *secret_env_values(environ)]:
+        if value:
+            text = text.replace(value, REDACTED)
+    for pattern, replacement in SECRET_PATTERNS:
+        text = pattern.sub(replacement, text)
+    return text
 
 
 Opener = Callable[..., object]

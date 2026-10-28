@@ -22,9 +22,27 @@ from checks.a11y.policy import A11yPolicy
 
 SCRIPT_ENV = "AXE_SCRIPT_PATH"
 
-_RUN = """async ([context, options]) => {
+# With ``hosts``, every violation and pass node is annotated in the page: ``_hosts`` (the
+# given component selectors that enclose it) and ``_text`` (its visible text), so a known
+# issue can be matched to an element without relying on a generated CSS path.
+_RUN = """async ([context, options, hosts]) => {
   const target = context === null ? document : context;
-  return await axe.run(target, options);
+  const result = await axe.run(target, options);
+  if (hosts && hosts.length) {
+    for (const kind of ["violations", "passes"]) {
+      for (const rule of result[kind] || []) {
+        for (const node of rule.nodes || []) {
+          let el = null;
+          try { el = node.target && node.target.length === 1
+                ? document.querySelector(node.target[0]) : null; } catch (e) { el = null; }
+          node._hosts = el ? hosts.filter(h => { try { return !!el.closest(h); }
+                                                 catch (e) { return false; } }) : [];
+          node._text = el ? (el.innerText || el.textContent || "").trim() : null;
+        }
+      }
+    }
+  }
+  return result;
 }"""
 
 
@@ -62,6 +80,19 @@ class Violation:
         return tuple(t for t in self.tags if t.startswith("wcag"))
 
 
+@dataclass(frozen=True)
+class AxeNode:
+    """One element axe decided on: ``outcome`` is ``violation`` or ``pass``."""
+
+    rule_id: str
+    outcome: str
+    target: str
+    html: str = ""
+    text: str | None = None
+    fg_color: str | None = None  # color-contrast only: any[].data.fgColor
+    hosts: tuple[str, ...] = ()
+
+
 @dataclass
 class A11yReport:
     route: str
@@ -70,6 +101,7 @@ class A11yReport:
     rule_ids: frozenset[str] = frozenset()
     axe_version: str | None = None
     error: str | None = None
+    nodes: list[AxeNode] = field(default_factory=list)
 
     def blocking(self, policy: A11yPolicy) -> list[Violation]:
         return [v for v in self.violations if policy.is_blocking(v.impact, v.rule_id)]
@@ -112,7 +144,40 @@ def parse_results(route: str, raw: object) -> A11yReport:
         rules_run=len(ids),
         rule_ids=frozenset(ids),
         axe_version=engine.get("version") if isinstance(engine, dict) else None,
+        nodes=_nodes(raw),
     )
+
+
+def _fg_color(node: dict[str, Any]) -> str | None:
+    for check in node.get("any") or ():
+        data = check.get("data") if isinstance(check, dict) else None
+        if isinstance(data, dict) and data.get("fgColor"):
+            return str(data["fgColor"])
+    return None
+
+
+def _nodes(raw: dict[str, Any]) -> list[AxeNode]:
+    out = []
+    for key, outcome in (("violations", "violation"), ("passes", "pass")):
+        for rule in raw.get(key) or ():
+            if not isinstance(rule, dict):
+                continue
+            rule_id = str(rule.get("id"))
+            for node in rule.get("nodes") or ():
+                if not isinstance(node, dict):
+                    continue
+                out.append(
+                    AxeNode(
+                        rule_id=rule_id,
+                        outcome=outcome,
+                        target=_targets([node])[0],
+                        html=str(node.get("html") or ""),
+                        text=node.get("_text"),
+                        fg_color=_fg_color(node) if rule_id == "color-contrast" else None,
+                        hosts=tuple(str(h) for h in node.get("_hosts") or ()),
+                    )
+                )
+    return out
 
 
 def scan(
@@ -123,8 +188,13 @@ def scan(
     exclude: Sequence[str] = (),
     route: str | None = None,
     source: str | None = None,
+    hosts: Sequence[str] = (),
 ) -> A11yReport:
-    """Scan the page as it is now. Raises ``AxeUnavailable`` when axe cannot be loaded."""
+    """Scan the page as it is now. Raises ``AxeUnavailable`` when axe cannot be loaded.
+
+    ``hosts``: component selectors the known issues name; each node is annotated with the
+    ones that enclose it.
+    """
     policy = policy or A11yPolicy()
     script = source if source is not None else axe_source()
     context: dict[str, list[list[str]]] | None = None
@@ -137,7 +207,10 @@ def scan(
     where = route or getattr(page, "url", "") or "page"
     try:
         page.evaluate(script)
-        raw = page.evaluate(_RUN, [context, policy.axe_options()])
+        args: list[Any] = [context, policy.axe_options()]
+        if hosts:
+            args.append(list(hosts))
+        raw = page.evaluate(_RUN, args)
     except Exception as exc:  # noqa: BLE001 - any browser-side failure means "not scanned"
         return A11yReport(route=where, error=f"axe did not run: {type(exc).__name__}: {exc}")
     return parse_results(where, raw)

@@ -19,6 +19,7 @@ class T:
     reqs: tuple[str, ...] = ()
     draft: bool = False
     defect: str | None = None
+    failed_first: str | None = None  # an earlier attempt in the same run failed with this
 
 
 @dataclass
@@ -82,6 +83,8 @@ def write_artifacts(root: Path, runs: list[RunSpec]) -> Path:
                     "outcome": t.outcome,
                     "markers": ["draft"] if t.draft else [],
                     "defect": t.defect,
+                    "failed_attempts": 1 if t.failed_first is not None else 0,
+                    "first_failure": t.failed_first or "",
                 }
                 for t in run.tests
             },
@@ -127,7 +130,20 @@ def load_store(store, runs: list[RunSpec]) -> None:
             ResultRecord(
                 run.run_id,
                 t.nodeid,
+                "failed",
+                attempt=1,
+                case_id=case_id_for_nodeid(t.nodeid),
+                message=t.failed_first,
+            )
+            for t in run.tests
+            if t.failed_first is not None
+        )
+        store.add_results(
+            ResultRecord(
+                run.run_id,
+                t.nodeid,
                 t.outcome,
+                attempt=2 if t.failed_first is not None else 1,
                 case_id=case_id_for_nodeid(t.nodeid),
                 defect_ref=t.defect,
                 markers=("draft",) if t.draft else (),

@@ -34,6 +34,17 @@
     },
     "new_gaps": {"type": "array", "items": {"type": "string"}},
     "closed_gaps": {"type": "array", "items": {"type": "string"}},
+    "ratchet": {
+      "type": ["object", "null"],
+      "required": ["new", "closed", "passed"],
+      "properties": {
+        "new": {"type": "array", "items": {"type": "string"}},
+        "closed": {"type": "array", "items": {"type": "string"}},
+        "passed": {"type": "boolean"}
+      }
+    },
+    "groups": {"type": ["array", "null"]},
+    "frozen": {"type": ["object", "null"]},
     "run_id": {"type": ["string", "null"]},
     "branch": {"type": ["string", "null"]}
   }

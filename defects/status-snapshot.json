@@ -1,0 +1,146 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-10-27T11:41:55.796Z",
+  "defects": {
+    "BUG-171": {
+      "id": "BUG-171",
+      "state": "unknown",
+      "title": "",
+      "severity": null,
+      "labels": [],
+      "url": null,
+      "tracker": "file"
+    },
+    "BUG-201": {
+      "id": "BUG-201",
+      "state": "unknown",
+      "title": "",
+      "severity": null,
+      "labels": [],
+      "url": null,
+      "tracker": "file"
+    },
+    "BUG-202": {
+      "id": "BUG-202",
+      "state": "unknown",
+      "title": "",
+      "severity": null,
+      "labels": [],
+      "url": null,
+      "tracker": "file"
+    },
+    "DEMO-101": {
+      "id": "DEMO-101",
+      "state": "unknown",
+      "title": "",
+      "severity": null,
+      "labels": [],
+      "url": null,
+      "tracker": ""
+    },
+    "DEMO-102": {
+      "id": "DEMO-102",
+      "state": "unknown",
+      "title": "",
+      "severity": null,
+      "labels": [],
+      "url": null,
+      "tracker": ""
+    },
+    "DEMO-103": {
+      "id": "DEMO-103",
+      "state": "unknown",
+      "title": "",
+      "severity": null,
+      "labels": [],
+      "url": null,
+      "tracker": ""
+    },
+    "DEMO-104": {
+      "id": "DEMO-104",
+      "state": "unknown",
+      "title": "",
+      "severity": null,
+      "labels": [],
+      "url": null,
+      "tracker": ""
+    },
+    "DEMO-106": {
+      "id": "DEMO-106",
+      "state": "unknown",
+      "title": "",
+      "severity": null,
+      "labels": [],
+      "url": null,
+      "tracker": ""
+    },
+    "DEMO-108": {
+      "id": "DEMO-108",
+      "state": "unknown",
+      "title": "",
+      "severity": null,
+      "labels": [],
+      "url": null,
+      "tracker": ""
+    },
+    "DEMO-112": {
+      "id": "DEMO-112",
+      "state": "unknown",
+      "title": "",
+      "severity": null,
+      "labels": [],
+      "url": null,
+      "tracker": ""
+    },
+    "DEMO-113": {
+      "id": "DEMO-113",
+      "state": "unknown",
+      "title": "",
+      "severity": null,
+      "labels": [],
+      "url": null,
+      "tracker": ""
+    },
+    "DEMO-114": {
+      "id": "DEMO-114",
+      "state": "unknown",
+      "title": "",
+      "severity": null,
+      "labels": [],
+      "url": null,
+      "tracker": ""
+    },
+    "DEMO-116": {
+      "id": "DEMO-116",
+      "state": "unknown",
+      "title": "",
+      "severity": null,
+      "labels": [],
+      "url": null,
+      "tracker": ""
+    },
+    "DEMO-117": {
+      "id": "DEMO-117",
+      "state": "unknown",
+      "title": "",
+      "severity": null,
+      "labels": [],
+      "url": null,
+      "tracker": ""
+    },
+    "DEMO-118": {
+      "id": "DEMO-118",
+      "state": "unknown",
+      "title": "",
+      "severity": null,
+      "labels": [],
+      "url": null,
+      "tracker": ""
+    }
+  },
+  "open": [],
+  "errors": [
+    "github: GitHub tracker needs 'owner/name', got '' (kept the last snapshot)"
+  ],
+  "missing": []
+}

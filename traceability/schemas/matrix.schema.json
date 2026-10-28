@@ -20,7 +20,7 @@
           "requirement_id": {"type": "string"},
           "title": {"type": "string"},
           "priority": {"type": ["string", "null"]},
-          "status": {"enum": ["UNCOVERED", "NOT_RUN", "UNVERIFIED", "FAILING", "KNOWN_DEFECT",
+          "status": {"enum": ["UNCOVERED", "NOT_RUN", "UNVERIFIED", "FAILING", "FIX_OBSERVED", "FLAKY", "KNOWN_DEFECT",
                               "DRAFT_ONLY", "PASSING", "PROVED"]},
           "stale": {"type": ["boolean", "null"]},
           "cases": {
@@ -34,7 +34,8 @@
                 "outcome": {"type": "string"},
                 "run_id": {"type": ["string", "null"]},
                 "run_integrity": {"type": ["string", "null"]},
-                "state": {"enum": ["not_run", "unverified", "failing", "known_defect", "passed"]},
+                "state": {"enum": ["not_run", "unverified", "failing", "fix_observed", "flaky",
+                                     "known_defect", "passed"]},
                 "coverage_verdict": {"type": ["string", "null"]},
                 "detector_verdict": {"type": ["string", "null"]},
                 "defects": {"type": "array", "items": {"type": "string"}},

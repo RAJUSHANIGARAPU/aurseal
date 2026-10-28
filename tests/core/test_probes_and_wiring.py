@@ -73,7 +73,7 @@ class TestDeployedVersionProbe:
         )
         assert reason in probe.probe().describe()
 
-    def test_measured_once_per_process(self):
+    def test_measured_once_per_process(self, tmp_path):
         dv.reset_for_tests()
         calls = []
 
@@ -84,9 +84,16 @@ class TestDeployedVersionProbe:
         probe = dv.BuildInfoProbe(fetch)
         assert dv.last_observed().describe().startswith("UNKNOWN — no version probe has run")
         with framework_log() as log:
-            assert dv.observe_once(probe).value == "7"
-            assert dv.observe_once(probe).value == "7"
+            assert dv.observe_once(probe, out_dir=tmp_path, run_id="r1").value == "7"
+            assert dv.observe_once(probe, out_dir=tmp_path).value == "7"
         assert calls == ["/version"]
+        written = json.loads((tmp_path / "build-info.json").read_text())
+        assert {k: written[k] for k in ("component", "version", "measured", "run_id")} == {
+            "component": "app",
+            "version": "7",
+            "measured": True,
+            "run_id": "r1",
+        }
         assert log.text.count("deployed version: 7") == 1
         assert dv.last_observed().value == "7"
         dv.reset_for_tests()

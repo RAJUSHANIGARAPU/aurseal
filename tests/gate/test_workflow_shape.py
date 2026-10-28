@@ -423,3 +423,66 @@ def test_the_rule_runs_with_the_directory_lint(tmp_path):
     )
     found = [f.problem for f in lint_workflows(tmp_path)]
     assert any("queue behind the merge gate" in p for p in found)
+
+
+def test_the_report_only_release_verdict_step_is_wired_safely():
+    """Pins the CI wiring: present, opt-in (off by default), always(), report, never fatal."""
+    import yaml
+
+    from gate.workflow_lint import release_verdict_problems, release_verdict_steps
+
+    data = yaml.safe_load((WORKFLOWS / "tests.yml").read_text(encoding="utf-8"))
+    steps = release_verdict_steps(data["jobs"])
+    assert [w for w, _ in steps] and all(w.startswith("jobs.browser.") for w, _ in steps)
+    for _, step in steps:
+        assert release_verdict_problems(step) == []
+        assert "RELEASE_VERDICT_REPORT == 'true'" in step["if"]
+        assert "inputs.release_verdict_report" in step["if"]
+    on = data.get("on", data.get(True))
+    assert on["workflow_dispatch"]["inputs"]["release_verdict_report"]["default"] is False
+    job = data["jobs"]["browser"]
+    uploads = [s for s in job["steps"] if "reports/release/" in str(s.get("with", {}).get("path"))]
+    assert uploads and "always()" in uploads[0]["if"]
+
+
+@pytest.mark.parametrize(
+    "step,problem",
+    [
+        (
+            {
+                "if": "success()",
+                "run": "python -m traceability release decide --enforcement report",
+            },
+            "always()",
+        ),
+        (
+            {"if": "always()", "run": "python -m traceability release decide"},
+            "--enforcement report",
+        ),
+        (
+            {
+                "if": "always()",
+                "run": "python -m traceability release decide --enforcement report",
+                "continue-on-error": False,
+            },
+            "continue-on-error",
+        ),
+    ],
+)
+def test_a_badly_wired_release_verdict_step_is_found(tmp_path, step, problem):
+    # Positive control: each planted violation is caught in an ordinary workflow.
+    import yaml
+
+    wf = {
+        "name": "t",
+        "on": {"pull_request": {}},
+        "concurrency": {
+            "group": "g",
+            "cancel-in-progress": "${{ github.event_name == 'pull_request' }}",
+        },
+        "jobs": {"a": {"runs-on": "ubuntu-24.04", "timeout-minutes": 5, "steps": [step]}},
+    }
+    path = tmp_path / "w.yml"
+    path.write_text(yaml.safe_dump(wf))
+    findings = [str(f) for f in lint_workflow(path, shape=ShapeOptions())]
+    assert any(problem in f for f in findings), findings

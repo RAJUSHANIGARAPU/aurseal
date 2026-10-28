@@ -45,8 +45,14 @@ import threading
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 
 from core.logger import logger
+
+COMPONENT_ENV = "BUILD_INFO_COMPONENT"
+DIR_ENV = "BUILD_INFO_DIR"
+DEFAULT_COMPONENT = "app"
+FILE_NAME = "build-info.json"
 
 Fetch = Callable[[str], "tuple[int, str] | None"]
 Reader = Callable[[object], "BuildInfo | None"]
@@ -192,8 +198,19 @@ _observed: BuildInfo | None = None
 _lock = threading.Lock()
 
 
-def observe_once(probe: BuildInfoProbe) -> BuildInfo:
-    """Measure on the first call in this process, log it, return the same answer after."""
+def observe_once(
+    probe: BuildInfoProbe,
+    *,
+    component: str | None = None,
+    out_dir: str | Path | None = None,
+    run_id: str | None = None,
+) -> BuildInfo:
+    """Measure on the first call in this process, log it, return the same answer after.
+
+    The first measurement is also written to ``<out_dir>/build-info.json`` (default
+    ``$BUILD_INFO_DIR`` or ``reports``) as ``{component, version, source, measured}``, so the
+    release verdict can compare what the run measured with the version a candidate pins.
+    """
     global _observed
     with _lock:
         if _observed is None:
@@ -204,7 +221,34 @@ def observe_once(probe: BuildInfoProbe) -> BuildInfo:
                     "[version] build version unknown; whatever these diagnostics say about the "
                     "deployed build is a guess, not a measurement"
                 )
+            write_build_info(_observed, component=component, out_dir=out_dir, run_id=run_id)
         return _observed
+
+
+def write_build_info(
+    info: BuildInfo,
+    *,
+    component: str | None = None,
+    out_dir: str | Path | None = None,
+    run_id: str | None = None,
+) -> Path | None:
+    """Best effort: a failure to write is logged, never raised."""
+    target = Path(out_dir or os.environ.get(DIR_ENV) or "reports") / FILE_NAME
+    body = {
+        "component": component or os.environ.get(COMPONENT_ENV) or DEFAULT_COMPONENT,
+        "version": info.value,
+        "source": info.source,
+        "measured": info.known,
+        "detail": info.detail,
+        "run_id": run_id or os.environ.get("TEST_RUN_ID") or None,
+    }
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(json.dumps(body, indent=2) + "\n", encoding="utf-8")
+    except OSError as exc:
+        logger.warning("[version] could not write %s: %s", target, exc)
+        return None
+    return target
 
 
 def last_observed() -> BuildInfo:

@@ -24,14 +24,23 @@ Matching is by explicit tag or requirement link only. Fuzzy title matching is no
 purpose: a false "covered" is worse than a visible gap.
 
 The CI step uses a **ratchet**: ``traceability/gap-baseline.json`` lists accepted gaps. A
-new gap fails the step; a closed gap passes with a reminder to shrink the baseline. The
-baseline only changes in a reviewed pull request.
+new gap fails the step, and so does a baseline entry that is no longer a gap ("stale
+baseline entry, delete it"), so the baseline can only shrink (``--allow-stale`` turns the
+second rule into a reminder). ``--write-baseline`` is the only way to rewrite it, in a
+reviewed pull request. The report's JSON carries ``ratchet: {new, closed, passed}``, which
+the release verdict reads.
+
+Two report-only views, never read by the ratchet: gaps **per group** (``--groups``: group
+name -> source-item prefixes or ``tag:<requirement>``), and the gaps of a **frozen ref**
+(``--frozen-ref``: the same sources as they are at a git ref, e.g. a release tag).
 """
 
 from __future__ import annotations
 
 import json
 import re
+import subprocess
+import tempfile
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -251,6 +260,9 @@ class GapReport:
     runtime: bool = False
     new_gaps: list[str] = field(default_factory=list)
     closed_gaps: list[str] = field(default_factory=list)
+    ratchet: dict[str, Any] | None = None  # {new, closed, passed} once a baseline was applied
+    groups: list[dict[str, Any]] | None = None  # report only
+    frozen: dict[str, Any] | None = None  # report only
     generated_at: str = field(default_factory=utc_now)
 
     @property
@@ -273,6 +285,9 @@ class GapReport:
             "items": [i.to_json() for i in self.items],
             "new_gaps": self.new_gaps,
             "closed_gaps": self.closed_gaps,
+            "ratchet": self.ratchet,
+            "groups": self.groups,
+            "frozen": self.frozen,
         }
 
     def to_markdown(self) -> str:
@@ -290,6 +305,22 @@ class GapReport:
         if self.closed_gaps:
             lines += ["Closed since the baseline (remove them from it):", ""]
             lines += [f"- `{g}`" for g in self.closed_gaps] + [""]
+        if self.groups is not None:
+            lines += ["### Gaps per group (report only)", "", "| Group | Items | Uncovered |"]
+            lines += ["|---|---|---|"]
+            lines += [f"| {g['group']} | {g['items']} | {g['uncovered']} |" for g in self.groups]
+            lines.append("")
+        if self.frozen is not None:
+            f = self.frozen
+            lines += [f"### Frozen ref `{f['ref']}` (report only)", ""]
+            if not f.get("measured"):
+                lines += [f"not measured: {f.get('reason')}", ""]
+            else:
+                lines.append(f"{f['gaps']} gap(s) at the ref, {len(self.gaps)} at HEAD")
+                for label, key in (("only at HEAD", "only_head"), ("only at the ref", "only_ref")):
+                    if f[key]:
+                        lines += [f"- {label}: " + ", ".join(f"`{x}`" for x in f[key][:50])]
+                lines.append("")
         for source in self.sources:
             name = source["name"]
             gaps = [i for i in self.gaps if i.item.source == name]
@@ -396,10 +427,23 @@ def detect_gaps(
 class RatchetResult:
     new_gaps: list[str]
     closed_gaps: list[str]
+    strict: bool = True  # a closed gap still in the baseline fails until it is deleted
 
     @property
     def ok(self) -> bool:
-        return not self.new_gaps
+        return not self.new_gaps and not (self.strict and self.closed_gaps)
+
+    @property
+    def passed(self) -> bool:
+        return self.ok
+
+    def messages(self) -> list[str]:
+        out = [f"NEW GAP: {g}" for g in self.new_gaps]
+        if self.strict:
+            out += [f"stale baseline entry, delete it: {g}" for g in self.closed_gaps]
+        elif self.closed_gaps:
+            out.append(f"{len(self.closed_gaps)} gap(s) closed: remove them from the baseline")
+        return out
 
 
 def load_baseline(path: Path) -> set[str]:
@@ -411,12 +455,137 @@ def load_baseline(path: Path) -> set[str]:
     return {str(x) for x in data["accepted"]}
 
 
-def ratchet(report: GapReport, baseline: Path) -> RatchetResult:
+def ratchet(report: GapReport, baseline: Path, *, strict: bool = True) -> RatchetResult:
     accepted = load_baseline(baseline)
     current = {g.item.ref for g in report.gaps}
-    result = RatchetResult(sorted(current - accepted), sorted(accepted - current))
+    result = RatchetResult(sorted(current - accepted), sorted(accepted - current), strict)
     report.new_gaps, report.closed_gaps = result.new_gaps, result.closed_gaps
+    report.ratchet = {"new": result.new_gaps, "closed": result.closed_gaps, "passed": result.ok}
     return result
+
+
+# ---------------------------------------------------------------------- report-only views
+
+
+def group_gaps(report: GapReport, groups: Mapping[str, Sequence[str]]) -> list[dict[str, Any]]:
+    """Per group: how many source items it ships and how many are uncovered.
+
+    A selector is a prefix of the item's ``source:key`` or key, or ``tag:<id>`` for an item
+    that carries that requirement. An item in no group lands in ``(ungrouped)``.
+    """
+
+    def matches(item: SourceItem, selector: str) -> bool:
+        if selector.startswith("tag:"):
+            return selector[4:] in item.requirements
+        return item.ref.startswith(selector) or item.key.startswith(selector)
+
+    rows = []
+    grouped: set[str] = set()
+    for name, selectors in groups.items():
+        members = [g for g in report.items if any(matches(g.item, s) for s in selectors)]
+        grouped |= {g.item.ref for g in members}
+        rows.append(
+            {
+                "group": str(name),
+                "items": len(members),
+                "uncovered": sum(1 for g in members if g.status == GAP),
+            }
+        )
+    rest = [g for g in report.items if g.item.ref not in grouped]
+    rows.append(
+        {
+            "group": "(ungrouped)",
+            "items": len(rest),
+            "uncovered": sum(1 for g in rest if g.status == GAP),
+        }
+    )
+    return rows
+
+
+def load_groups(path: Path) -> dict[str, list[str]]:
+    from traceability._util import load_yaml
+
+    data = load_yaml(Path(path)) if Path(path).suffix in (".yaml", ".yml") else read_json(path)
+    if not isinstance(data, dict) or not all(isinstance(v, list) for v in data.values()):
+        raise GapSourceError(f"{path}: groups are a mapping of name -> list of selectors")
+    return {str(k): [str(s) for s in v] for k, v in data.items()}
+
+
+def _git_show(root: Path, ref: str, path: str) -> bytes | None:
+    proc = subprocess.run(
+        ["git", "show", f"{ref}:{path}"], cwd=root, capture_output=True, check=False
+    )
+    return proc.stdout if proc.returncode == 0 else None
+
+
+def _git_list(root: Path, ref: str, directory: str) -> list[str] | None:
+    proc = subprocess.run(
+        ["git", "ls-tree", "--name-only", f"{ref}:{directory}"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return proc.stdout.split() if proc.returncode == 0 else None
+
+
+def frozen_view(
+    report: GapReport,
+    ref: str,
+    *,
+    root: Path,
+    openapi: Sequence[str] = (),
+    specs: str | None = None,
+    postman: Sequence[str] = (),
+    links: Iterable[Mapping[str, Any]] = (),
+) -> dict[str, Any]:
+    """The same file sources read at ``ref``: its gap count and the ids only one side has.
+
+    A source file the ref does not have makes the view "not measured", never "no gaps".
+    The suite's links are HEAD's: this measures what the frozen sources asked for against
+    the tests as they are now. Registry-based items are not re-read.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        base = Path(tmp)
+        sources: list[GapSource] = []
+        for kind, paths in (("openapi", openapi), ("postman", postman)):
+            for rel in paths:
+                rel = Path(rel).resolve().relative_to(root.resolve()).as_posix()
+                blob = _git_show(root, ref, rel)
+                if blob is None:
+                    return {"ref": ref, "measured": False, "reason": f"{rel} is not at {ref}"}
+                target = base / rel
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(blob)
+                sources.append(
+                    OpenApiSource(target) if kind == "openapi" else PostmanSource(target)
+                )
+        if specs:
+            rel = Path(specs).resolve().relative_to(root.resolve()).as_posix()
+            names = _git_list(root, ref, rel)
+            if names is None:
+                return {"ref": ref, "measured": False, "reason": f"{rel}/ is not at {ref}"}
+            (base / rel).mkdir(parents=True, exist_ok=True)
+            for name in names:
+                if name.endswith(".md"):
+                    (base / rel / name).write_bytes(_git_show(root, ref, f"{rel}/{name}") or b"")
+            sources.append(SpecSource(base / rel))
+        if not sources:
+            return {"ref": ref, "measured": False, "reason": "no file source to re-read"}
+        try:
+            frozen = detect_gaps(sources, links)
+        except GapSourceError as exc:
+            return {"ref": ref, "measured": False, "reason": str(exc)}
+    names = {s.name for s in sources}
+    head_ids = {i.item.ref for i in report.items if i.item.source in names}
+    ref_ids = {i.item.ref for i in frozen.items}
+    return {
+        "ref": ref,
+        "measured": True,
+        "gaps": len(frozen.gaps),
+        "only_head": sorted(head_ids - ref_ids),
+        "only_ref": sorted(ref_ids - head_ids),
+    }
 
 
 def write_baseline(report: GapReport, path: Path) -> Path:

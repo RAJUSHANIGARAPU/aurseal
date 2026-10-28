@@ -14,6 +14,10 @@ The registry is a reviewed file in the repository (``requirements/requirements.y
         status: active          # active | retired
         labels: [subscriptions]
         release: "1.0"
+        kind: requirement       # requirement (default) | epic | container
+
+An ``epic`` or ``container`` entry groups requirements; a test linked to it directly is
+reported as "link too coarse" (report only).
 
 ``Registry.status(id)`` answers ``active``, ``retired`` or ``unknown``.
 """
@@ -116,6 +120,7 @@ class Requirement:
     source: str = "local"
     source_ref: str | None = None
     url: str | None = None
+    kind: str = "requirement"  # requirement | epic | container
 
     @property
     def content_hash(self) -> str:
@@ -142,6 +147,7 @@ class Requirement:
             source=source or str(data.get("source") or "local"),
             source_ref=data.get("source_ref"),
             url=data.get("url"),
+            kind=str(data.get("kind") or "requirement"),
         )
 
 

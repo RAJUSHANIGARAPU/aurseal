@@ -94,6 +94,7 @@ INPUTS: tuple[Input, ...] = (
     Input("changed_services", "string", "", "workflow"),
     Input("shards", "choice", "1", "workflow"),
     Input("shard_users", "string", "", "command"),
+    Input("release_verdict_report", "boolean", "false", "workflow"),
 )
 INPUT_NAMES = frozenset(i.name for i in INPUTS)
 
@@ -194,6 +195,7 @@ def plan(
             "require_config_binding",
             "browser_matrix",
             "run_token_lane",
+            "release_verdict_report",
         )
     }
 

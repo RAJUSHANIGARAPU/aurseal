@@ -24,7 +24,8 @@
           "source": {"type": "string"},
           "source_ref": {"type": ["string", "null"]},
           "url": {"type": ["string", "null"]},
-          "content_hash": {"type": "string"}
+          "content_hash": {"type": "string"},
+          "kind": {"enum": ["requirement", "epic", "container"]}
         }
       }
     }
