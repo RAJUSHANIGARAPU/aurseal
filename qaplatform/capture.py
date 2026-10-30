@@ -20,6 +20,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from core.artifact_redaction import cookie_values, redact_trace
+
 DEFAULT_DIR = Path("reports") / "sessions"
 MAX_ERROR_NOTES = 20
 _TEXT_LIMIT = 500
@@ -94,8 +96,12 @@ class CaptureHandle:
         target = self.artifact_dir / f"session-{self.session_id}.zip"
         trace_error = ""
         try:
+            values = cookie_values(self.context)
             self.context.tracing.stop(path=str(target))
-            self.trace_path = target
+            if redact_trace(target, values):
+                self.trace_path = target
+            else:
+                trace_error = "trace deleted: redaction failed"
         except Exception as exc:  # the browser died: keep going, post what exists
             trace_error = f"{type(exc).__name__}: {exc}"[:_TEXT_LIMIT]
         notes: list[dict[str, Any]] = [

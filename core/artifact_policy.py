@@ -23,12 +23,13 @@ from __future__ import annotations
 
 import os
 import shutil
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
 
+from core.artifact_redaction import cookie_values, redact_trace
 from core.logger import logger
 
 _REPORTS = pytest.StashKey[dict]()
@@ -97,13 +98,23 @@ def worth_keeping(item) -> bool:
 # ── trace and video ──────────────────────────────────────────────────────────
 
 
-def finish_trace(context, keep: bool, path: str | Path) -> Path | None:
-    """Stop tracing; write ``path`` only when ``keep``. Returns the path written, if any."""
+def finish_trace(
+    context, keep: bool, path: str | Path, known_values: Iterable[str] = ()
+) -> Path | None:
+    """
+    Stop tracing; write ``path`` only when ``keep``. Returns the path written, if any.
+
+    A kept trace is rewritten with session credentials masked. The context's cookie
+    values are read before the trace is written, and ``known_values`` (for example
+    cookies read when tracing started) are masked as well. If the rewrite fails the
+    trace is deleted and nothing is returned.
+    """
     try:
         if keep:
             Path(path).parent.mkdir(parents=True, exist_ok=True)
+            values = [*known_values, *cookie_values(context)]
             context.tracing.stop(path=str(path))
-            return Path(path)
+            return Path(path) if redact_trace(path, values) else None
         context.tracing.stop()
     except Exception as exc:  # noqa: BLE001 - evidence never fails a test
         logger.warning("stopping the trace failed: %s", exc)

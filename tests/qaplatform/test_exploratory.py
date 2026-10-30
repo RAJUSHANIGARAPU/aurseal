@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import zipfile
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -154,8 +155,8 @@ class FakeTracing:
     def stop(self, path=None):
         if self.fail_stop:
             raise RuntimeError("browser has been closed")
-        with open(path, "wb") as fh:
-            fh.write(b"PK")
+        with zipfile.ZipFile(path, "w") as archive:
+            archive.writestr("trace.trace", "{}")
 
 
 class FakePage:
@@ -212,7 +213,8 @@ def test_capture_attaches_trace_and_errors(tmp_path):
     assert texts[0] == "browser console error: TypeError: x is undefined"
     assert texts[1] == "browser HTTP 503 from https://app.example.test/api/refunds"
     assert notes[-1]["attachment_uri"].endswith("session-xs-1.zip")
-    assert (tmp_path / "session-xs-1.zip").read_bytes() == b"PK"
+    with zipfile.ZipFile(tmp_path / "session-xs-1.zip") as archive:
+        assert archive.read("trace.trace") == b"{}"
     assert handle.close() == []  # closing again posts nothing
 
 

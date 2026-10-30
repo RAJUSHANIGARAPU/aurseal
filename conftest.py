@@ -12,6 +12,7 @@ from core.artifact_policy import (
     page_videos,
     worth_keeping,
 )
+from core.artifact_redaction import RedactingFilter, cookie_values
 from core.browser_evidence import BrowserEvidence
 from core.config_reader import ConfigReader
 from core.failure_reporter import write_failure_bundle
@@ -152,6 +153,7 @@ def setup_logging():
     file_handler.setFormatter(formatter)
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(formatter)
+    file_handler.addFilter(RedactingFilter())
     logger.addHandler(file_handler)
     logger.addHandler(console_handler)
     logger.propagate = False
@@ -219,6 +221,9 @@ def gateway_retry(context):
 def enable_artifacts(context, request, browser_name):
     os.makedirs(artifact_names.VIDEO_DIR, exist_ok=True)
     os.makedirs(artifact_names.TRACE_DIR, exist_ok=True)
+    # Read after the context options have applied any cookies; finish_trace adds the
+    # values the context holds when the test ends.
+    started_with = cookie_values(context)
     context.tracing.start(screenshots=True, snapshots=True, sources=True)
     yield
     policy = RetentionPolicy.from_env()  # TRACE_ALWAYS / VIDEO_ALWAYS keep everything
@@ -231,7 +236,7 @@ def enable_artifacts(context, request, browser_name):
     # action="append" with a default of [], so it put a literal "[]" in every
     # filename.
     trace_path = artifact_names.trace_path(test_name, browser_name, timestamp)
-    finish_trace(context, policy.keep_trace(keep), trace_path)
+    finish_trace(context, policy.keep_trace(keep), trace_path, started_with)
     videos = page_videos(context)
     context.close()  # flushes the video files
     finalize_videos(
