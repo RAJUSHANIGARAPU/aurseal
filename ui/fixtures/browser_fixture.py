@@ -21,6 +21,7 @@ import os
 import pytest
 from playwright.sync_api import sync_playwright
 
+from core.artifact_redaction import cookie_values, redact_trace
 from core.config_reader import ConfigReader
 
 
@@ -68,7 +69,10 @@ def page(browser, request):
 
     yield page
 
-    context.tracing.stop(path=f"reports/traces/{request.node.name}.zip")
+    trace_path = f"reports/traces/{request.node.name}.zip"
+    values = cookie_values(context)
+    context.tracing.stop(path=trace_path)
+    redact_trace(trace_path, values)
 
     context.close()
 

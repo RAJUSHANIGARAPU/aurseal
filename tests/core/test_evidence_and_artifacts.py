@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import zipfile
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -96,7 +97,8 @@ class _Tracing:
     def stop(self, path=None):
         self.stops.append(path)
         if path:
-            Path(path).write_bytes(b"zip")
+            with zipfile.ZipFile(path, "w") as archive:
+                archive.writestr("trace.trace", "{}")
 
 
 class TestTraceAndVideo:
