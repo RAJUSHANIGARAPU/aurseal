@@ -49,6 +49,7 @@ its configuration (environment variables and defaults) and a short example.
 | [accessibility.md](accessibility.md) | axe-core scans per route, rule-scoped known defects, detector pair, accessibility plugin |
 | [visual-regression.md](visual-regression.md) | Committed per-platform baselines, pixel diff with threshold, approvals, visual plugin, Linux baseline job |
 | [security-testing.md](security-testing.md) | gitleaks over history, bandit SAST, pip-audit on the lock file, expiring allow-list, security plugin |
+| [canary-log-scan.md](canary-log-scan.md) | Run-unique canaries seeded as test data, searched in service logs (files, Loki, CloudWatch), STILL_LEAKING / CLEARED / NOT_ASSESSED, positive control |
 | [mutation-testing.md](mutation-testing.md) | mutmut 3 per-package scope and thresholds, isolated copy, score gate, survivors, mutation plugin |
 | [fault-injection.md](fault-injection.md) | Playwright and HTTP fault injection, faults fixture, not-exercised rule, breaker ignores injected faults, fault-injection plugin |
 | [requirements-linking.md](requirements-linking.md) | `requirement` marker, REQ-n registry, id namespace vs defect ids, case-links file, case requirement REST handlers |

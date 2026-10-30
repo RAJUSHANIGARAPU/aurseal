@@ -136,3 +136,6 @@ entries:
   - fingerprint: "bandit:B608:traceability/evidence.py:0ec6a36e53c5"
     reason: "the f-string only builds ? placeholders; every value is a bound parameter"
     expires: 2027-01-28
+  - fingerprint: "bandit:B310:checks/canary/backends.py:933b978a6409"
+    reason: "Loki query; the URL scheme is limited to http(s) and credentials in the URL are rejected when the backend is built"
+    expires: 2027-01-16
