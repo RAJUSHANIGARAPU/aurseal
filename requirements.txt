@@ -36,6 +36,6 @@ urllib3==2.8.0
 virtualenv==21.14.13
 vulture==2.16
 faker>=40.43.0
-jsonschema>=4.21.0
+jsonschema>=4.26.0
 pytest-json-report>=1.5.0
 graphifyy>=0.9.94
