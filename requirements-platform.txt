@@ -9,10 +9,10 @@ defusedxml==0.7.1
 # (tests/qaplatform_http, collected only when these are installed). Pinned, not ranged:
 # the service and the offline suite never import them.
 fastapi==0.162.0
-starlette==1.9.0
-pydantic==2.14.1
+starlette==1.10.0
+pydantic==2.14.3
 uvicorn==0.54.0
-anyio==4.15.1
+anyio==4.16.0
 # The read-only web UI (qaplatform/http/ui); the API runs without it.
 jinja2==3.1.6
 markupsafe==3.0.4
